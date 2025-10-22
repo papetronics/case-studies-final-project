@@ -1,0 +1,12 @@
+name: Create W&B Job
+
+on:
+  push:
+    branches: ['*']
+
+jobs:
+  call-reusable-workflow:
+    uses: papetronics/pape-lab/.github/workflows/create-job.yml@main
+    secrets:
+      ssh-deploy-key: ${{ secrets.SSH_DEPLOY_KEY }}
+      wandb-api-key: ${{ secrets.WANDB_API_KEY }}

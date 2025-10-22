@@ -1,0 +1,17 @@
+# syntax=docker/dockerfile:1.4
+
+# Dockerfile.wandb
+
+# Utilizes the base image (base-image/Dockerfile.base) with additional requirements for running a W&B job.
+FROM 367942341054.dkr.ecr.us-east-2.amazonaws.com/pape-lab/train:base-latest
+WORKDIR /workspace
+
+# Install additional Python packages required for this W&B job
+COPY --link requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the main script for the W&B job (this needs to be updated to copy all scripts from a specific directory)
+COPY --link main.py ./
+
+# Runs the main script when the container starts
+ENTRYPOINT ["python", "main.py"]
