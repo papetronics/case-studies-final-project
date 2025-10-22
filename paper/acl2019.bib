@@ -1,0 +1,166 @@
+
+
+@inproceedings{jia-liang-2017-adversarial,
+    title = "Adversarial Examples for Evaluating Reading Comprehension Systems",
+    author = "Jia, Robin  and
+      Liang, Percy",
+    booktitle = "Proceedings of the 2017 Conference on Empirical Methods in Natural Language Processing",
+    month = sep,
+    year = "2017",
+    address = "Copenhagen, Denmark",
+    publisher = "Association for Computational Linguistics",
+    url = "https://www.aclweb.org/anthology/D17-1215",
+    doi = "10.18653/v1/D17-1215",
+    pages = "2021--2031",
+    abstract = "Standard accuracy metrics indicate that reading comprehension systems are making rapid progress, but the extent to which these systems truly understand language remains unclear. To reward systems with real language understanding abilities, we propose an adversarial evaluation scheme for the Stanford Question Answering Dataset (SQuAD). Our method tests whether systems can answer questions about paragraphs that contain adversarially inserted sentences, which are automatically generated to distract computer systems without changing the correct answer or misleading humans. In this adversarial setting, the accuracy of sixteen published models drops from an average of 75% F1 score to 36%; when the adversary is allowed to add ungrammatical sequences of words, average accuracy on four models decreases further to 7%. We hope our insights will motivate the development of new models that understand language more precisely.",
+}
+
+@misc{clark2020electra,
+      title={ELECTRA: Pre-training Text Encoders as Discriminators Rather Than Generators}, 
+      author={Kevin Clark and Minh-Thang Luong and Quoc V. Le and Christopher D. Manning},
+      year={2020},
+      eprint={2003.10555},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL}
+}
+
+@misc{devlin2019bert,
+      title={BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding}, 
+      author={Jacob Devlin and Ming-Wei Chang and Kenton Lee and Kristina Toutanova},
+      year={2019},
+      eprint={1810.04805},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL}
+}
+
+@misc{rajpurkar2016squad,
+      title={SQuAD: 100,000+ Questions for Machine Comprehension of Text}, 
+      author={Pranav Rajpurkar and Jian Zhang and Konstantin Lopyrev and Percy Liang},
+      year={2016},
+      eprint={1606.05250},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL}
+}
+
+@misc{feng2021survey,
+      title={A Survey of Data Augmentation Approaches for NLP}, 
+      author={Steven Y. Feng and Varun Gangal and Jason Wei and Sarath Chandar and Soroush Vosoughi and Teruko Mitamura and Eduard Hovy},
+      year={2021},
+      eprint={2105.03075},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL}
+}
+
+@misc{ribeiro2020accuracy,
+      title={Beyond Accuracy: Behavioral Testing of NLP models with CheckList}, 
+      author={Marco Tulio Ribeiro and Tongshuang Wu and Carlos Guestrin and Sameer Singh},
+      year={2020},
+      eprint={2005.04118},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL}
+}
+
+@misc{aburass2023ensemble,
+      title={An Ensemble Approach to Question Classification: Integrating Electra Transformer, GloVe, and LSTM}, 
+      author={Sanad Aburass and Osama Dorgham and Maha Abu Rumman},
+      year={2023},
+      eprint={2308.06828},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL}
+}
+
+@inproceedings{bachina-etal-2021-ensemble,
+    title = "Ensemble {ALBERT} and {R}o{BERT}a for Span Prediction in Question Answering",
+    author = "Bachina, Sony  and
+      Balumuri, Spandana  and
+      Kamath S, Sowmya",
+    editor = "Feng, Song  and
+      Reddy, Siva  and
+      Alikhani, Malihe  and
+      He, He  and
+      Ji, Yangfeng  and
+      Iyyer, Mohit  and
+      Yu, Zhou",
+    booktitle = "Proceedings of the 1st Workshop on Document-grounded Dialogue and Conversational Question Answering (DialDoc 2021)",
+    month = aug,
+    year = "2021",
+    address = "Online",
+    publisher = "Association for Computational Linguistics",
+    url = "https://aclanthology.org/2021.dialdoc-1.9",
+    doi = "10.18653/v1/2021.dialdoc-1.9",
+    pages = "63--68",
+    abstract = "Retrieving relevant answers from heterogeneous data formats, for given for questions, is a challenging problem. The process of pinpointing relevant information suitable to answer a question is further compounded in large document collections containing documents of substantial length. This paper presents the models designed as part of our submission to the DialDoc21 Shared Task (Document-grounded Dialogue and Conversational Question Answering) for span prediction in question answering. The proposed models leverage the superior predictive power of pretrained transformer models like RoBERTa, ALBERT and ELECTRA, to identify the most relevant information in an associated passage for the next agent turn. To further enhance the performance, the models were fine-tuned on different span selection based question answering datasets like SQuAD2.0 and Natural Questions (NQ) corpus. We also explored ensemble techniques for combining multiple models to achieve enhanced performance for the task. Our team SB{\_}NITK ranked 6th on the leaderboard for the Knowledge Identification task, and our best ensemble model achieved an Exact score of 58.58 and an F1 score of 73.39.",
+}
+
+@article{kfold,
+author = {Manorathna, Rukshan},
+year = {2020},
+month = {12},
+pages = {},
+title = {k-fold cross-validation explained in plain English (For evaluating a model's performance and hyperparameter tuning)}
+}
+
+@Article{Dutschmann2023,
+author={Dutschmann, Thomas-Martin
+and Kinzel, Lennart
+and ter Laak, Antonius
+and Baumann, Knut},
+title={Large-scale evaluation of k-fold cross-validation ensembles for uncertainty estimation},
+journal={Journal of Cheminformatics},
+year={2023},
+month={Apr},
+day={28},
+volume={15},
+number={1},
+pages={49},
+abstract={It is insightful to report an estimator that describes how certain a model is in a prediction, additionally to the prediction alone. For regression tasks, most approaches implement a variation of the ensemble method, apart from few exceptions. Instead of a single estimator, a group of estimators yields several predictions for an input. The uncertainty can then be quantified by measuring the disagreement between the predictions, for example by the standard deviation. In theory, ensembles should not only provide uncertainties, they also boost the predictive performance by reducing errors arising from variance. Despite the development of novel methods, they are still considered the ``golden-standard'' to quantify the uncertainty of regression models. Subsampling-based methods to obtain ensembles can be applied to all models, regardless whether they are related to deep learning or traditional machine learning. However, little attention has been given to the question whether the ensemble method is applicable to virtually all scenarios occurring in the field of cheminformatics. In a widespread and diversified attempt, ensembles are evaluated for 32 datasets of different sizes and modeling difficulty, ranging from physicochemical properties to biological activities. For increasing ensemble sizes with up to 200 members, the predictive performance as well as the applicability as uncertainty estimator are shown for all combinations of five modeling techniques and four molecular featurizations. Useful recommendations were derived for practitioners regarding the success and minimum size of ensembles, depending on whether predictive performance or uncertainty quantification is of more importance for the task at hand.},
+issn={1758-2946},
+doi={10.1186/s13321-023-00709-9},
+url={https://doi.org/10.1186/s13321-023-00709-9}
+}
+
+@article{MOHAMMED2023757,
+title = {A comprehensive review on ensemble deep learning: Opportunities and challenges},
+journal = {Journal of King Saud University - Computer and Information Sciences},
+volume = {35},
+number = {2},
+pages = {757-774},
+year = {2023},
+issn = {1319-1578},
+doi = {https://doi.org/10.1016/j.jksuci.2023.01.014},
+url = {https://www.sciencedirect.com/science/article/pii/S1319157823000228},
+author = {Ammar Mohammed and Rania Kora},
+keywords = {Ensemble learning, Ensemble methods, Machine learning, Deep learning, Ensemble deep learning},
+abstract = {In machine learning, two approaches outperform traditional algorithms: ensemble learning and deep learning. The former refers to methods that integrate multiple base models in the same framework to obtain a stronger model that outperforms them. The success of an ensemble method depends on several factors, including how the baseline models are trained and how they are combined. In the literature, there are common approaches to building an ensemble model successfully applied in several domains. On the other hand, deep learning-based models have improved the predictive accuracy of machine learning across a wide range of domains. Despite the diversity of deep learning architectures and their ability to deal with complex problems and the ability to extract features automatically, the main challenge in deep learning is that it requires a lot of expertise and experience to tune the optimal hyper-parameters, which makes it a tedious and time-consuming task. Numerous recent research efforts have been made to approach ensemble learning to deep learning to overcome this challenge. Most of these efforts focus on simple ensemble methods that have some limitations. Hence, this review paper provides comprehensive reviews of the various strategies for ensemble learning, especially in the case of deep learning. Also, it explains in detail the various features or factors that influence the success of ensemble methods. In addition, it presents and accurately categorized several research efforts that used ensemble learning in a wide range of domains.}
+}
+
+@inproceedings{swayamdipta2020dataset,
+    title={Dataset Cartography: Mapping and Diagnosing Datasets with Training Dynamics},
+    author={Swabha Swayamdipta and Roy Schwartz and Nicholas Lourie and Yizhong Wang and Hannaneh Hajishirzi and Noah A. Smith and Yejin Choi},
+    booktitle={Proceedings of EMNLP},
+    url={https://arxiv.org/abs/2009.10795},
+    year={2020}
+}
+
+@misc{boosting,
+      title={A Short Introduction to Boosting}, 
+      author={Yoav Freund and Robert E. Schapire},
+      year={1999},
+      url={https://cseweb.ucsd.edu/~yfreund/papers/IntroToBoosting.pdf}
+}
+
+@misc{wei2019eda,
+      title={EDA: Easy Data Augmentation Techniques for Boosting Performance on Text Classification Tasks}, 
+      author={Jason Wei and Kai Zou},
+      year={2019},
+      eprint={1901.11196},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL}
+}
+
+@misc{ensemblebert,
+      title={Ensemble BERT with Data Augmentation and Linguistic Knowledge on SQuAD 2.0}, 
+      author={Wen Zhou, Zianzhe Zhange and Hang Jiang},
+      year={2019},
+      url={https://web.stanford.edu/class/archive/cs/cs224n/cs224n.1204/reports/default/15845024.pdf}
+}
