@@ -5,6 +5,7 @@ import wandb
 
 import gymnasium as gym
 import yahtzee_gym
+from dice_sum_maximizer import DiceSumMaximizer
 
 def maybe_init_wandb():
     """
@@ -19,25 +20,48 @@ def maybe_init_wandb():
         run = None
     return run
 
+def train(model, env, num_steps=1000):
+    """
+    Training loop for the Yahtzee agent.
+    """
+    observation, info = env.reset()
+    print(f"Obs: {observation}")
+
+    for _ in range(num_steps):
+        # Get probabilities from neural network
+        probs = model.forward(observation)
+        
+        # Sample binary mask from probabilities
+        action = torch.bernoulli(probs.cpu()).numpy().astype(int)
+        
+        observation, reward, terminated, truncated, info = env.step(action)
+        print(f"Obs: {observation}")
+        print(f"Action: {action}, Reward: {reward}, Terminated: {terminated}, Truncated: {truncated}")
+        
+        if terminated or truncated:
+            observation, info = env.reset()
+            print(f"Obs: {observation}")
+
 def main():
     run = maybe_init_wandb()
 
     print("CUDA available:", torch.cuda.is_available())
+    # Set up device
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"Using device: {device}")
     print("GPU count:", torch.cuda.device_count())
     if torch.cuda.is_available():
         print("GPU name:", torch.cuda.get_device_name(0))
     else:
         print("No GPU detected!")
 
+    # Initialize the neural network and environment
+    model = DiceSumMaximizer(hidden_size=64)
     env = gym.make('Yahtzee-v0')
-    observation, info = env.reset()
-
-    for _ in range(1000):
-        action = env.action_space.sample()  # Random action
-        observation, reward, terminated, truncated, info = env.step(action)
-        
-        if terminated or truncated:
-            observation, info = env.reset()
+    
+    # Run training
+    train(model, env, num_steps=1000)
+    
     env.close()
 
     if run is not None:

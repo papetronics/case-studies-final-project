@@ -42,3 +42,5 @@ paper/main_academic.*
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+__pycache__
