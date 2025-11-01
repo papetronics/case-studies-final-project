@@ -43,9 +43,6 @@ class YahtzeeEnv(gym.Env):
     
     def step(self, action) -> tuple[dict, float, bool, bool, dict]:
         """Execute one time step within the environment."""
-        # TODO: Implement game logic
-        reward = 0
-        terminated = False
         truncated = False
         info = {}
 
@@ -53,6 +50,12 @@ class YahtzeeEnv(gym.Env):
         self.state = self.__roll_dice(self.state, action)
 
         terminated = self.state.rolls_remaining == 0
+        
+        # Give reward as sum of dice when episode terminates
+        if terminated:
+            reward = float(np.sum(self.state.dice))
+        else:
+            reward = 0.0
 
         return self.state.observation(), reward, terminated, truncated, info
 
@@ -67,7 +70,7 @@ class YahtzeeEnv(gym.Env):
         
         # TODO: Reset game state
         self.state = self.__roll_dice(
-            DiceState(dice=np.array([1, 1, 1, 1, 1]), rolls_remaining=3),
+            DiceState(dice=np.array([1, 1, 1, 1, 1], dtype=np.int32), rolls_remaining=3),
             hold_mask=np.array([0, 0, 0, 0, 0])
         )
 
@@ -91,4 +94,6 @@ class YahtzeeEnv(gym.Env):
         # Use mask to roll only dice that are not held (hold_mask == 0)
         roll_mask = hold_mask == 0
         new_dice[roll_mask] = np.random.randint(1, 7, size=np.sum(roll_mask))
+        # Ensure the dice are int32 to match observation space
+        new_dice = new_dice.astype(np.int32)
         return DiceState(dice=new_dice, rolls_remaining=initial_state.rolls_remaining - 1)

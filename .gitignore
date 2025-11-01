@@ -44,3 +44,6 @@ ehthumbs.db
 Thumbs.db
 
 __pycache__
+
+lightning_logs
+logs
