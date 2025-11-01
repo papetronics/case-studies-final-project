@@ -14,8 +14,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY --link yahtzee-gym /opt/yahtzee-gym
 RUN pip install -e /opt/yahtzee-gym
 
-# Copy the main script for the W&B job (this needs to be updated to copy all scripts from a specific directory)
+# Copy all necessary Python scripts for the W&B job
 COPY --link containerized/main.py ./
+COPY --link containerized/src ./src
 
 # Runs the main script when the container starts
 ENTRYPOINT ["python", "main.py"]
