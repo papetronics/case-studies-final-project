@@ -7,8 +7,7 @@ import argparse
 import gymnasium as gym
 import yahtzee_gym
 import pytorch_lightning as L
-from src.dice_sum_maximizer import DiceSumMaximizer
-from src.reinforce_trainer import REINFORCEWithBaselineTrainer
+from src.A_dice_maximizer.trainer import REINFORCEWithBaselineTrainer
 from src.return_calculators import MonteCarloReturnCalculator
 from src.dummy_dataset import DummyDataset
 

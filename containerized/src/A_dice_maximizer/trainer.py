@@ -5,9 +5,9 @@ from typing import Dict, Any, Optional
 
 import gymnasium as gym
 import yahtzee_gym
-from .dice_sum_maximizer import DiceSumMaximizer
-from .return_calculators import ReturnCalculator, MonteCarloReturnCalculator
-from .episode import Episode
+from .model import DiceSumMaximizer
+from src.return_calculators import ReturnCalculator, MonteCarloReturnCalculator
+from src.episode import Episode
 
 
 class REINFORCEWithBaselineTrainer(L.LightningModule):
