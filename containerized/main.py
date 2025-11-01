@@ -29,7 +29,7 @@ def main():
     # Initialize wandb first to check for config
     wandb_run = maybe_init_wandb()
     
-    # Set up argument parser with defaults
+    # Set up argument Parser with defaults
     parser = argparse.ArgumentParser(description='Yahtzee Monte Carlo Training')
     parser.add_argument('--epochs', type=int, default=50,
                         help='Number of training epochs')
@@ -100,6 +100,8 @@ def main():
         log_every_n_steps=1,
         accelerator='auto',  # Will use GPU if available
         devices='auto',
+        gradient_clip_val=1.0,  # Start with 1.0, adjust as needed
+        gradient_clip_algorithm="norm",  # Clip by gradient norm
     )
     
     # Create dummy dataloader (required by Lightning but not used)

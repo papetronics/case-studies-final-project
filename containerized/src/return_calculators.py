@@ -16,8 +16,15 @@ class MonteCarloReturnCalculator(ReturnCalculator):
     
     def calculate_returns(self, episode) -> List[float]:
         num_steps = len(episode.states)
-        episode_return = float(episode.reward)
-        returns = [episode_return] * num_steps
+        returns = []
+        
+        # Calculate discounted return for each step
+        for t in range(num_steps):
+            G_t = 0.0
+            for k in range(t, num_steps):
+                G_t += (self.gamma ** (k - t)) * episode.rewards[k]
+            returns.append(G_t)
+            
         return returns
 
 

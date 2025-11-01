@@ -6,7 +6,7 @@ from typing import Dict, Any, Optional
 import gymnasium as gym
 import yahtzee_gym
 from .dice_sum_maximizer import DiceSumMaximizer
-from .return_calculators import ReturnCalculator, MonteCarloReturnCalculator
+from .return_calculators import ReturnCalculator, TDLambdaReturnCalculator
 from .episode import Episode
 
 
@@ -15,7 +15,7 @@ class REINFORCEWithBaselineTrainer(L.LightningModule):
     def __init__(
         self,
         hidden_size: int = 64,
-        learning_rate: float = 1e-3,
+        learning_rate: float = 1e-2,
         episodes_per_batch: int = 32,
         baseline_alpha: float = 0.1,
         return_calculator: Optional[ReturnCalculator] = None,
@@ -30,7 +30,7 @@ class REINFORCEWithBaselineTrainer(L.LightningModule):
         self.episodes_per_batch = episodes_per_batch
         self.baseline_alpha = baseline_alpha
         
-        self.return_calculator = return_calculator or MonteCarloReturnCalculator()
+        self.return_calculator = return_calculator or TDLambdaReturnCalculator(lambda_=0.8)
         
         self.baseline = 0.0
         
@@ -41,23 +41,38 @@ class REINFORCEWithBaselineTrainer(L.LightningModule):
         
     def collect_episode(self) -> Episode:
         if self.env is None:
-            self.env = gym.make('Yahtzee-v0')
+            self.env = gym.make('Yahtzee-v0', max_episode_steps=13*3)
             
         episode = Episode()
         observation, info = self.env.reset()
+        #print(observation)
         
         step_count = 0
         while True:
-            action_tensor, log_prob = self.policy_net.sample(observation)
-            action = action_tensor.cpu().numpy().astype(int)
-            
-            episode.add_step(observation, action, log_prob)
+            hold_action_tensor, scoring_action_tensor, log_prob = self.policy_net.sample(observation)
+            hold_action = hold_action_tensor.cpu().numpy().astype(int)
+            scoring_action = scoring_action_tensor.cpu().numpy().astype(int)
+
+            action = {
+                'dice_hold': hold_action,
+                'scoring': scoring_action
+            }
+            #print(action)
             
             observation, reward, terminated, truncated, info = self.env.step(action)
+            #print(reward)
+            #print(observation)
+            
+            # Add step with the reward we just received
+            episode.add_step(observation, action, log_prob, reward)
             step_count += 1
             
+            #if truncated:
+                #print("Episode truncated!")
+            #if terminated:
+                #print("Episode ended, total score:", episode.total_reward())
+
             if terminated or truncated:
-                episode.set_reward(reward)
                 break
                 
         return episode
@@ -69,7 +84,7 @@ class REINFORCEWithBaselineTrainer(L.LightningModule):
         for _ in range(self.episodes_per_batch):
             episode = self.collect_episode()
             episodes.append(episode)
-            total_reward += episode.reward
+            total_reward += episode.total_reward()
             
         policy_loss = 0.0
         
@@ -96,7 +111,7 @@ class REINFORCEWithBaselineTrainer(L.LightningModule):
         return torch.optim.Adam(self.policy_net.parameters(), lr=self.learning_rate)
         
     def on_train_start(self):
-        self.env = gym.make('Yahtzee-v0')
+        self.env = gym.make('Yahtzee-v0', max_episode_steps=14*3)
         
     def on_train_end(self):
         if self.env is not None:
