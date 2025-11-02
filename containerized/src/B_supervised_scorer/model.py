@@ -82,26 +82,35 @@ class SupervisedDiceScorer(nn.Module):
         scoring_head_layers.append(nn.Linear(hidden_size, scoring_output_size))
         self.scoring_head = nn.Sequential(*scoring_head_layers)
         self.masked_softmax = SupervisedDiceScorer.MaskedSoftmax()
+        
+        # Add score prediction head for regression
+        score_prediction_layers = []
+        if dropout_rate > 0.0:
+            score_prediction_layers.append(nn.Dropout(dropout_rate))
+        score_prediction_layers.append(nn.Linear(hidden_size, scoring_output_size))  # 13 raw scores
+        score_prediction_layers.append(nn.PReLU())
+        self.score_prediction_head = nn.Sequential(*score_prediction_layers)
 
-    def forward_observation(self, observation: Dict[str, Any]) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward_observation(self, observation: Dict[str, Any]) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         return self.forward(observation_to_tensor(observation).unsqueeze(0).to(self.device))
 
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         spine = self.network(x)
 
         rolling_output = self.rolling_head(spine)
-        scoring_output =  self.scoring_head(spine)
+        scoring_output = self.scoring_head(spine)
+        score_predictions = self.score_prediction_head(spine)
 
         # select last 13 inputs as mask
         scoring_output = self.masked_softmax(scoring_output, x[:, -13:])
 
-        return rolling_output.squeeze(0), scoring_output.squeeze(0)
+        return rolling_output.squeeze(0), scoring_output.squeeze(0), score_predictions.squeeze(0)
 
-    def sample_observation(self, observation: Dict[str, Any]) -> tuple[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
+    def sample_observation(self, observation: Dict[str, Any]) -> tuple[tuple[torch.Tensor, torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
         return self.sample(observation_to_tensor(observation).unsqueeze(0).to(self.device))
 
-    def sample(self, x: torch.Tensor) -> tuple[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
-        rolling_probs, scoring_probs = self.forward(x)
+    def sample(self, x: torch.Tensor) -> tuple[tuple[torch.Tensor, torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
+        rolling_probs, scoring_probs, score_predictions = self.forward(x)
         rolling_dist = torch.distributions.Bernoulli(rolling_probs)
         rolling_tensor = rolling_dist.sample()
         rolling_log_prob = rolling_dist.log_prob(rolling_tensor).sum()
@@ -110,6 +119,6 @@ class SupervisedDiceScorer(nn.Module):
         scoring_tensor = scoring_dist.sample()
         scoring_log_prob = scoring_dist.log_prob(scoring_tensor).sum()
 
-        return (rolling_tensor, scoring_tensor), (rolling_log_prob, scoring_log_prob)
+        return (rolling_tensor, scoring_tensor, score_predictions), (rolling_log_prob, scoring_log_prob)
     
 

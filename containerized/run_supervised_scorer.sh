@@ -24,6 +24,6 @@ docker run --rm \
   -e WANDB_MODE=offline \
   -e HOME=/tmp \
   $IMAGE_NAME \
-  --epochs 50 --episodes-per-batch 32 --log-dir /workspace/logs --scenario supervised_scorer --hidden-size 128 --num-hidden 2 --dataset-size 5000
+  --epochs 50 --episodes-per-batch 32 --log-dir /workspace/logs --scenario supervised_scorer --hidden-size 256 --num-hidden 4 --dataset-size 5000
 
 echo "✅ Done."
