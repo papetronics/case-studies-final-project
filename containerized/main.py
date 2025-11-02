@@ -6,8 +6,8 @@ import argparse
 
 import pytorch_lightning as L
 from src.A_dice_maximizer.trainer import REINFORCEWithBaselineTrainer
-
 from src.B_supervised_scorer.trainer import SupervisedScorerTrainer
+from src.C_single_turn_score_maximizer.trainer import SingleTurnScoreMaximizerREINFORCETrainer
 
 from src.return_calculators import MonteCarloReturnCalculator
 from src.dummy_dataset import DummyDataset
@@ -31,7 +31,8 @@ def main():
     
     # Set up argument parser with defaults
     parser = argparse.ArgumentParser(description='Yahtzee RL')
-    parser.add_argument('--scenario', type=str, default='supervised_scorer', choices=['dice_maximizer', 'supervised_scorer'],
+    parser.add_argument('--scenario', type=str, default='supervised_scorer',
+                        choices=['dice_maximizer', 'supervised_scorer', 'single_turn_score_maximizer', 'test_single_turn_rl'],
                         help='Scenario to run')
     parser.add_argument('--epochs', type=int, default=50,
                         help='Number of training epochs')
@@ -46,7 +47,9 @@ def main():
     parser.add_argument('--dataset-size', type=int, default=10000,
                         help='Dataset size (for supervised scorer)')
     parser.add_argument('--log-dir', type=str, default='./logs')
-    
+    parser.add_argument('--checkpoint-path', type=str, default=None,
+                        help='Path to model checkpoint for evaluation')
+
     args = parser.parse_args()
     
     # Get hyperparameters from wandb config if available, otherwise use argparse
@@ -113,6 +116,19 @@ def main():
             num_hidden=num_hidden,
             dataset_size=dataset_size
         )
+    elif args.scenario == 'single_turn_score_maximizer':
+        single_turn_score_maximizer_main(
+            epochs=epochs,
+            episodes_per_batch=episodes_per_batch,
+            learning_rate=learning_rate,
+            hidden_size=hidden_size,
+            logger=logger,
+            num_hidden=num_hidden,
+            dropout_rate=0.1
+        )
+    elif args.scenario == 'test_single_turn_rl':
+        from src.C_single_turn_score_maximizer.test_episode import main as test_episode_main
+        test_episode_main(checkpoint_path=args.checkpoint_path)
     else:
         raise ValueError(f"Unknown scenario: {args.scenario}")
     
@@ -120,6 +136,46 @@ def main():
     
     if wandb_run is not None:
         wandb_run.finish()
+
+def single_turn_score_maximizer_main(
+    epochs: int,
+    episodes_per_batch: int,
+    learning_rate: float,
+    hidden_size: int,
+    logger: L.loggers.Logger,
+    num_hidden: int,
+    dropout_rate: float,
+):
+    # Create return calculator and model
+    return_calculator = MonteCarloReturnCalculator()
+    model = SingleTurnScoreMaximizerREINFORCETrainer(
+        hidden_size=hidden_size,
+        learning_rate=learning_rate,
+        episodes_per_batch=episodes_per_batch,
+        return_calculator=return_calculator,
+        num_hidden=num_hidden,
+        dropout_rate=dropout_rate
+    )
+        
+    # Create trainer
+    trainer = L.Trainer(
+        max_epochs=epochs,
+        logger=logger,
+        enable_checkpointing=True,
+        log_every_n_steps=1,
+        accelerator='auto',  # Will use GPU if available
+        devices='auto',
+    )
+    
+    # Create dummy dataloader (required by Lightning but not used)
+    dummy_dataset = DummyDataset(size=1000)
+    dataloader = torch.utils.data.DataLoader(dummy_dataset, batch_size=1, num_workers=0)
+    
+    # Train
+    trainer.fit(model, dataloader)
+
+    from src.C_single_turn_score_maximizer.test_episode import main as test_episode_main
+    test_episode_main(model=model.policy_net)
 
 def supervised_scorer_main(
     epochs: int,
