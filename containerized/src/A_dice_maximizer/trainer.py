@@ -34,30 +34,27 @@ class REINFORCEWithBaselineTrainer(L.LightningModule):
         
         self.baseline = 0.0
         
-        self.env = None
+        self.env = gym.make('Yahtzee-v0')
         
     def forward(self, observation: Dict[str, Any]) -> torch.Tensor:
         return self.policy_net(observation)
         
     def collect_episode(self) -> Episode:
-        if self.env is None:
-            self.env = gym.make('Yahtzee-v0')
-            
         episode = Episode()
-        observation, info = self.env.reset()
+        observation, _ = self.env.reset()
         
         step_count = 0
         while True:
             action_tensor, log_prob = self.policy_net.sample(observation)
-            action = action_tensor.cpu().numpy().astype(int)
-            
+            action = action_tensor.cpu().numpy().astype(bool)
+
             episode.add_step(observation, action, log_prob)
-            
-            observation, reward, terminated, truncated, info = self.env.step(action)
+
+            observation, reward, terminated, truncated, _ = self.env.step(action)
             step_count += 1
             
             if terminated or truncated:
-                episode.set_reward(reward)
+                episode.set_reward(float(reward))
                 break
                 
         return episode
@@ -67,12 +64,12 @@ class REINFORCEWithBaselineTrainer(L.LightningModule):
         total_reward = 0.0
         
         for _ in range(self.episodes_per_batch):
-            episode = self.collect_episode()
+            episode: Episode = self.collect_episode()
             episodes.append(episode)
             total_reward += episode.reward
-            
-        policy_loss = 0.0
-        
+
+        policy_loss = torch.tensor([0.0], device=self.device)
+
         for episode in episodes:
             returns = self.return_calculator.calculate_returns(episode)
             
@@ -96,7 +93,7 @@ class REINFORCEWithBaselineTrainer(L.LightningModule):
         return torch.optim.Adam(self.policy_net.parameters(), lr=self.learning_rate)
         
     def on_train_start(self):
-        self.env = gym.make('Yahtzee-v0')
+        pass
         
     def on_train_end(self):
         if self.env is not None:

@@ -24,6 +24,6 @@ docker run --rm \
   -e WANDB_MODE=offline \
   -e HOME=/tmp \
   $IMAGE_NAME \
-  --epochs 3 --episodes-per-batch 16
+  --epochs 3 --episodes-per-batch 16 --log-dir /workspace/logs
 
 echo "✅ Done."

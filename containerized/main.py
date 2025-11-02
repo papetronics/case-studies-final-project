@@ -38,6 +38,7 @@ def main():
                         help='Learning rate')
     parser.add_argument('--hidden-size', type=int, default=64,
                         help='Hidden layer size')
+    parser.add_argument('--log-dir', type=str, default='./logs')
     
     args = parser.parse_args()
     
@@ -47,6 +48,7 @@ def main():
         episodes_per_batch = wandb_run.config.get('episodes_per_batch', args.episodes_per_batch)
         learning_rate = wandb_run.config.get('learning_rate', args.learning_rate)
         hidden_size = wandb_run.config.get('hidden_size', args.hidden_size)
+        log_dir = wandb_run.config.get('log_dir', args.log_dir)
         use_wandb = True
     else:
         epochs = args.epochs
@@ -54,6 +56,7 @@ def main():
         learning_rate = args.learning_rate
         hidden_size = args.hidden_size
         use_wandb = False
+        log_dir = args.log_dir
 
     print("CUDA available:", torch.cuda.is_available())
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -87,7 +90,6 @@ def main():
         )
     else:
         # Ensure log directory exists
-        log_dir = "/workspace/logs"
         os.makedirs(log_dir, exist_ok=True)
         logger = L.pytorch_lightning.loggers.TensorBoardLogger(log_dir, name="yahtzee-reinforce")
         

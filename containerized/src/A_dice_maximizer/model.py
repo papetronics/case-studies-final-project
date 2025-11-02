@@ -10,6 +10,9 @@ class DiceSumMaximizer(nn.Module):
         
         self.device = device
         
+        ## 33 model inputs:
+        #   - Dice [30]: One-hot encoding of 5 dice (6 sides each) = 5 * 6 = 30
+        #   - Rolls Used [3]: One-hot encoding of rolls used (0, 1, 2) = 3
         self.network = nn.Sequential(
             nn.Linear(33, hidden_size),
             nn.ReLU(),
@@ -32,11 +35,11 @@ class DiceSumMaximizer(nn.Module):
         return action_tensor, log_prob
     
     def _observation_to_tensor(self, observation: Dict[str, Any]) -> torch.Tensor:
-        dice = observation['dice']
-        rolls_remaining = observation['rolls_remaining']
-        
+        dice = observation['dice'] # numpy array showing the actual dice, e.g. [1, 3, 5, 6, 2]
+        rolls_used = observation['rolls_used'] # integer: 0, 1, or 2
+
         dice_onehot = np.eye(6)[dice - 1].flatten()
-        rolls_onehot = np.eye(3)[rolls_remaining]
-        
+        rolls_onehot = np.eye(3)[rolls_used]
+
         input_vector = np.concatenate([dice_onehot, rolls_onehot])
         return torch.FloatTensor(input_vector).unsqueeze(0).to(self.device)
