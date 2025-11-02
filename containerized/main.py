@@ -4,8 +4,6 @@ import torch
 import wandb
 import argparse
 
-import gymnasium as gym
-import yahtzee_gym
 import pytorch_lightning as L
 from src.A_dice_maximizer.trainer import REINFORCEWithBaselineTrainer
 from src.return_calculators import MonteCarloReturnCalculator

@@ -4,7 +4,7 @@ import numpy as np
 from typing import Dict, Any, Optional
 
 import gymnasium as gym
-import yahtzee_gym
+import src.A_dice_maximizer.yahtzee_env
 from .model import DiceSumMaximizer
 from src.return_calculators import ReturnCalculator, MonteCarloReturnCalculator
 from src.episode import Episode

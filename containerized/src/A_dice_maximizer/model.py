@@ -15,9 +15,11 @@ class DiceSumMaximizer(nn.Module):
         #   - Rolls Used [3]: One-hot encoding of rolls used (0, 1, 2) = 3
         self.network = nn.Sequential(
             nn.Linear(33, hidden_size),
-            nn.ReLU(),
+            nn.GELU(),
+            nn.LayerNorm(hidden_size),
             nn.Linear(hidden_size, hidden_size),
-            nn.ReLU(),
+            nn.GELU(),
+            nn.LayerNorm(hidden_size),
             nn.Linear(hidden_size, 5),
             nn.Sigmoid()
         ).to(device)
