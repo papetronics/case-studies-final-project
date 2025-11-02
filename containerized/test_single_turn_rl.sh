@@ -42,7 +42,7 @@ echo "🚀 Running container..."
 mkdir -p "$(pwd)/logs"
 
 # Run container with user mapping and proper volume permissions
-docker run --rm \
+docker run --rm -it \
   --gpus all \
   -u "$(id -u):$(id -g)" \
   -v "$(pwd)/logs":/workspace/logs \
