@@ -5,6 +5,7 @@ from typing import Dict, Any, Optional
 
 import gymnasium as gym
 import src.C_single_turn_score_maximizer.yahtzee_env
+import src.full_yahtzee_env
 from .model import TurnScoreMaximizer
 from src.return_calculators import ReturnCalculator, MonteCarloReturnCalculator
 from src.episode import Episode
@@ -37,6 +38,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(L.LightningModule):
         self.baseline = 0.0
         
         self.env = gym.make('Yahtzee-v1')
+        self.full_env = gym.make('FullYahtzee-v1')  # For validation
         
     def forward(self, observation: Dict[str, Any]) -> torch.Tensor:
         return self.policy_net(observation)
@@ -71,6 +73,53 @@ class SingleTurnScoreMaximizerREINFORCETrainer(L.LightningModule):
                 break
                 
         return episode
+    
+    def run_full_game_episode(self) -> float:
+        """Run a complete Yahtzee game using the full environment and return total score."""
+        observation, _ = self.full_env.reset()
+        total_score = 0.0
+        
+        while True:
+            # Use the trained policy to select actions
+            with torch.no_grad():
+                actions, _ = self.policy_net.sample_observation(observation)
+                rolling_action_tensor, scoring_action_tensor = actions
+
+                action = {}
+                if observation['phase'] == 0:
+                    action = {
+                        'hold_mask': rolling_action_tensor.cpu().numpy().astype(bool)
+                    }
+                else:
+                    action = {
+                        'score_category': scoring_action_tensor.cpu().item()
+                    }
+
+            observation, reward, terminated, truncated, _ = self.full_env.step(action)
+            total_score += float(reward)
+            
+            if terminated or truncated:
+                break
+                
+        return total_score
+    
+    def validation_step(self, batch, batch_idx):
+        """Run validation using the full Yahtzee environment."""
+        num_validation_games = 50
+        total_scores = []
+        
+        for _ in range(num_validation_games):
+            score = self.run_full_game_episode()
+            total_scores.append(score)
+        
+        mean_total_score = float(np.mean(total_scores))
+        std_total_score = float(np.std(total_scores))
+        
+        self.log('val/mean_total_score', mean_total_score, prog_bar=True)
+        self.log('val/std_total_score', std_total_score, prog_bar=False)
+        
+        # Return a dict for PyTorch Lightning compatibility
+        return {'val_loss': -mean_total_score}  # Negative because higher scores are better
         
     def training_step(self, batch, batch_idx):
         episodes = []
@@ -130,3 +179,5 @@ class SingleTurnScoreMaximizerREINFORCETrainer(L.LightningModule):
     def on_train_end(self):
         if self.env is not None:
             self.env.close()
+        if self.full_env is not None:
+            self.full_env.close()

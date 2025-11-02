@@ -167,14 +167,20 @@ def single_turn_score_maximizer_main(
         log_every_n_steps=1,
         accelerator='auto',  # Will use GPU if available
         devices='auto',
+        check_val_every_n_epoch=1,  # Run validation every epoch
+        #num_sanity_val_steps=0,  # Disable sanity checking
     )
     
     # Create dummy dataloader (required by Lightning but not used)
     dummy_dataset = DummyDataset(size=dataset_size//episodes_per_batch)
-    dataloader = torch.utils.data.DataLoader(dummy_dataset, batch_size=1, num_workers=0)
+    train_dataloader = torch.utils.data.DataLoader(dummy_dataset, batch_size=1, num_workers=15)
     
-    # Train
-    trainer.fit(model, dataloader)
+    # Create dummy validation dataloader
+    val_dummy_dataset = DummyDataset(size=1)  # Just one batch for validation
+    val_dataloader = torch.utils.data.DataLoader(val_dummy_dataset, batch_size=1, num_workers=15)
+    
+    # Train with validation
+    trainer.fit(model, train_dataloader, val_dataloader)
 
     from src.C_single_turn_score_maximizer.test_episode import main as test_episode_main
     test_episode_main(model=model.policy_net)

@@ -46,7 +46,9 @@ class DiceState:
         """Randomly fill the score sheet."""
         self.score_sheet_available_mask[:] = 1
         num_filled = np.random.randint(0, 12)  # 0 to 11 inclusive
-        self.score_sheet_available_mask[12] = 0  # Ensure chance category is always filled
+        # fill chance category with 90% probability
+        if np.random.rand() < 0.9:
+            self.score_sheet_available_mask[12] = 0
         filled_indices = np.random.choice(12, size=num_filled, replace=False)
         self.score_sheet_available_mask[filled_indices] = 0
 
