@@ -24,6 +24,6 @@ docker run --rm \
   -e WANDB_MODE=offline \
   -e HOME=/tmp \
   $IMAGE_NAME \
-  --epochs 3 --episodes-per-batch 16 --log-dir /workspace/logs --scenario single_turn_score_maximizer --hidden-size 256 --num-hidden 4 --dataset-size 1000
+  --epochs 35 --episodes-per-batch 32 --log-dir /workspace/logs --scenario single_turn_score_maximizer --hidden-size 256 --num-hidden 4 --dataset-size 1000
 
 echo "✅ Done."

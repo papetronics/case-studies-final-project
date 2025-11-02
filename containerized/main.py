@@ -124,7 +124,8 @@ def main():
             hidden_size=hidden_size,
             logger=logger,
             num_hidden=num_hidden,
-            dropout_rate=0.1
+            dropout_rate=0.1,
+            dataset_size=dataset_size
         )
     elif args.scenario == 'test_single_turn_rl':
         from src.C_single_turn_score_maximizer.test_episode import main as test_episode_main
@@ -145,6 +146,7 @@ def single_turn_score_maximizer_main(
     logger: L.loggers.Logger,
     num_hidden: int,
     dropout_rate: float,
+    dataset_size: int,
 ):
     # Create return calculator and model
     return_calculator = MonteCarloReturnCalculator()
@@ -168,7 +170,7 @@ def single_turn_score_maximizer_main(
     )
     
     # Create dummy dataloader (required by Lightning but not used)
-    dummy_dataset = DummyDataset(size=1000)
+    dummy_dataset = DummyDataset(size=dataset_size//episodes_per_batch)
     dataloader = torch.utils.data.DataLoader(dummy_dataset, batch_size=1, num_workers=0)
     
     # Train

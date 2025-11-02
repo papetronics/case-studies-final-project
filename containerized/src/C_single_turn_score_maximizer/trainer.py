@@ -99,6 +99,9 @@ class SingleTurnScoreMaximizerREINFORCETrainer(L.LightningModule):
         self.log('train/policy_loss', policy_loss, prog_bar=True)
         self.log('train/avg_reward', avg_reward, prog_bar=True)
         self.log('train/baseline', self.baseline, prog_bar=False)
+        # Log current learning rate
+        current_lr = self.trainer.optimizers[0].param_groups[0]['lr']
+        self.log('lr', current_lr, prog_bar=False)
         
         return policy_loss
             
@@ -116,7 +119,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(L.LightningModule):
             "optimizer": optimizer,
             "lr_scheduler": {
                 "scheduler": scheduler,
-                "monitor": "train/loss",    # Monitor training loss 
+                "monitor": "train/policy_loss",    # Monitor training loss 
                 "frequency": 1            # Check every epoch
             }
         }

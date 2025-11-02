@@ -12,6 +12,8 @@ def observation_to_tensor(observation: Dict[str, Any]) -> torch.Tensor:
     dice_onehot = np.eye(6)[dice - 1].flatten()
     rolls_onehot = np.eye(3)[rolls_used]
 
+    #print(available_categories)
+
     input_vector = np.concatenate([dice_onehot, rolls_onehot, [phase], available_categories])
     return torch.FloatTensor(input_vector)
 
@@ -45,7 +47,6 @@ class TurnScoreMaximizer(nn.Module):
     def __init__(self, hidden_size: int = 64, num_hidden: int = 1, dropout_rate: float = 0.1, device = 'cuda' if torch.cuda.is_available() else 'cpu'):
         super(TurnScoreMaximizer, self).__init__()
         
-        self.device = device
         self.dropout_rate = dropout_rate
         
         ## 46 model inputs:
@@ -67,7 +68,7 @@ class TurnScoreMaximizer(nn.Module):
             
         self.network = nn.Sequential(
             *layers
-        ).to(device)
+        )
 
         rolling_head_layers = []
         if dropout_rate > 0.0:
@@ -76,14 +77,19 @@ class TurnScoreMaximizer(nn.Module):
             nn.Linear(hidden_size, dice_output_size),
             nn.Sigmoid()
         ])
-        self.rolling_head = nn.Sequential(*rolling_head_layers)
+        self.rolling_head = nn.Sequential(*rolling_head_layers).to(self.device)
 
         scoring_head_layers = []
         if dropout_rate > 0.0:
             scoring_head_layers.append(nn.Dropout(dropout_rate))
         scoring_head_layers.append(nn.Linear(hidden_size, scoring_output_size))
-        self.scoring_head = nn.Sequential(*scoring_head_layers)
-        self.masked_softmax = TurnScoreMaximizer.MaskedSoftmax()
+        self.scoring_head = nn.Sequential(*scoring_head_layers).to(self.device)
+        self.masked_softmax = TurnScoreMaximizer.MaskedSoftmax().to(self.device)
+
+    @property
+    def device(self) -> torch.device:
+        """Get the device of the model parameters."""
+        return next(self.parameters()).device
 
     def forward_observation(self, observation: Dict[str, Any]) -> tuple[torch.Tensor, torch.Tensor]:
         return self.forward(observation_to_tensor(observation).unsqueeze(0).to(self.device))
@@ -104,6 +110,8 @@ class TurnScoreMaximizer(nn.Module):
 
     def sample(self, x: torch.Tensor) -> tuple[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
         rolling_probs, scoring_probs = self.forward(x)
+        #print(rolling_probs)
+        #print(scoring_probs)
         rolling_dist = torch.distributions.Bernoulli(rolling_probs)
         rolling_tensor = rolling_dist.sample()
         rolling_log_prob = rolling_dist.log_prob(rolling_tensor).sum()
