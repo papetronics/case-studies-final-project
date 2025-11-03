@@ -183,7 +183,7 @@ def single_turn_score_maximizer_main(
     trainer.fit(model, train_dataloader, val_dataloader)
 
     from src.C_single_turn_score_maximizer.test_episode import main as test_episode_main
-    test_episode_main(model=model.policy_net)
+    test_episode_main(model=model.policy_net, interactive=False)
 
 def supervised_scorer_main(
     epochs: int,

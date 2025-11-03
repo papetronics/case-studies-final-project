@@ -18,7 +18,8 @@ def wait_for_enter():
 
 def main(
     checkpoint_path: str | None = None,
-    model: TurnScoreMaximizer | None = None
+    model: TurnScoreMaximizer | None = None,
+    interactive: bool = True,
 ):
     env = gym.make("FullYahtzee-v1")
 
@@ -31,11 +32,12 @@ def main(
         model = model if model else TurnScoreMaximizer()
     
     model.eval()
-    run_episode(env, model)
+    run_episode(env, model, interactive)
 
 def run_episode(
     env: gym.Env,
-    model: TurnScoreMaximizer
+    model: TurnScoreMaximizer,
+    interactive: bool = True,
 ):
     obs, _ = env.reset()
     original_dice = obs['dice'].copy()
@@ -43,7 +45,8 @@ def run_episode(
 
     clear_screen()
     print_game_state(obs, original_dice, kept_dice)
-    wait_for_enter()
+    if interactive:
+        wait_for_enter()
 
     total_reward = 0.0
 
@@ -66,8 +69,9 @@ def run_episode(
                 # Scoring phase
                 print_action_description(obs, None, scoring_action_tensor)
 
-            wait_for_enter()
-            
+            if interactive:
+                wait_for_enter()
+
             obs, reward, done, truncated, info = env.step(action)
             total_reward += float(reward)
 
@@ -89,8 +93,9 @@ def run_episode(
             if truncated:
                 print(f"\n⏰ Game Truncated! Total Score: {int(total_reward)}")
                 break
-            
-            wait_for_enter()
+
+            if interactive:
+                wait_for_enter()
 
 
 def print_scorecard(observation: dict):
