@@ -7,7 +7,7 @@ IMAGE_NAME="csml-final-project"
 cd ..
 
 echo "🔨 Building local dev image..."
-docker build -f containerized/Dockerfile.wandb -t $IMAGE_NAME .
+docker build -f Dockerfile.wandb -t $IMAGE_NAME .
 
 echo "🚀 Running container..."
 
