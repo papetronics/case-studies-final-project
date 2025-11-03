@@ -86,30 +86,37 @@ class TurnScoreMaximizer(nn.Module):
         self.scoring_head = nn.Sequential(*scoring_head_layers).to(self.device)
         self.masked_softmax = TurnScoreMaximizer.MaskedSoftmax().to(self.device)
 
+        baseline_head_layers = []
+        if dropout_rate > 0.0:
+            baseline_head_layers.append(nn.Dropout(dropout_rate))
+        baseline_head_layers.append(nn.Linear(hidden_size, 1))
+        self.baseline_head = nn.Sequential(*baseline_head_layers).to(self.device)
+
     @property
     def device(self) -> torch.device:
         """Get the device of the model parameters."""
         return next(self.parameters()).device
 
-    def forward_observation(self, observation: Dict[str, Any]) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward_observation(self, observation: Dict[str, Any]) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         return self.forward(observation_to_tensor(observation).unsqueeze(0).to(self.device))
 
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         spine = self.network(x)
 
         rolling_output = self.rolling_head(spine)
         scoring_output = self.scoring_head(spine)
+        baseline_output = self.baseline_head(spine)
 
         # select last 13 inputs as mask
         scoring_output = self.masked_softmax(scoring_output, x[:, -13:])
 
-        return rolling_output.squeeze(0), scoring_output.squeeze(0)
+        return rolling_output.squeeze(0), scoring_output.squeeze(0), baseline_output.squeeze(0)
 
-    def sample_observation(self, observation: Dict[str, Any]) -> tuple[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
+    def sample_observation(self, observation: Dict[str, Any]) -> tuple[tuple[torch.Tensor, torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
         return self.sample(observation_to_tensor(observation).unsqueeze(0).to(self.device))
 
-    def sample(self, x: torch.Tensor) -> tuple[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
-        rolling_probs, scoring_probs = self.forward(x)
+    def sample(self, x: torch.Tensor) -> tuple[tuple[torch.Tensor, torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
+        rolling_probs, scoring_probs, baseline_est = self.forward(x)
         #print(rolling_probs)
         #print(scoring_probs)
         rolling_dist = torch.distributions.Bernoulli(rolling_probs)
@@ -120,6 +127,6 @@ class TurnScoreMaximizer(nn.Module):
         scoring_tensor = scoring_dist.sample()
         scoring_log_prob = scoring_dist.log_prob(scoring_tensor).sum()
 
-        return (rolling_tensor, scoring_tensor), (rolling_log_prob, scoring_log_prob)
+        return (rolling_tensor, scoring_tensor, baseline_est), (rolling_log_prob, scoring_log_prob)
     
 
