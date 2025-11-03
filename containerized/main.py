@@ -29,7 +29,7 @@ def main():
     # Initialize wandb first to check for config
     wandb_run = maybe_init_wandb()
     
-    # Set up argument parser with defaults
+    # Set up argument Parser with defaults
     parser = argparse.ArgumentParser(description='Yahtzee RL')
     parser.add_argument('--scenario', type=str, default='supervised_scorer',
                         choices=['dice_maximizer', 'supervised_scorer', 'single_turn_score_maximizer', 'test_single_turn_rl'],
@@ -48,7 +48,12 @@ def main():
                         help='Dataset size (for supervised scorer)')
     parser.add_argument('--log-dir', type=str, default='./logs')
     parser.add_argument('--checkpoint-path', type=str, default=None,
-                        help='Path to model checkpoint for evaluation')
+                        help='Path to model checkpoint for evaluation') 
+    parser.add_argument('--activation-function', type=str, default='GELU',
+                        choices=['ReLU', 'GELU', 'CELU', 'PReLU', 'ELU', 'Tanh', 
+                                'LeakyReLU', 'Softplus', 'Softsign', 
+                                'Mish', 'Swish', 'SeLU'],
+                        help='Activation function to use in the model')
 
     args = parser.parse_args()
     
@@ -61,6 +66,7 @@ def main():
         log_dir = wandb_run.config.get('log_dir', args.log_dir)
         num_hidden = wandb_run.config.get('num_hidden', args.num_hidden)
         dataset_size = wandb_run.config.get('dataset_size', args.dataset_size)
+        activation_function = wandb_run.config.get('activation_function', args.activation_function)
         use_wandb = True
     else:
         epochs = args.epochs
@@ -71,7 +77,19 @@ def main():
         num_hidden = args.num_hidden
         dataset_size = args.dataset_size
         log_dir = args.log_dir
+        activation_function = args.activation_function
 
+    print("\n=== Hyperparameters ===")
+    print(f"Scenario: {args.scenario}")
+    print(f"Epochs: {epochs}")
+    print(f"Episodes per batch: {episodes_per_batch}")
+    print(f"Learning rate: {learning_rate}")
+    print(f"Hidden size: {hidden_size}")
+    print(f"Num hidden layers: {num_hidden}")
+    print(f"Dataset size: {dataset_size}")
+    print(f"Activation function: {activation_function}")
+
+    print("\n=== System Info ===")
     print("CUDA available:", torch.cuda.is_available())
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
@@ -126,7 +144,8 @@ def main():
             logger=logger,
             num_hidden=num_hidden,
             dropout_rate=0.1,
-            dataset_size=dataset_size
+            dataset_size=dataset_size,
+            activation_function=activation_function
         )
     elif args.scenario == 'test_single_turn_rl':
         from src.C_single_turn_score_maximizer.test_episode import main as test_episode_main
@@ -148,6 +167,7 @@ def single_turn_score_maximizer_main(
     num_hidden: int,
     dropout_rate: float,
     dataset_size: int,
+    activation_function: str,
 ):
     # Create return calculator and model
     return_calculator = MonteCarloReturnCalculator()
@@ -157,7 +177,8 @@ def single_turn_score_maximizer_main(
         episodes_per_batch=episodes_per_batch,
         return_calculator=return_calculator,
         num_hidden=num_hidden,
-        dropout_rate=dropout_rate
+        dropout_rate=dropout_rate,
+        activation_function=activation_function
     )
         
     # Create trainer

@@ -19,15 +19,16 @@ def observation_to_tensor(observation: Dict[str, Any]) -> torch.Tensor:
 
 class TurnScoreMaximizer(nn.Module):
     class Block(nn.Module):
-        def __init__(self, in_features: int, out_features: int, dropout_rate: float = 0.0):
+        def __init__(self, in_features: int, out_features: int, dropout_rate: float = 0.0, activation = nn.PReLU):
             super(TurnScoreMaximizer.Block, self).__init__()
             layers = [
                 nn.Linear(in_features, out_features),
-                nn.GELU(),
+                activation(),
                 nn.LayerNorm(out_features)
             ]
             if dropout_rate > 0.0:
                 layers.append(nn.Dropout(dropout_rate))
+
             self.network = nn.Sequential(*layers)
 
         def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -44,8 +45,31 @@ class TurnScoreMaximizer(nn.Module):
             x = x.masked_fill(mask == 0, self.mask_value)
             return self.softmax(x)
 
-    def __init__(self, hidden_size: int = 64, num_hidden: int = 1, dropout_rate: float = 0.1, device = 'cuda' if torch.cuda.is_available() else 'cpu'):
+    def __init__(self,
+                 hidden_size: int = 64,
+                 num_hidden: int = 1,
+                 dropout_rate: float = 0.1, 
+                 device = 'cuda' if torch.cuda.is_available() else 'cpu',
+                 activation_function: str = 'GELU'):
         super(TurnScoreMaximizer, self).__init__()
+
+        activation = {
+            'ReLU': nn.ReLU,
+            'GELU': nn.GELU,
+            'CELU': nn.CELU,
+            'PReLU': nn.PReLU,
+            'ELU': nn.ELU,
+            'Tanh': nn.Tanh,
+            'LeakyReLU': nn.LeakyReLU,
+            'Softplus': nn.Softplus,
+            'Softsign': nn.Softsign,
+            'Mish': nn.Mish,
+            'Swish': nn.SiLU,
+            'SeLU': nn.SELU
+        }[activation_function]
+
+        if activation is None:
+            raise ValueError(f"Unsupported activation function: {activation_function}")
         
         self.dropout_rate = dropout_rate
         
@@ -62,10 +86,10 @@ class TurnScoreMaximizer(nn.Module):
         dice_output_size = 5
         scoring_output_size = 13
 
-        layers = [TurnScoreMaximizer.Block(input_size, hidden_size, dropout_rate)]
+        layers = [TurnScoreMaximizer.Block(input_size, hidden_size, dropout_rate, activation)]
         for _ in range(num_hidden - 1):
-            layers.append(TurnScoreMaximizer.Block(hidden_size, hidden_size, dropout_rate))
-            
+            layers.append(TurnScoreMaximizer.Block(hidden_size, hidden_size, dropout_rate, activation))
+
         self.network = nn.Sequential(
             *layers
         )

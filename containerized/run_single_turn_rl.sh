@@ -24,6 +24,14 @@ docker run --rm \
   -e WANDB_MODE=offline \
   -e HOME=/tmp \
   $IMAGE_NAME \
-  --epochs 50 --episodes-per-batch 26 --log-dir /workspace/logs --scenario single_turn_score_maximizer --hidden-size 256 --num-hidden 4 --dataset-size 1300
+  --epochs 50 \
+  --episodes-per-batch 52 \
+  --log-dir /workspace/logs \
+  --scenario single_turn_score_maximizer \
+  --hidden-size 320 \
+  --num-hidden 3 \
+  --dataset-size 1300 \
+  --activation-function PReLU \
+  --learning-rate 0.00075
 
 echo "✅ Done."

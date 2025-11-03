@@ -22,12 +22,18 @@ class SingleTurnScoreMaximizerREINFORCETrainer(L.LightningModule):
         num_hidden: int = 1,
         dropout_rate: float = 0.1,
         return_calculator: Optional[ReturnCalculator] = None,
+        activation_function: str = 'GELU',
     ):
         super().__init__()
         
         self.save_hyperparameters(ignore=['return_calculator'])
 
-        self.policy_net = TurnScoreMaximizer(hidden_size=hidden_size, num_hidden=num_hidden, dropout_rate=dropout_rate)
+        self.policy_net = TurnScoreMaximizer(
+            hidden_size=hidden_size,
+            num_hidden=num_hidden,
+            dropout_rate=dropout_rate,
+            activation_function=activation_function
+        )
 
         self.learning_rate = learning_rate
         self.episodes_per_batch = episodes_per_batch
