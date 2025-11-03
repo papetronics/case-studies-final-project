@@ -91,7 +91,8 @@ def main():
     if use_wandb:
         logger = L.pytorch_lightning.loggers.WandbLogger(
             project=f"yahtzee-{args.scenario}",
-            name="monte-carlo-training"
+            name="monte-carlo-training",
+            log_model=True
         )
     else:
         # Ensure log directory exists
