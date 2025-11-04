@@ -10,7 +10,7 @@ from gymnasium import spaces
 import numpy as np
 from typing import Any
 
-from src.scoring_helper import get_all_scores
+from src.scoring_helper import get_all_scores, ScoreCategory
             
 from gymnasium.envs.registration import register
     
@@ -29,6 +29,8 @@ class DiceState:
         self.rolls_used = 0  # Track rolls used instead of remaining (0, 1, 2)
         self.phase = 0  # 0: rolling phase, 1: scoring phase
         
+        self.score_sheet: np.ndarray = np.zeros(13, dtype=np.int32)
+
         # Initialize the scoresheet to randomly pick 0->12 categories being full,
         # then randomly pick which categories are full
         # 1 = available, 0 = filled
@@ -39,6 +41,7 @@ class DiceState:
             "dice": self.dice,
             "rolls_used": self.rolls_used,
             "phase": self.phase,
+            "score_sheet": self.score_sheet,
             "score_sheet_available_mask": self.score_sheet_available_mask  # 1 if available, 0 if filled
         }
     
@@ -51,6 +54,40 @@ class DiceState:
             self.score_sheet_available_mask[12] = 0
         filled_indices = np.random.choice(12, size=num_filled, replace=False)
         self.score_sheet_available_mask[filled_indices] = 0
+
+        for category in range(13):
+            if self.score_sheet_available_mask[category] == 0:
+                # for ones through sixes, we can assume an average of 3 of each die face showing
+                if category == ScoreCategory.ONES or \
+                    category == ScoreCategory.TWOS or \
+                    category == ScoreCategory.THREES or \
+                    category == ScoreCategory.FOURS or \
+                    category == ScoreCategory.FIVES or \
+                    category == ScoreCategory.SIXES:
+                    self.score_sheet[category] = np.random.randint(0, 6) * (category + 1)
+
+                # for 3 and 4 of a kind we'll use a uniform distribution between 5 and 30
+                if category == ScoreCategory.THREE_OF_A_KIND or \
+                    category == ScoreCategory.FOUR_OF_A_KIND or \
+                    category == ScoreCategory.CHANCE:
+                    self.score_sheet[category] = np.random.randint(5, 31)  # 5->30
+
+                # full house; 50% of 0, 50% of 25
+                if category == ScoreCategory.FULL_HOUSE:
+                    self.score_sheet[category] = 25 * (1 if np.random.rand() < 0.5 else 0)
+                
+                # small straight; 50% of 0, 50% of 30
+                if category == ScoreCategory.SMALL_STRAIGHT:
+                    self.score_sheet[category] = 30 * (1 if np.random.rand() < 0.5 else 0)
+
+                # large straight; 50% of 0, 50% of 40
+                if category == ScoreCategory.LARGE_STRAIGHT:
+                    self.score_sheet[category] = 40 * (1 if np.random.rand() < 0.5 else 0)
+
+                # yahtzee; 50% of 0, 50% of 50
+                if category == ScoreCategory.YAHTZEE:
+                    self.score_sheet[category] = 50 * (1 if np.random.rand() < 0.5 else 0)
+
 
     def observation(self) -> dict:
         """Convert to observation format."""
@@ -88,12 +125,29 @@ class DiceState:
 
     def score_dice(self, category: int) -> int:
         """Score the dice for the given category and update the scoresheet."""
+        current_upper_score = np.sum(self.score_sheet[0:6]) 
+
         score, _ = get_all_scores(self.dice, self.score_sheet_available_mask)
-        if self.score_sheet_available_mask[category] == 1:
-            self.score_sheet_available_mask[category] = 0  # Mark as filled
-            return score[category] 
-        else:
+        if self.score_sheet_available_mask[category] != 1:
             raise ValueError("Category already filled.")
+        self.score_sheet_available_mask[category] = 0  # Mark as filled
+        self.score_sheet[category] = score[category]
+
+        # new upper score after scoring
+        new_upper_score = np.sum(self.score_sheet[0:6])
+
+        # Check for upper section bonus
+        bonus = 0
+        if current_upper_score < 63 and new_upper_score >= 63:
+            bonus = 35  # Bonus category is index 12
+
+        # Reset dice for next turn
+        #self.rolls_used = 0
+        #self.phase = 0 
+        #self.dice[:] = np.random.randint(1, 7, size=self.NUM_DICE)
+        #self.dice.sort()
+
+        return score[category] + bonus
 
 class YahtzeeEnv(gym.Env):
     """
@@ -111,6 +165,7 @@ class YahtzeeEnv(gym.Env):
         self.observation_space = spaces.Dict({
             "dice": spaces.Box(low=1, high=6, shape=(5,), dtype=np.int32), # the raw face values of the 5 dice
             "rolls_used": spaces.Discrete(3),  # 0, 1, or 2
+            "score_sheet": spaces.Box(low=0, high=50, shape=(13,), dtype=np.int32),  # 13 categories, scores from 0 to 50
             "score_sheet_available_mask": spaces.MultiBinary(13),  # 13 categories, 1 if available, 0 if filled,
             "phase": spaces.Discrete(2)  # 0: rolling phase, 1: scoring phase
         })

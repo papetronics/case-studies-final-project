@@ -31,7 +31,7 @@ docker run --rm \
   --hidden-size 320 \
   --num-hidden 3 \
   --dataset-size 1300 \
-  --activation-function PReLU \
+  --activation-function Swish \
   --learning-rate 0.00075
 
 echo "✅ Done."

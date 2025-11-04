@@ -3,10 +3,31 @@ import torch.nn as nn
 import numpy as np
 from typing import Dict, Any
 
+scoresheet_max = np.array([
+    5,  # Ones
+    10, # Twos
+    15, # Threes
+    20, # Fours
+    25, # Fives
+    30, # Sixes
+    30, # Three of a Kind
+    30, # Four of a Kind
+    25, # Full House
+    30, # Small Straight
+    40, # Large Straight
+    50, # Yahtzee
+    30  # Chance
+])
+
+
 def observation_to_tensor(observation: Dict[str, Any]) -> torch.Tensor:
     dice = observation['dice'] # numpy array showing the actual dice, e.g. [1, 3, 5, 6, 2]
     rolls_used = observation['rolls_used'] # integer: 0, 1, or 2
     available_categories = observation['score_sheet_available_mask'] # mask for available scoring categories (13,)
+    scoresheet = observation['score_sheet']  # scoresheet values (13,)
+
+    normalized_scoresheet = (scoresheet / scoresheet_max) * 2 - 1  # Normalize to [-1, 1]
+
     phase = observation.get('phase', 0)  # Current phase of the game (0: rolling, 1: scoring)
 
     dice_onehot = np.eye(6)[dice - 1].flatten()
@@ -14,7 +35,7 @@ def observation_to_tensor(observation: Dict[str, Any]) -> torch.Tensor:
 
     #print(available_categories)
 
-    input_vector = np.concatenate([dice_onehot, rolls_onehot, [phase], available_categories])
+    input_vector = np.concatenate([dice_onehot, rolls_onehot, [phase], normalized_scoresheet, available_categories])
     return torch.FloatTensor(input_vector)
 
 class TurnScoreMaximizer(nn.Module):
@@ -78,7 +99,8 @@ class TurnScoreMaximizer(nn.Module):
         #   - Rolls Used [3]: One-hot encoding of rolls used (0, 1, 2) = 3  (always 2 in this scenario)
         #   - Available Categories [13]: One-hot encoding of available scoring categories = 13
         #   - Current Phase [1]: Current phase of the game (0: rolling, 1: scoring) = 1
-        input_size = 30 + 3 + 13 + 1
+        #   - Scoresheet [13]: Current scoresheet values = 13
+        input_size = 30 + 3 + 13 + 1 + 13
 
         ## 18 Model outputs:
         #   - Action Probabilities [5]: Probability of re-rolling each of the 5 dice
