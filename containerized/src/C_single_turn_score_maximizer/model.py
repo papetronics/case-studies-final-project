@@ -3,6 +3,22 @@ import torch.nn as nn
 import numpy as np
 from typing import Dict, Any
 
+per_category_max = np.array([
+    5,  # Ones
+    10, # Twos
+    15, # Threes
+    20, # Fours
+    25, # Fives
+    30, # Sizes
+    30, # Three of a Kind
+    30, # Four of a Kind
+    25, # Full House
+    30, # Small Straight
+    40, # Large Straight
+    50, # Yahtzee
+    30  # Chance
+])
+
 def observation_to_tensor(observation: Dict[str, Any]) -> torch.Tensor:
     dice = observation['dice'] # numpy array showing the actual dice, e.g. [1, 3, 5, 6, 2]
     dice_counts = np.bincount(dice, minlength=7)[1:]  # counts of dice faces from 1 to 6
@@ -10,12 +26,15 @@ def observation_to_tensor(observation: Dict[str, Any]) -> torch.Tensor:
     available_categories = observation['score_sheet_available_mask'] # mask for available scoring categories (13,)
     phase = observation.get('phase', 0)  # Current phase of the game (0: rolling, 1: scoring)
 
+    # Raw score, normalized to category max values, (13,)
+    scores = observation['score_sheet'] / per_category_max
+
     dice_onehot = np.eye(6)[dice - 1].flatten()
     rolls_onehot = np.eye(3)[rolls_used]
 
     #print(available_categories)
 
-    input_vector = np.concatenate([dice_onehot, dice_counts, rolls_onehot, [phase], available_categories])
+    input_vector = np.concatenate([dice_onehot, dice_counts, scores, rolls_onehot, [phase], available_categories])
     return torch.FloatTensor(input_vector)
 
 class TurnScoreMaximizer(nn.Module):
@@ -80,7 +99,8 @@ class TurnScoreMaximizer(nn.Module):
         #   - Available Categories [13]: One-hot encoding of available scoring categories = 13
         #   - Current Phase [1]: Current phase of the game (0: rolling, 1: scoring) = 1
         #   - Dice Counts [6]: Counts of each die face (1-6) = 6
-        input_size = 30 + 3 + 13 + 1 + 6
+        #   - Scores [13]: Normalized scores for each category = 13
+        input_size = 30 + 3 + 13 + 1 + 6 + 13
 
         ## 18 Model outputs:
         #   - Action Probabilities [5]: Probability of re-rolling each of the 5 dice
