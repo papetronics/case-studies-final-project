@@ -23,6 +23,8 @@ class SingleTurnScoreMaximizerREINFORCETrainer(L.LightningModule):
         dropout_rate: float = 0.1,
         return_calculator: Optional[ReturnCalculator] = None,
         activation_function: str = 'GELU',
+        max_epochs: int = 200,
+        min_lr_ratio: float = 0.001,
     ):
         super().__init__()
         
@@ -38,6 +40,8 @@ class SingleTurnScoreMaximizerREINFORCETrainer(L.LightningModule):
         self.learning_rate = learning_rate
         self.episodes_per_batch = episodes_per_batch
         self.baseline_alpha = baseline_alpha
+        self.max_epochs = max_epochs
+        self.min_lr_ratio = min_lr_ratio
         
         self.return_calculator = return_calculator or MonteCarloReturnCalculator()
         
@@ -175,19 +179,17 @@ class SingleTurnScoreMaximizerREINFORCETrainer(L.LightningModule):
             
     def configure_optimizers(self): # type: ignore
         optimizer = torch.optim.Adam(self.policy_net.parameters(), lr=self.learning_rate)
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, 
-            mode='min',           # Monitor loss (minimize)
-            factor=0.7,          # Reduce LR by 30% (less aggressive)
-            patience=3,          # Wait 3 epochs before reducing (better for short training)
-            min_lr=1e-6          # Don't go below this LR
+        scheduler = torch.optim.lr_scheduler.LinearLR(
+            optimizer,
+            start_factor=1.0,  # Start at full learning rate
+            end_factor=self.min_lr_ratio,  # End at min_lr_ratio of initial LR
+            total_iters=self.max_epochs  # Linear decay over training epochs
         )
         
         return {
             "optimizer": optimizer,
             "lr_scheduler": {
                 "scheduler": scheduler,
-                "monitor": "train/policy_loss",    # Monitor training loss 
                 "frequency": 1            # Check every epoch
             }
         }

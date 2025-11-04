@@ -32,6 +32,7 @@ docker run --rm \
   --num-hidden 3 \
   --dataset-size 1300 \
   --activation-function Swish \
-  --learning-rate 0.00075
+  --learning-rate 0.00075 \
+  --min-lr-ratio 0.01
 
 echo "✅ Done."

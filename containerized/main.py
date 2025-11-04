@@ -54,6 +54,8 @@ def main():
                                 'LeakyReLU', 'Softplus', 'Softsign', 
                                 'Mish', 'Swish', 'SeLU'],
                         help='Activation function to use in the model')
+    parser.add_argument('--min-lr-ratio', type=float, default=0.001,
+                        help='Ratio of minimum learning rate to initial learning rate (for cosine annealing)')
 
     args = parser.parse_args()
     
@@ -67,6 +69,7 @@ def main():
         num_hidden = wandb_run.config.get('num_hidden', args.num_hidden)
         dataset_size = wandb_run.config.get('dataset_size', args.dataset_size)
         activation_function = wandb_run.config.get('activation_function', args.activation_function)
+        min_lr_ratio = wandb_run.config.get('min_lr_ratio', args.min_lr_ratio)
         use_wandb = True
     else:
         epochs = args.epochs
@@ -78,6 +81,7 @@ def main():
         dataset_size = args.dataset_size
         log_dir = args.log_dir
         activation_function = args.activation_function
+        min_lr_ratio = args.min_lr_ratio
 
     print("\n=== Hyperparameters ===")
     print(f"Scenario: {args.scenario}")
@@ -145,7 +149,8 @@ def main():
             num_hidden=num_hidden,
             dropout_rate=0.1,
             dataset_size=dataset_size,
-            activation_function=activation_function
+            activation_function=activation_function,
+            min_lr_ratio=min_lr_ratio
         )
     elif args.scenario == 'test_single_turn_rl':
         from src.C_single_turn_score_maximizer.test_episode import main as test_episode_main
@@ -168,6 +173,7 @@ def single_turn_score_maximizer_main(
     dropout_rate: float,
     dataset_size: int,
     activation_function: str,
+    min_lr_ratio: float,
 ):
     # Create return calculator and model
     return_calculator = MonteCarloReturnCalculator()
@@ -178,7 +184,9 @@ def single_turn_score_maximizer_main(
         return_calculator=return_calculator,
         num_hidden=num_hidden,
         dropout_rate=dropout_rate,
-        activation_function=activation_function
+        activation_function=activation_function,
+        max_epochs=epochs,
+        min_lr_ratio=min_lr_ratio
     )
         
     # Create trainer
