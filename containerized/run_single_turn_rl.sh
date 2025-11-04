@@ -24,14 +24,14 @@ docker run --rm \
   -e WANDB_MODE=offline \
   -e HOME=/tmp \
   $IMAGE_NAME \
-  --epochs 50 \
-  --episodes-per-batch 52 \
+  --epochs 100 \
+  --episodes-per-batch 104 \
   --log-dir /workspace/logs \
   --scenario single_turn_score_maximizer \
   --hidden-size 400 \
-  --num-hidden 3 \
+  --num-hidden 4 \
   --dataset-size 1300 \
   --activation-function Swish \
-  --learning-rate 0.00075
+  --learning-rate 0.001
 
 echo "✅ Done."

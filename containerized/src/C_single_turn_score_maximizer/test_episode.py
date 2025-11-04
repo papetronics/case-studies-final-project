@@ -53,7 +53,7 @@ def run_episode(
     with torch.no_grad():
         while True:
             actions, _ = model.sample_observation(obs)
-            hold_action_tensor, scoring_action_tensor = actions
+            hold_action_tensor, scoring_action_tensor, _ = actions
 
             action = {
                 'hold_mask': hold_action_tensor.cpu().numpy().astype(bool),

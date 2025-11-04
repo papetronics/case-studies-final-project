@@ -55,7 +55,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(L.LightningModule):
     
         while True:
             actions, log_probs = self.policy_net.sample_observation(observation)
-            rolling_action_tensor, scoring_action_tensor = actions
+            rolling_action_tensor, scoring_action_tensor, V = actions
             rolling_log_prob, scoring_log_prob = log_probs
 
             action = {}
@@ -70,7 +70,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(L.LightningModule):
                 }
                 log_prob = scoring_log_prob
             
-            episode.add_step(observation, action, log_prob)
+            episode.add_step(observation, action, log_prob, V)
 
             observation, reward, terminated, truncated, _ = self.env.step(action)
             
@@ -89,7 +89,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(L.LightningModule):
             # Use the trained policy to select actions
             with torch.no_grad():
                 actions, _ = self.policy_net.sample_observation(observation)
-                rolling_action_tensor, scoring_action_tensor = actions
+                rolling_action_tensor, scoring_action_tensor, _ = actions
 
                 action = {}
                 if observation['phase'] == 0:
@@ -137,28 +137,34 @@ class SingleTurnScoreMaximizerREINFORCETrainer(L.LightningModule):
             total_reward += episode.reward
 
         policy_loss = torch.tensor([0.0], device=self.device)
+        value_loss = torch.tensor([0.0], device=self.device)
 
         for episode in episodes:
             returns = self.return_calculator.calculate_returns(episode)
             
             for step_idx, log_prob in enumerate(episode.log_probs):
                 step_return = returns[step_idx]
-                advantage = step_return - self.baseline
+                step_V = episode.Vs[step_idx]
+                advantage = step_return - step_V.detach()
                 policy_loss -= log_prob * advantage
-                
-        policy_loss /= self.episodes_per_batch
+                value_loss += torch.nn.functional.mse_loss(step_V, torch.tensor([step_return], device=self.device))
+ 
+        loss = (value_loss + policy_loss) / self.episodes_per_batch
         
         avg_reward = total_reward / self.episodes_per_batch
         self.baseline = (1 - self.baseline_alpha) * self.baseline + self.baseline_alpha * avg_reward
         
+        self.log('train/value_loss', value_loss, prog_bar=True)
         self.log('train/policy_loss', policy_loss, prog_bar=True)
+        self.log('train/loss', loss, prog_bar=True)
+        
         self.log('train/avg_reward', avg_reward, prog_bar=True)
         self.log('train/baseline', self.baseline, prog_bar=False)
         # Log current learning rate
         current_lr = self.trainer.optimizers[0].param_groups[0]['lr']
         self.log('lr', current_lr, prog_bar=False)
         
-        return policy_loss
+        return loss
             
     def configure_optimizers(self): # type: ignore
         optimizer = torch.optim.Adam(self.policy_net.parameters(), lr=self.learning_rate)
@@ -174,7 +180,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(L.LightningModule):
             "optimizer": optimizer,
             "lr_scheduler": {
                 "scheduler": scheduler,
-                "monitor": "train/policy_loss",    # Monitor training loss 
+                "monitor": "train/loss",    # Monitor training loss 
                 "frequency": 1            # Check every epoch
             }
         }
