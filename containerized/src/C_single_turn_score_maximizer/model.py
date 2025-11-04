@@ -9,13 +9,12 @@ def observation_to_tensor(observation: Dict[str, Any]) -> torch.Tensor:
     available_categories = observation['score_sheet_available_mask'] # mask for available scoring categories (13,)
     phase = observation.get('phase', 0)  # Current phase of the game (0: rolling, 1: scoring)
 
-    dice_onehot = np.eye(6)[dice - 1].flatten()
     rolls_onehot = np.eye(3)[rolls_used]
 
     #print(available_categories)
 
-    input_vector = np.concatenate([dice_onehot, rolls_onehot, [phase], available_categories])
-    return torch.FloatTensor(input_vector)
+    input_vector = np.concatenate([dice, rolls_onehot, [phase], available_categories])
+    return torch.Tensor(input_vector)
 
 class TurnScoreMaximizer(nn.Module):
     class Block(nn.Module):
@@ -47,11 +46,31 @@ class TurnScoreMaximizer(nn.Module):
 
     def __init__(self,
                  hidden_size: int = 64,
+                 embedding_dim: int | None = None,  # Will be auto-calculated if None
                  num_hidden: int = 1,
                  dropout_rate: float = 0.1, 
+                 
                  device = 'cuda' if torch.cuda.is_available() else 'cpu',
                  activation_function: str = 'GELU'):
         super(TurnScoreMaximizer, self).__init__()
+
+        # Ensure hidden_size is divisible by 5 for clean embedding dimension calculation
+        if hidden_size % 5 != 0:
+            raise ValueError(f"hidden_size ({hidden_size}) must be divisible by 5 for optimal dice embedding allocation")
+        
+        # Auto-calculate embedding_dim if not provided
+        if embedding_dim is None:
+            embedding_dim = hidden_size // 5  # Each die gets 1/5 of the hidden space
+
+        print(f"Using embedding_dim: {embedding_dim} for hidden_size: {hidden_size}")
+        
+        # Validate that embedding_dim works with the architecture
+        if hidden_size != 5 * embedding_dim:
+            print(f"Warning: hidden_size ({hidden_size}) != 5 * embedding_dim ({5 * embedding_dim}). "
+                  f"This may cause dimension mismatches.")
+        
+        self.embedding_dim = embedding_dim
+        self.hidden_size = hidden_size
 
         activation = {
             'ReLU': nn.ReLU,
@@ -73,12 +92,12 @@ class TurnScoreMaximizer(nn.Module):
         
         self.dropout_rate = dropout_rate
         
-        ## 46 model inputs:
-        #   - Dice [30]: One-hot encoding of 5 dice (6 sides each) = 5 * 6 = 30
-        #   - Rolls Used [3]: One-hot encoding of rolls used (0, 1, 2) = 3  (always 2 in this scenario)
+        ## 22 model inputs:
+        #   - Dice [5]: Raw dice values (1-6)
+        #   - Rolls Used [3]: One-hot encoding of rolls used (0, 1, 2) = 3
         #   - Available Categories [13]: One-hot encoding of available scoring categories = 13
         #   - Current Phase [1]: Current phase of the game (0: rolling, 1: scoring) = 1
-        input_size = 30 + 3 + 13 + 1
+        input_size = 5 + 3 + 13 + 1
 
         ## 18 Model outputs:
         #   - Action Probabilities [5]: Probability of re-rolling each of the 5 dice
@@ -86,7 +105,19 @@ class TurnScoreMaximizer(nn.Module):
         dice_output_size = 5
         scoring_output_size = 13
 
-        layers = [TurnScoreMaximizer.Block(input_size, hidden_size, dropout_rate, activation)]
+        self.dice_embedding = nn.Embedding(6, embedding_dim=self.embedding_dim)
+
+        # Cross-attention: dice embeddings attend to game state
+        self.dice_cross_attention = nn.MultiheadAttention(embed_dim=self.embedding_dim, num_heads=4, batch_first=True)
+
+        # Size of non-dice inputs: rolls_used(3) + phase(1) + available_categories(13) = 17
+        non_dice_input_size = 3 + 1 + 13
+        # Project game state directly to hidden_size (no intermediate projection needed!)
+        self.game_state_projector = TurnScoreMaximizer.Block(non_dice_input_size, self.hidden_size, dropout_rate, activation)
+        
+        # No feature projector needed anymore since we go directly to hidden_size!
+
+        layers = []
         for _ in range(num_hidden - 1):
             layers.append(TurnScoreMaximizer.Block(hidden_size, hidden_size, dropout_rate, activation))
 
@@ -119,13 +150,34 @@ class TurnScoreMaximizer(nn.Module):
         return self.forward(observation_to_tensor(observation).unsqueeze(0).to(self.device))
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        spine = self.network(x)
+        # Extract dice values (first 5 elements) and convert to 0-based indices for embedding
+        dice_indices = x[:, :5].long() - 1  # Convert to 0-based indices
+        dice_embeddings = self.dice_embedding(dice_indices)  # (batch_size, 5, embedding_dim)
+
+        # Extract non-dice inputs (rolls_used[3] + phase[1] + available_categories[13] = 17)
+        non_dice_inputs = x[:, 5:]  # (batch_size, 17)
+        
+        # Project game state directly to hidden_size
+        game_state_features = self.game_state_projector(non_dice_inputs)  # (batch_size, hidden_size)
+        
+        # Reshape game state to match dice sequence for cross-attention
+        game_state_kv = game_state_features.view(x.size(0), 5, self.embedding_dim)  # (batch_size, 5, embedding_dim)
+
+        # Cross-attention: dice embeddings (Q) attend to game state (K, V)
+        context_aware_dice, _ = self.dice_cross_attention(dice_embeddings, game_state_kv, game_state_kv)
+        
+        # Flatten context-aware dice embeddings - this is already hidden_size!
+        features = context_aware_dice.view(x.size(0), -1)  # (batch_size, hidden_size)
+
+        # Pass through the main network
+        spine = self.network(features)
 
         rolling_output = self.rolling_head(spine)
         scoring_output = self.scoring_head(spine)
 
-        # select last 13 inputs as mask
-        scoring_output = self.masked_softmax(scoring_output, x[:, -13:])
+        # Use the available categories mask for scoring (last 13 elements of original input)
+        available_categories_mask = x[:, -13:]
+        scoring_output = self.masked_softmax(scoring_output, available_categories_mask)
 
         return rolling_output.squeeze(0), scoring_output.squeeze(0)
 

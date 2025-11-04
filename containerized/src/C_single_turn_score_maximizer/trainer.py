@@ -165,9 +165,9 @@ class SingleTurnScoreMaximizerREINFORCETrainer(L.LightningModule):
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer, 
             mode='min',           # Monitor loss (minimize)
-            factor=0.7,          # Reduce LR by 30% (less aggressive)
+            factor=0.5,          # Reduce LR by 50% 
             patience=3,          # Wait 3 epochs before reducing (better for short training)
-            min_lr=1e-6          # Don't go below this LR
+            min_lr=1e-7          # Don't go below this LR
         )
         
         return {
