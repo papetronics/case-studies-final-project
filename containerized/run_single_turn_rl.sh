@@ -28,10 +28,10 @@ docker run --rm \
   --episodes-per-batch 52 \
   --log-dir /workspace/logs \
   --scenario single_turn_score_maximizer \
-  --hidden-size 320 \
+  --hidden-size 384 \
   --num-hidden 3 \
   --dataset-size 1300 \
-  --activation-function PReLU \
+  --activation-function Swish \
   --learning-rate 0.00075
 
 echo "✅ Done."
