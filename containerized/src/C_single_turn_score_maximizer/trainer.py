@@ -43,7 +43,8 @@ class SingleTurnScoreMaximizerREINFORCETrainer(L.LightningModule):
         
         self.baseline = 0.0
         
-        self.env = gym.make('Yahtzee-v1')
+        self.env = gym.make('FullYahtzee-v1')
+        self.env.reset()
         self.full_env = gym.make('FullYahtzee-v1')  # For validation
         
     def forward(self, observation: Dict[str, Any]) -> torch.Tensor:
@@ -51,9 +52,14 @@ class SingleTurnScoreMaximizerREINFORCETrainer(L.LightningModule):
         
     def collect_episode(self) -> Episode:
         episode = Episode()
-        observation, _ = self.env.reset()
-    
-        while True:
+        observation = self.env.unwrapped.observe()
+
+        # This is a bit of a hack, the environment supports full turns, but our model is single-turn
+        # so we are just going to cut it off after 3 steps and pretend that is an episode.
+        # we reset the environment whenever it terminates, that brings us back to an empty scoresheet.
+        reward = 0.0
+
+        for _ in range(3):  # roll, roll, score
             actions, log_probs = self.policy_net.sample_observation(observation)
             rolling_action_tensor, scoring_action_tensor = actions
             rolling_log_prob, scoring_log_prob = log_probs
@@ -74,9 +80,16 @@ class SingleTurnScoreMaximizerREINFORCETrainer(L.LightningModule):
 
             observation, reward, terminated, truncated, _ = self.env.step(action)
             
+            
+
             if terminated or truncated:
-                episode.set_reward(float(reward))
-                break
+                observation, _ = self.env.reset()
+
+        episode.set_reward(float(reward))
+        # print ("Episode reward:", episode.reward)
+
+        # sanity check: after 3 rolls we should always have rolls_used == 0 (new turn) and phase == 0
+        assert observation['rolls_used'] == 0 and observation['phase'] == 0
                 
         return episode
     
