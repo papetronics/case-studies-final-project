@@ -10,7 +10,7 @@ from gymnasium import spaces
 import numpy as np
 from typing import Any
 
-from src.scoring_helper import get_all_scores
+from src.utilities.scoring_helper import get_all_scores
             
 from gymnasium.envs.registration import register
     

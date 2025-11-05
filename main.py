@@ -9,8 +9,8 @@ from src.A_dice_maximizer.trainer import REINFORCEWithBaselineTrainer
 from src.B_supervised_scorer.trainer import SupervisedScorerTrainer
 from src.C_single_turn_score_maximizer.trainer import SingleTurnScoreMaximizerREINFORCETrainer
 
-from src.return_calculators import MonteCarloReturnCalculator
-from src.dummy_dataset import DummyDataset
+from src.utilities.return_calculators import MonteCarloReturnCalculator
+from src.utilities.dummy_dataset import DummyDataset
 
 def maybe_init_wandb():
     """

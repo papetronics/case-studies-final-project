@@ -5,10 +5,10 @@ from typing import Dict, Any, Optional
 
 import gymnasium as gym
 import src.C_single_turn_score_maximizer.yahtzee_env
-import src.full_yahtzee_env
+import src.environment.full_yahtzee_env
 from .model import TurnScoreMaximizer
-from src.return_calculators import ReturnCalculator, MonteCarloReturnCalculator
-from src.episode import Episode
+from src.utilities.return_calculators import ReturnCalculator, MonteCarloReturnCalculator
+from src.utilities.episode import Episode
 
 
 class SingleTurnScoreMaximizerREINFORCETrainer(L.LightningModule):
