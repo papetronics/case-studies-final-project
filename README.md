@@ -1,6 +1,9 @@
 # Yahtzee Reinforcement Learning
 This repo is for the final project for the *Case Studies in Machine Learning* course in UT Austin's Master of Science in Artificial Intelligence.
 
+## Paper
+The final paper can be found here: [/paper/csml_paper.pdf](./paper/csml_paper.pdf).
+
 ## Organization
 This project is configured using the `pape-lab` infrastructure, which provides a hookup to Weights & Biases (much better than using tensorboard!) and lets me farm jobs out to either my local GPU or to Amazon SageMaker.
 
