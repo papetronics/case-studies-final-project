@@ -1,179 +1,35 @@
-# ✅ Fleet Pape: Local-to-Fleet MLOps Roadmap
+# Yahtzee Reinforcement Learning
+This repo is for the final project for the *Case Studies in Machine Learning* course in UT Austin's Master of Science in Artificial Intelligence.
 
-A realistic, prioritized list of deliverables to turn my experiments from “chaotic local loops” into a reproducible mini lab.  
-Each block is **15–120 minutes**, so I can slot them into hobby time.
+## Paper
+The final paper can be found here: [/paper/csml_paper.pdf](./paper/csml_paper.pdf).
 
----
+## Organization
+This project is configured using the `pape-lab` infrastructure, which provides a hookup to Weights & Biases (much better than using tensorboard!) and lets me farm jobs out to either my local GPU or to Amazon SageMaker.
 
-## 🎯 Core Goal
+As such, everything (including the inner dev loop) is organized around creating a docker container. The primary dockerfile can be found in [Dockerfile.wandb](./Dockerfile.wandb). This is required for running in SageMaker, but has the added benefit of reproducibility or sharing in the future.
 
-- 🔹 One repo = one W&B project
-- 🔹 One Job snapshot = one frozen Docker image per commit
-- 🔹 Local agent does dev work for free
-- 🔹 Amazon SageMaker fleet does sweeps when it’s worth paying
-- 🔹 Everything is versioned, reproducible, and easy to rerun
+So far in this project I've been building the infrastructure for doing RL on Yahtzee from the ground up. 
 
----
+## A) Dice Maximizer 
+A basic setup for doing REINFORCE on the problem of "maximizing the face value of all dice". This was primarily to get my dev environment setup, ensure the infrastructure for OpenAI Gymnasium, PyTorch Lightning, W&B, and AWS was working properly.
 
-## ✅ PHASE 1 — Local Baseline (zero cost)
+This can be run with `cd src && ./run_dice_maximizer.sh`.
 
----
+You'll see the model very quickly learns it should keep dice that are above 4, which is pretty much the optimal strategy. It scores around the theoretical limit for this problem, which is ~23.5.
 
-### **1.** Local `wandb launch` flow (30–60 min)
-- ✅ `train.py` with `wandb.init()` and `wandb.finish()`
-- ✅ Use `wandb launch` CLI → confirm runs show in Dashboard
-- ✅ Local `launch-agent` polls queue and runs jobs
+## B) Supervised Scorer
+Here I tried to do supervised learning on the subset problem of trying to figure out which categories would be the best given a set of dice. Part of the thought process here was that later in the project I may want to do some form of behavioral cloning before moving on to RL for fine-tuning.
 
-**Outcome:** Queue → agent loop works.
+This can be run with `cd src && ./run_supervised_scorer.sh`.
 
----
+It's not particularly interesting, it also learns this trivial problem fairly quickly, and I so far have not used it in a later phase.
 
-### **2.** Pin Python env (15–30 min)
-- ✅ Create `requirements.txt` with pinned versions (`torch==...`, `pytorch-lightning==...`)
-- ✅ Confirm fresh venv works identically
+## C) Single Turn Score Maximizer
+This is where things start to get interesting. The entire focus of this project is doing pure RL for the single-turn problem.
 
-**Outcome:** No surprises in Docker or on other machines.
+Basically, the question is: "only training on a single turn of roll, roll, score; how good can we do overall at the game of Yahtzee?"
 
----
+These can be run with `cd src && ./run_single_turn_rl.sh`.
 
-### **3.** Git commit discipline (15 min)
-- ✅ `main` is my “known good” (LKG) branch
-- ✅ Push every run worth training — no uncommitted “mystery heads”
-- ✅ Use SSH and ensure the Git access token is not exposed anywhere.
-
-**Outcome:** Every run can be traced to code.
-
----
-
-## ✅ PHASE 2 — Local “multi-idea” fleet
-
----
-
-### **4.** Dev branch run pattern (30–60 min)
-- ✅ Test feature branch → push → `wandb launch` with `--git-version branchname`
-- ✅ Confirm each run pins to that branch SHA
-- ✅ Agent can queue and run multiple jobs back to back
-
-**Outcome:** I can push 5 ideas → GPU stays busy while I sleep.
-
----
-
-### **5.** Basic sweep YAML (30–45 min)
-- ✅ Write `sweep.yaml` for simple params (`lr`, `epochs`, etc.)
-- ✅ Test creating a Sweep in Dashboard → confirm agent runs multiple jobs
-
-**Outcome:** Launch queue + Dashboard sweeps work locally.
-
----
-
-## ✅ PHASE 3 — Automated CI/CD Job Creation
-
----
-
-### **6.** Add `wandb job create` in CI (30–60 min)
-- ✅ After any branch is updated, `wandb job create` with the repo+branch as the job name
-- ✅ Confirm Job appears in W&B workspace with `:latest`
-- ✅ Confirm we can run a job
-
-**Outcome:** No babysitting job definitions in W&B.
-
----
-
-## ✅ PHASE 4 — Real “Fleet Pape” sweep test
-
----
-
-### **7.** Amazon SageMaker auto-launch + autokill test (60–90 min)
-- ✅ Create terraformer infra (in `pape-lab` repo)
-- ✅ Request capacity
-- ✅ Create and push base Docker image (in `pape-lab` repo)
-- ✅ Tested creating a run from W&B and seeing it succeed in AWS!
-
-**Outcome:** Prove I can scale out with zero babysitting.
-
----
-
-## ✅ PHASE 5 — Template & docs
-
----
-
-### **8.** Extract `pape-lab` repo (60–90 min)
-- ✅ Terraformer config for AWS infra
-- ✅ Scripts for base Docker image creation and management
-- ✅ `README.md` with instructions
-
-**Outcome:** Infra repo (`pape-lab`) automates AWS setup and base image updates.
-
----
-
-### **9.** Extract `pape-lab-project` repo (60–90 min)
-- ✅ `Dockerfile.wandb`
-- ✅ Scripts to manually trigger a job
-- ✅ Starter code
-- ✅ `README.md` with instructions
-
-**Outcome:** Template repo (`pape-lab-project`) for future ideas.
-
----
-
-## ⬜ PHASE 6 — Migrate VQ-VAE + AR
-
----
-
-### **10.** Add `wandb.init()` to VQ-VAE script (30–60 min)
-- ⬜ Log config: `epochs`, `start_lr`, `commit penalty`
-- ⬜ Log checkpoints as W&B Artifacts
-
-**Outcome:** VQ-VAE is Launch-ready.
-
----
-
-### **11.** Add AR + quantizer pattern (30–60 min)
-- ⬜ Feed output of VQ-VAE → AR → log AR results to W&B
-- ⬜ Runs through same queue, proven chained pipeline
-
-**Outcome:** Full multi-step experiment is reproducible.
-
----
-
-## ⬜ PHASE 7 — Productionize repos
-
----
-
-### **12.** Automate `pape-lab-template` workflows (60–90 min)
-- ⬜ Automatically build Docker image on changes to `main`
-- ⬜ Push image to GHCR (or DockerHub for testing)
-- ⬜ Create a W&B job for `main` using the built image
-- ⬜ Automatically create a git-based W&B job whenever a branch is pushed
-
-**Outcome:** Template repo (`pape-lab-template`) handles CI/CD for experiments.
-
----
-
-### **13.** Automate `pape-lab` workflows (60–90 min)
-- ⬜ Automatically run terraformer on changes to `main` terraformer config
-- ⬜ Automatically rebuild base Docker image on changes to its `Dockerfile` or `requirements.txt`
-- ⬜ Push rebuilt image to GHCR (or DockerHub for testing)
-
-**Outcome:** Infra repo (`pape-lab`) handles AWS infra updates and base image management.
-
----
-
-### **14.** Switch W&B to using pre-built images directly (30–60 min)
-- ⬜ `wandb launch job-foo:latest` → local agent pulls frozen image, not raw Git
-- ⬜ Runs reproducibly, no surprises
-
-**Outcome:** Ready for SageMaker fleet later.
-
----
-
-## ⚡️ Final Takeaway
-
-- 🏃 *80% of the real benefit comes from Phases 1–3.*
-- 🗃️ *Prebuilt images + CI give me reproducibility.*
-- 🚀 *Amazon SageMaker fleet makes sweeping cost-effective when it’s worth paying.*
-- 🧩 *Two repos (`pape-lab` and `pape-lab-project`) mean I never reinvent the wheel.*
-
----
-
-> **Commit every run. Snapshot every env. Never lose your best idea to a half-finished folder again.**
+So far best runs are scoring in the 160 range.
