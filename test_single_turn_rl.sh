@@ -51,6 +51,7 @@ docker run --rm -it \
   -e WANDB_MODE=offline \
   -e HOME=/tmp \
   $IMAGE_NAME \
-  --scenario test_single_turn_rl --checkpoint-path "$WORKSPACE_CHECKPOINT_PATH"
+  python /workspace/src/C_single_turn_score_maximizer/main.py \
+  --mode test --checkpoint-path "$WORKSPACE_CHECKPOINT_PATH"
 
 echo "✅ Done."

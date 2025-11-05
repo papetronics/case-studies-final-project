@@ -24,10 +24,10 @@ docker run --rm \
   -e WANDB_MODE=offline \
   -e HOME=/tmp \
   $IMAGE_NAME \
+  python /workspace/src/C_single_turn_score_maximizer/main.py \
   --epochs 50 \
   --episodes-per-batch 52 \
   --log-dir /workspace/logs \
-  --scenario single_turn_score_maximizer \
   --hidden-size 384 \
   --num-hidden 3 \
   --dataset-size 1300 \

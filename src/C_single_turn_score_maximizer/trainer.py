@@ -1,11 +1,10 @@
 import torch
 import pytorch_lightning as L
 import numpy as np
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, cast
 
 import gymnasium as gym
-import src.C_single_turn_score_maximizer.yahtzee_env
-import src.environment.full_yahtzee_env
+from src.environments.full_yahtzee_env import YahtzeeEnv
 from .model import TurnScoreMaximizer
 from src.utilities.return_calculators import ReturnCalculator, MonteCarloReturnCalculator
 from src.utilities.episode import Episode
@@ -15,16 +14,16 @@ class SingleTurnScoreMaximizerREINFORCETrainer(L.LightningModule):
     
     def __init__(
         self,
-        hidden_size: int = 64,
-        learning_rate: float = 1e-3,
-        episodes_per_batch: int = 32,
-        baseline_alpha: float = 0.1,
-        num_hidden: int = 1,
-        dropout_rate: float = 0.1,
+        hidden_size: int,
+        learning_rate: float,
+        episodes_per_batch: int,
+        num_hidden: int,
+        dropout_rate: float,
+        activation_function: str,
+        max_epochs: int,
+        min_lr_ratio: float,
         return_calculator: Optional[ReturnCalculator] = None,
-        activation_function: str = 'GELU',
-        max_epochs: int = 200,
-        min_lr_ratio: float = 0.001,
+        baseline_alpha: float = 0.1,
     ):
         super().__init__()
         
@@ -56,7 +55,8 @@ class SingleTurnScoreMaximizerREINFORCETrainer(L.LightningModule):
         
     def collect_episode(self) -> Episode:
         episode = Episode()
-        observation = self.env.unwrapped.observe()
+        unwrapped: YahtzeeEnv = cast(YahtzeeEnv, self.env.unwrapped)
+        observation = unwrapped.observe()
 
         # This is a bit of a hack, the environment supports full turns, but our model is single-turn
         # so we are just going to cut it off after 3 steps and pretend that is an episode.

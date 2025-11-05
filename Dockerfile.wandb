@@ -7,12 +7,11 @@ FROM 367942341054.dkr.ecr.us-east-2.amazonaws.com/pape-lab/train:base-latest
 WORKDIR /workspace
 
 # Install additional Python packages required for this W&B job
-COPY --link requirements.txt .
+COPY --link requirements-freeze.txt requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy all necessary Python scripts for the W&B job
-COPY --link main.py ./
 COPY --link src ./src
 
-# Runs the main script when the container starts
-ENTRYPOINT ["python", "/workspace/main.py"]
+# Default entrypoint - can be overridden by docker run command
+ENTRYPOINT []

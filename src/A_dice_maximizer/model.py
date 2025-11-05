@@ -5,7 +5,7 @@ from typing import Dict, Any
 
 
 class DiceSumMaximizer(nn.Module):
-    def __init__(self, hidden_size: int = 64, device = 'cuda' if torch.cuda.is_available() else 'cpu'):
+    def __init__(self, hidden_size: int, device: str = 'cuda' if torch.cuda.is_available() else 'cpu'):
         super(DiceSumMaximizer, self).__init__()
         
         self.device = device

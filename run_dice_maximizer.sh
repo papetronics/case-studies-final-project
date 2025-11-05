@@ -24,6 +24,7 @@ docker run --rm \
   -e WANDB_MODE=offline \
   -e HOME=/tmp \
   $IMAGE_NAME \
-  --epochs 3 --episodes-per-batch 16 --log-dir /workspace/logs --scenario dice_maximizer
+  python /workspace/src/A_dice_maximizer/main.py \
+  --epochs 3 --episodes-per-batch 16 --log-dir /workspace/logs
 
 echo "✅ Done."

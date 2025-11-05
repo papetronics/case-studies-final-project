@@ -16,7 +16,7 @@ def observation_to_tensor(observation: Dict[str, Any]) -> torch.Tensor:
 
 class SupervisedDiceScorer(nn.Module):
     class Block(nn.Module):
-        def __init__(self, in_features: int, out_features: int, dropout_rate: float = 0.0):
+        def __init__(self, in_features: int, out_features: int, dropout_rate: float):
             super(SupervisedDiceScorer.Block, self).__init__()
             layers = [
                 nn.Linear(in_features, out_features),
@@ -41,7 +41,7 @@ class SupervisedDiceScorer(nn.Module):
             x = x.masked_fill(mask == 0, self.mask_value)
             return self.softmax(x)
 
-    def __init__(self, hidden_size: int = 64, num_hidden: int = 1, dropout_rate: float = 0.1, device = 'cuda' if torch.cuda.is_available() else 'cpu'):
+    def __init__(self, hidden_size: int, num_hidden: int, dropout_rate: float = 0.1, device: str = 'cuda' if torch.cuda.is_available() else 'cpu'):
         super(SupervisedDiceScorer, self).__init__()
         
         self.device = device
