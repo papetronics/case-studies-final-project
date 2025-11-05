@@ -5,6 +5,7 @@ from typing import Dict, Any
 
 def observation_to_tensor(observation: Dict[str, Any]) -> torch.Tensor:
     dice = observation['dice'] # numpy array showing the actual dice, e.g. [1, 3, 5, 6, 2]
+    dice_counts = np.bincount(dice, minlength=7)[1:]  # counts of dice faces from 1 to 6
     rolls_used = observation['rolls_used'] # integer: 0, 1, or 2
     available_categories = observation['score_sheet_available_mask'] # mask for available scoring categories (13,)
     phase = observation.get('phase', 0)  # Current phase of the game (0: rolling, 1: scoring)
@@ -14,7 +15,7 @@ def observation_to_tensor(observation: Dict[str, Any]) -> torch.Tensor:
 
     #print(available_categories)
 
-    input_vector = np.concatenate([dice_onehot, rolls_onehot, [phase], available_categories])
+    input_vector = np.concatenate([dice_onehot, dice_counts, rolls_onehot, [phase], available_categories])
     return torch.FloatTensor(input_vector)
 
 class TurnScoreMaximizer(nn.Module):
@@ -78,7 +79,8 @@ class TurnScoreMaximizer(nn.Module):
         #   - Rolls Used [3]: One-hot encoding of rolls used (0, 1, 2) = 3  (always 2 in this scenario)
         #   - Available Categories [13]: One-hot encoding of available scoring categories = 13
         #   - Current Phase [1]: Current phase of the game (0: rolling, 1: scoring) = 1
-        input_size = 30 + 3 + 13 + 1
+        #   - Dice Counts [6]: Counts of each die face (1-6) = 6
+        input_size = 30 + 3 + 13 + 1 + 6
 
         ## 18 Model outputs:
         #   - Action Probabilities [5]: Probability of re-rolling each of the 5 dice

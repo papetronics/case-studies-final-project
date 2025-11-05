@@ -179,3 +179,7 @@ class YahtzeeEnv(gym.Env):
         """Close the environment."""
         # TODO: Clean up any resources
         pass
+
+    def observe(self) -> dict:
+        """Return the current observation."""
+        return self.state.observation()

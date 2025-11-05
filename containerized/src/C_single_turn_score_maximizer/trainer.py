@@ -23,6 +23,8 @@ class SingleTurnScoreMaximizerREINFORCETrainer(L.LightningModule):
         dropout_rate: float = 0.1,
         return_calculator: Optional[ReturnCalculator] = None,
         activation_function: str = 'GELU',
+        max_epochs: int = 200,
+        min_lr_ratio: float = 0.001,
     ):
         super().__init__()
         
@@ -38,12 +40,15 @@ class SingleTurnScoreMaximizerREINFORCETrainer(L.LightningModule):
         self.learning_rate = learning_rate
         self.episodes_per_batch = episodes_per_batch
         self.baseline_alpha = baseline_alpha
+        self.max_epochs = max_epochs
+        self.min_lr_ratio = min_lr_ratio
         
         self.return_calculator = return_calculator or MonteCarloReturnCalculator()
         
         self.baseline = 0.0
         
-        self.env = gym.make('Yahtzee-v1')
+        self.env = gym.make('FullYahtzee-v1')
+        self.env.reset()
         self.full_env = gym.make('FullYahtzee-v1')  # For validation
         
     def forward(self, observation: Dict[str, Any]) -> torch.Tensor:
@@ -51,9 +56,14 @@ class SingleTurnScoreMaximizerREINFORCETrainer(L.LightningModule):
         
     def collect_episode(self) -> Episode:
         episode = Episode()
-        observation, _ = self.env.reset()
-    
-        while True:
+        observation = self.env.unwrapped.observe()
+
+        # This is a bit of a hack, the environment supports full turns, but our model is single-turn
+        # so we are just going to cut it off after 3 steps and pretend that is an episode.
+        # we reset the environment whenever it terminates, that brings us back to an empty scoresheet.
+        reward = 0.0
+
+        for _ in range(3):  # roll, roll, score
             actions, log_probs = self.policy_net.sample_observation(observation)
             rolling_action_tensor, scoring_action_tensor = actions
             rolling_log_prob, scoring_log_prob = log_probs
@@ -74,9 +84,16 @@ class SingleTurnScoreMaximizerREINFORCETrainer(L.LightningModule):
 
             observation, reward, terminated, truncated, _ = self.env.step(action)
             
+            
+
             if terminated or truncated:
-                episode.set_reward(float(reward))
-                break
+                observation, _ = self.env.reset()
+
+        episode.set_reward(float(reward))
+        # print ("Episode reward:", episode.reward)
+
+        # sanity check: after 3 rolls we should always have rolls_used == 0 (new turn) and phase == 0
+        assert observation['rolls_used'] == 0 and observation['phase'] == 0
                 
         return episode
     
@@ -162,19 +179,17 @@ class SingleTurnScoreMaximizerREINFORCETrainer(L.LightningModule):
             
     def configure_optimizers(self): # type: ignore
         optimizer = torch.optim.Adam(self.policy_net.parameters(), lr=self.learning_rate)
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer, 
-            mode='min',           # Monitor loss (minimize)
-            factor=0.7,          # Reduce LR by 30% (less aggressive)
-            patience=3,          # Wait 3 epochs before reducing (better for short training)
-            min_lr=1e-6          # Don't go below this LR
+        scheduler = torch.optim.lr_scheduler.LinearLR(
+            optimizer,
+            start_factor=1.0,  # Start at full learning rate
+            end_factor=self.min_lr_ratio,  # End at min_lr_ratio of initial LR
+            total_iters=self.max_epochs  # Linear decay over training epochs
         )
         
         return {
             "optimizer": optimizer,
             "lr_scheduler": {
                 "scheduler": scheduler,
-                "monitor": "train/policy_loss",    # Monitor training loss 
                 "frequency": 1            # Check every epoch
             }
         }
