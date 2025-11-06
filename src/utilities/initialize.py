@@ -28,7 +28,7 @@ class ConfigParam:
 
 
 def initialize(scenario_name: str, config_params: List[ConfigParam], description: Optional[str] = None, 
-               wandb_project_prefix: str = "yahtzee", logger_name: Optional[str] = None, log_dir: str = "./logs"):
+               wandb_project_prefix: str = "yahtzee", logger_name: Optional[str] = None):
     """
     Initialize the project with configuration management, wandb setup, logger setup, and system info.
     
@@ -38,10 +38,9 @@ def initialize(scenario_name: str, config_params: List[ConfigParam], description
         description: Description for the argument parser
         wandb_project_prefix: Prefix for wandb project name (default: "yahtzee")
         logger_name: Name for the logger (default: based on scenario)
-        log_dir: Directory for logs (default: "./logs")
     
     Returns:
-        tuple: (wandb_run, config_dict, use_wandb, logger)
+        tuple: (wandb_run, config_dict, logger)
     """
     # Initialize wandb if running inside a wandb launch agent or job
     is_launch = os.getenv("WANDB_JOB_NAME") or os.getenv("WANDB_RUN_ID")
@@ -62,6 +61,11 @@ def initialize(scenario_name: str, config_params: List[ConfigParam], description
         print("GPU name:", torch.cuda.get_device_name(0))
     else:
         print("No GPU detected!")
+    
+    # Add log_dir parameter if not already present
+    param_names = [param.name for param in config_params]
+    if 'log_dir' not in param_names:
+        config_params = config_params + [ConfigParam('log_dir', str, './logs', 'Directory for logs', display_name='Log directory')]
     
     # Set up argument parser
     parser = argparse.ArgumentParser(description=description or f'Yahtzee {scenario_name}')
@@ -115,6 +119,8 @@ def initialize(scenario_name: str, config_params: List[ConfigParam], description
             log_model=True
         )
     else:
+        # Get log_dir from config, fallback to default if not specified
+        log_dir = config.get('log_dir', './logs')
         # Ensure log directory exists
         os.makedirs(log_dir, exist_ok=True)
         logger = TensorBoardLogger(

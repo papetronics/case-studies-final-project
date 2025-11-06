@@ -10,13 +10,13 @@ from gymnasium import spaces
 import numpy as np
 from typing import Any
 
-from src.utilities.scoring_helper import get_all_scores
+from utilities.scoring_helper import get_all_scores
             
 from gymnasium.envs.registration import register
     
 register(
     id='FullYahtzee-v1',
-    entry_point='src.full_yahtzee_env:YahtzeeEnv',
+    entry_point='full_yahtzee_env:YahtzeeEnv',
     max_episode_steps=39,  # 3 rounds: roll, roll, score X 13 categories = 39 steps
 )
 

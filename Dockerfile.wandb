@@ -7,11 +7,14 @@ FROM 367942341054.dkr.ecr.us-east-2.amazonaws.com/pape-lab/train:base-latest
 WORKDIR /workspace
 
 # Install additional Python packages required for this W&B job
-COPY --link requirements-freeze.txt requirements.txt
+COPY --link requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy all necessary Python scripts for the W&B job
 COPY --link src ./src
+
+# Set working directory to src so everything runs relative to src
+WORKDIR /workspace/src
 
 # Default entrypoint - can be overridden by docker run command
 ENTRYPOINT []

@@ -3,10 +3,10 @@ import torch
 
 import pytorch_lightning as L
 
-from src.A_dice_maximizer.trainer import REINFORCEWithBaselineTrainer
-from src.utilities.return_calculators import MonteCarloReturnCalculator
-from src.utilities.dummy_dataset import DummyDataset
-from src.utilities.initialize import initialize, finish, ConfigParam
+from A_dice_maximizer.trainer import REINFORCEWithBaselineTrainer
+from utilities.return_calculators import MonteCarloReturnCalculator
+from utilities.dummy_dataset import DummyDataset
+from utilities.initialize import initialize, finish, ConfigParam
 
 def main():
     # Define configuration schema

@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 import pytorch_lightning as L
 
-from src.B_supervised_scorer.trainer import SupervisedScorerTrainer
-from src.utilities.initialize import initialize, finish, ConfigParam
+from B_supervised_scorer.trainer import SupervisedScorerTrainer
+from utilities.initialize import initialize, finish, ConfigParam
 
 def main():
     # Define configuration schema

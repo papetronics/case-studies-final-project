@@ -4,10 +4,10 @@ import numpy as np
 from typing import Dict, Any, Optional
 
 import gymnasium as gym
-import src.A_dice_maximizer.yahtzee_env
+import A_dice_maximizer.yahtzee_env
 from .model import DiceSumMaximizer
-from src.utilities.return_calculators import ReturnCalculator, MonteCarloReturnCalculator
-from src.utilities.episode import Episode
+from utilities.return_calculators import ReturnCalculator, MonteCarloReturnCalculator
+from utilities.episode import Episode
 
 
 class REINFORCEWithBaselineTrainer(L.LightningModule):

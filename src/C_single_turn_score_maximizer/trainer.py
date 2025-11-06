@@ -4,10 +4,10 @@ import numpy as np
 from typing import Dict, Any, Optional, cast
 
 import gymnasium as gym
-from src.environments.full_yahtzee_env import YahtzeeEnv
+from environments.full_yahtzee_env import YahtzeeEnv
 from .model import TurnScoreMaximizer
-from src.utilities.return_calculators import ReturnCalculator, MonteCarloReturnCalculator
-from src.utilities.episode import Episode
+from utilities.return_calculators import ReturnCalculator, MonteCarloReturnCalculator
+from utilities.episode import Episode
 
 
 class SingleTurnScoreMaximizerREINFORCETrainer(L.LightningModule):

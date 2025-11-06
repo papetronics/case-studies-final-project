@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 set -e
 
-IMAGE_NAME="csml-final-project"
-
 # Parse checkpoint path argument
 CHECKPOINT_PATH=""
 while [[ $# -gt 0 ]]; do
@@ -30,28 +28,7 @@ else
   WORKSPACE_CHECKPOINT_PATH="/workspace/single_turn_model_checkpoint.pth"
 fi
 
-# Change to the project root directory
-cd ..
-
-echo "🔨 Building local dev image..."
-docker build -f Dockerfile.wandb -t $IMAGE_NAME .
-
-echo "🚀 Running container..."
-
-# Ensure logs directory exists with correct permissions
-mkdir -p "$(pwd)/logs"
-
-# Run container with user mapping and proper volume permissions
-docker run --rm -it \
-  --gpus all \
-  -u "$(id -u):$(id -g)" \
-  -v "$(pwd)/logs":/workspace/logs \
-  -v /etc/passwd:/etc/passwd:ro \
-  -v /etc/group:/etc/group:ro \
-  -e WANDB_MODE=offline \
-  -e HOME=/tmp \
-  $IMAGE_NAME \
-  python /workspace/src/C_single_turn_score_maximizer/main.py \
-  --mode test --checkpoint-path "$WORKSPACE_CHECKPOINT_PATH"
-
-echo "✅ Done."
+# Build and run the test scenario
+./build_image.sh C_single_turn_score_maximizer \
+  --mode test \
+  --checkpoint-path "$WORKSPACE_CHECKPOINT_PATH"

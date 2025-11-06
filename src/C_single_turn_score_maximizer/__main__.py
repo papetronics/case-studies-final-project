@@ -3,10 +3,10 @@ import torch
 
 import pytorch_lightning as L
 
-from src.C_single_turn_score_maximizer.trainer import SingleTurnScoreMaximizerREINFORCETrainer
-from src.utilities.return_calculators import MonteCarloReturnCalculator
-from src.utilities.dummy_dataset import DummyDataset
-from src.utilities.initialize import initialize, finish, ConfigParam
+from C_single_turn_score_maximizer.trainer import SingleTurnScoreMaximizerREINFORCETrainer
+from utilities.return_calculators import MonteCarloReturnCalculator
+from utilities.dummy_dataset import DummyDataset
+from utilities.initialize import initialize, finish, ConfigParam
 
 def main():
     # Define configuration schema
@@ -47,7 +47,7 @@ def main():
 
     if mode == 'test':
         # Test mode
-        from src.C_single_turn_score_maximizer.test_episode import main as test_episode_main
+        from C_single_turn_score_maximizer.test_episode import main as test_episode_main
         test_episode_main(checkpoint_path=checkpoint_path)
     else:
         # Create return calculator and model
@@ -87,7 +87,7 @@ def main():
         trainer.fit(model, train_dataloader, val_dataloader)
 
         # Run a test episode after training
-        from src.C_single_turn_score_maximizer.test_episode import main as test_episode_main
+        from C_single_turn_score_maximizer.test_episode import main as test_episode_main
         test_episode_main(model=model.policy_net, interactive=False)
     
     print("Process completed!")
