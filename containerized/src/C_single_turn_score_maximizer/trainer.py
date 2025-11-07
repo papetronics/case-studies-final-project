@@ -21,10 +21,12 @@ class SingleTurnScoreMaximizerREINFORCETrainer(L.LightningModule):
         baseline_alpha: float = 0.1,
         num_hidden: int = 1,
         dropout_rate: float = 0.1,
-        return_calculator: Optional[ReturnCalculator] = None,
+        return_calculator: Optional[MonteCarloReturnCalculator] = None,
         activation_function: str = 'GELU',
         max_epochs: int = 200,
         min_lr_ratio: float = 0.001,
+        gamma_max: float = 1.0,
+        gamma_min: float = 0.0,
     ):
         super().__init__()
         
@@ -42,8 +44,12 @@ class SingleTurnScoreMaximizerREINFORCETrainer(L.LightningModule):
         self.baseline_alpha = baseline_alpha
         self.max_epochs = max_epochs
         self.min_lr_ratio = min_lr_ratio
+        self.gamma_max = gamma_max
+        self.gamma_min = gamma_min
+        
         
         self.return_calculator = return_calculator or MonteCarloReturnCalculator()
+        self.return_calculator.gamma = self.gamma_min
         
         self.baseline = 0.0
         
@@ -193,6 +199,18 @@ class SingleTurnScoreMaximizerREINFORCETrainer(L.LightningModule):
                 "frequency": 1            # Check every epoch
             }
         }
+    
+    def on_train_epoch_start(self):
+        """Update gamma linearly from gamma_min to gamma_max over training."""
+        if self.max_epochs > 1:
+            # Linear interpolation from gamma_min to gamma_max
+            progress = self.current_epoch / (self.max_epochs - 1)
+            current_gamma = self.gamma_min + progress * (self.gamma_max - self.gamma_min)
+        else:
+            current_gamma = self.gamma_max
+        
+        self.return_calculator.gamma = current_gamma
+        self.log('train/gamma', current_gamma, prog_bar=False)
     
     def on_train_start(self):
         pass

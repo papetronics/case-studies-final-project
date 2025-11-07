@@ -56,8 +56,10 @@ def main():
                         help='Activation function to use in the model')
     parser.add_argument('--min-lr-ratio', type=float, default=0.001,
                         help='Ratio of minimum learning rate to initial learning rate (for cosine annealing)')
-    parser.add_argument('--gamma', type=float, default=1.0,
-                        help='Discount factor for return calculation (for single turn score maximizer)')
+    parser.add_argument('--gamma-max', type=float, default=1.0,
+                        help='Discount factor for return calculation, target at end of training (for single turn score maximizer)')
+    parser.add_argument('--gamma-min', type=float, default=0.0,
+                        help='Discount factor for return calculation, target at start of training (for single turn score maximizer)')
 
     args = parser.parse_args()
     
@@ -72,7 +74,8 @@ def main():
         dataset_size = wandb_run.config.get('dataset_size', args.dataset_size)
         activation_function = wandb_run.config.get('activation_function', args.activation_function)
         min_lr_ratio = wandb_run.config.get('min_lr_ratio', args.min_lr_ratio)
-        gamma = wandb_run.config.get('gamma', args.gamma)
+        gamma_max = wandb_run.config.get('gamma_max', args.gamma_max)
+        gamma_min = wandb_run.config.get('gamma_min', args.gamma_min)
         use_wandb = True
     else:
         epochs = args.epochs
@@ -85,7 +88,8 @@ def main():
         log_dir = args.log_dir
         activation_function = args.activation_function
         min_lr_ratio = args.min_lr_ratio
-        gamma = args.gamma
+        gamma_max = args.gamma_max
+        gamma_min = args.gamma_min
 
     print("\n=== Hyperparameters ===")
     print(f"Scenario: {args.scenario}")
@@ -96,6 +100,9 @@ def main():
     print(f"Num hidden layers: {num_hidden}")
     print(f"Dataset size: {dataset_size}")
     print(f"Activation function: {activation_function}")
+    print(f"Min LR ratio: {min_lr_ratio}")
+    print(f"Gamma max: {gamma_max}")
+    print(f"Gamma min: {gamma_min}")
 
     print("\n=== System Info ===")
     print("CUDA available:", torch.cuda.is_available())
@@ -155,7 +162,8 @@ def main():
             dataset_size=dataset_size,
             activation_function=activation_function,
             min_lr_ratio=min_lr_ratio,
-            gamma=gamma
+            gamma_max=gamma_max,
+            gamma_min=gamma_min
         )
     elif args.scenario == 'test_single_turn_rl':
         from src.C_single_turn_score_maximizer.test_episode import main as test_episode_main
@@ -179,10 +187,11 @@ def single_turn_score_maximizer_main(
     dataset_size: int,
     activation_function: str,
     min_lr_ratio: float,
-    gamma: float
+    gamma_max: float,
+    gamma_min: float,
 ):
     # Create return calculator and model
-    return_calculator = MonteCarloReturnCalculator(gamma = 1.0)
+    return_calculator = MonteCarloReturnCalculator(1.0)
     model = SingleTurnScoreMaximizerREINFORCETrainer(
         hidden_size=hidden_size,
         learning_rate=learning_rate,
@@ -192,7 +201,9 @@ def single_turn_score_maximizer_main(
         dropout_rate=dropout_rate,
         activation_function=activation_function,
         max_epochs=epochs,
-        min_lr_ratio=min_lr_ratio
+        min_lr_ratio=min_lr_ratio,
+        gamma_max=gamma_max,
+        gamma_min=gamma_min,
     )
         
     # Create trainer
