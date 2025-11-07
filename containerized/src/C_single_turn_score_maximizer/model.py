@@ -10,12 +10,14 @@ def observation_to_tensor(observation: Dict[str, Any]) -> torch.Tensor:
     available_categories = observation['score_sheet_available_mask'] # mask for available scoring categories (13,)
     phase = observation.get('phase', 0)  # Current phase of the game (0: rolling, 1: scoring)
 
-    dice_onehot = np.eye(6)[dice - 1].flatten()
-    rolls_onehot = np.eye(3)[rolls_used]
+    dice_norm = (dice - 1) / 5.0 # 0.0, 0.2, 0.4, 0.6, 0.8, 1.0
+    rolls_norm = rolls_used / 2.0  # 0.0, 0.5, 1.0
+    bins_norm = dice_counts / 5.0  # 0.0, 0.2, 0.4, 0.6, 0.8, 1.0
+    
 
     #print(available_categories)
 
-    input_vector = np.concatenate([dice_onehot, dice_counts, rolls_onehot, [phase], available_categories])
+    input_vector = np.concatenate([dice_norm, bins_norm, [rolls_norm], [phase], available_categories])
     return torch.FloatTensor(input_vector)
 
 class TurnScoreMaximizer(nn.Module):
@@ -75,12 +77,12 @@ class TurnScoreMaximizer(nn.Module):
         self.dropout_rate = dropout_rate
         
         ## 46 model inputs:
-        #   - Dice [30]: One-hot encoding of 5 dice (6 sides each) = 5 * 6 = 30
-        #   - Rolls Used [3]: One-hot encoding of rolls used (0, 1, 2) = 3  (always 2 in this scenario)
-        #   - Available Categories [13]: One-hot encoding of available scoring categories = 13
+        #   - Dice [5]: Dice, normalized to [0, 1]
+        #   - Rolls Used [1]: Normalized rolls used (0, 0.5, 1) = 1
+        #   - Available Categories [13]: Available scoring categories, 0/1 = 13
         #   - Current Phase [1]: Current phase of the game (0: rolling, 1: scoring) = 1
-        #   - Dice Counts [6]: Counts of each die face (1-6) = 6
-        input_size = 30 + 3 + 13 + 1 + 6
+        #   - Dice Counts [6]: Counts of each die face (1-6) = 6, normalized to [0, 1]
+        input_size = 5 + 1 + 13 + 1 + 6
 
         ## 18 Model outputs:
         #   - Action Probabilities [5]: Probability of re-rolling each of the 5 dice
