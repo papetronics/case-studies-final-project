@@ -68,48 +68,15 @@ $$\mathbf{c} = (c_1, c_2, \ldots, c_{13}) \text{ where } c_i \in \mathcal{D}_i \
 
 and $\varnothing$ indicates an unused category.
 
-Let us define a dice face counting function which we can use to simplify score calculations:
+Let us also define a dice face counting function which we can use to simplify score calculations:
 \begin{align*}
 n_v(\mathbf{d}) &= \sum_{i=1}^{5} \mathbb{I}(d_i = v),
 \quad v \in \{1,\dots,6\} \\
 \mathbf{n}(\mathbf{d}) &= \big(n_1(\mathbf{d}),\dots,n_6(\mathbf{d})\big)
 \end{align*}
 
-Next we define the indicator functions for each of the scoring categories:
-
+Let the potential score for each category be defined as follows (where detailed scoring rules can be found in Appendix):
 \begin{align*}
-\mathbb{I}_{3\mathrm{k}}(\mathbf{d})
-&= \mathbb{I}\bigl\{ \max_{v} n_v(\mathbf{d}) \ge 3 \bigr\} \\[4pt]
-\mathbb{I}_{4\mathrm{k}}(\mathbf{d})
-&= \mathbb{I}\bigl\{ \max_{v} n_v(\mathbf{d}) \ge 4 \bigr\} \\[6pt]
-\mathbb{I}_{\mathrm{full}}(\mathbf{d})
-&= \mathbb{I}\Bigl\{
-  \exists i, j \in \{1, \mathellipsis, 6 \} \ \text{with} \ n_i(\mathbf{d}) = 3 \land n_j(\mathbf{d}) = 2
-\Bigr\} \\[6pt]
-\mathbb{I}_{\mathrm{ss}}(\mathbf{d})
-&= \mathbb{I}\Bigl\{
-   \exists k \in \{1,2,3\} \ \text{with}\
-   \sum_{v=k}^{k+3} \mathbb{I}\{n_v(\mathbf{d}) > 0\} = 4
-   \Bigr\} \\[6pt]
-\mathbb{I}_{\mathrm{ls}}(\mathbf{d})
-&= \mathbb{I}\Bigl\{
-   \exists k \in \{1,2\} \ \text{with}\
-   \sum_{v=k}^{k+4} \mathbb{I}\{n_v(\mathbf{d}) > 0\} = 5
-   \Bigr\} \\[6pt]
-\mathbb{I}_{\mathrm{yahtzee}}(\mathbf{d})
-  &= \mathbb{I}\bigl\{\max_v n_v(\mathbf{d}) = 5\bigr\}
-\end{align*}
-
-The potential score for each category can then be defined as:
-\begin{align*}
-f_j(\mathbf{d})   &= j \cdot n_j(\mathbf{d}), \qquad j \in \{1,\dots,6\} \\[4pt]
-f_7(\mathbf{d})   &= \mathbf{1}^\top \mathbf{d} \cdot \mathbb{I}_{3\mathrm{k}}(\mathbf{d}) \\[4pt]
-f_8(\mathbf{d})   &= \mathbf{1}^\top \mathbf{d} \cdot \mathbb{I}_{4\mathrm{k}}(\mathbf{d}) \\[4pt]
-f_9(\mathbf{d})   &= 25 \cdot \mathbb{I}_{\mathrm{full}}(\mathbf{d}) \\[4pt]
-f_{10}(\mathbf{d})&= 30 \cdot \mathbb{I}_{\mathrm{ss}}(\mathbf{d}) \\[4pt]
-f_{11}(\mathbf{d})&= 40 \cdot \mathbb{I}_{\mathrm{ls}}(\mathbf{d}) \\[4pt]
-f_{12}(\mathbf{d})&= 50 \cdot \mathbb{I}_{\mathrm{yahtzee}}(\mathbf{d}) \\[4pt]
-f_{13}(\mathbf{d})&= \mathbf{1}^\top \mathbf{d} \\[4pt]
 \mathbf{f}(\mathbf{d}) &=
 \bigl(f_1(\mathbf{d}), f_2(\mathbf{d}), \ldots, f_{13}(\mathbf{d})\bigr)
 \end{align*}
@@ -141,10 +108,16 @@ $$\mathbf{k} \in \{0,1\}^5$$
 where $\mathbf{k}_i = 1$ indicates that die $i$ is kept, otherwise it is re-rolled.
 
 We can then define the transition of the dice state after a re-roll as:
-$$
-\mathbf{d'} \sim U(\mathcal{D}), \\
-\mathbf{d}_{r+1} = \mathbf{d'} \cdot (1 - \mathbf{k}) + \mathbf{d} \cdot \mathbf{k}
-$$
+\begin{align*}
+\mathbf{d}' &\sim U(\mathcal{D}), \\[2pt]
+\mathbf{d}_{r+1}
+  &= (\mathbf{1} - \mathbf{k}) \odot \mathbf{d}'
+   + \mathbf{k} \odot \mathbf{d}
+\end{align*}
+
+
+When $r=2$, the player must choose a scoring category to apply their current dice to. Define a scoring choice mask as a one-hot vector:
+$$\mathbf{s} \in \{0,1\}^{13}, \quad \|\mathbf{s}|_1 = 1$$
 
 For the purposes of calculating the final (or current) score, any field that has not been scored yet can be counted as zero.
 We can define a mask vector for this:
@@ -153,6 +126,7 @@ We can define a mask vector for this:
 &\mathbf{u}(\mathbf{c}) \in \{0,1\}^{13} \\
 &\mathbf{u}(\mathbf{c})_i = \mathbb{I}\bigl(c_i \neq \varnothing\bigr), \quad \forall i = \{ 1, \ldots 13 \}
 \end{align*}
+
 
 If a player achieves a total score of 63 or more in the upper section (categories 1-6), they receive a bonus of 35 points:
 $$
@@ -207,7 +181,7 @@ Assume for simplicity our reduced representation consists of the dice state $\ma
 the roll count $r$ encoded one-hot,
 the bin count vector $\mathbf{n}(\mathbf{d})$ encoded one-hot,
 and a score mask $\mathbf{u}(\mathbf{c})$. This gives input dimensionality of $30 + 3 + 30 + 13 = 52$ and cardinality of
-$5^6 \cdot 3 \cdot 
+$2^{52} \approx 4.5 \times 10^{15}$.
 
 
 For a discrete control problem with a finite state size of $|\mathbf{S}|$, there are classical results \cite{horne-hush-1993-bounds-rnn-fsm} 
@@ -308,5 +282,48 @@ Acknowledge any help or resources you used.
 
 \bibliography{references}
 \bibliographystyle{acl_natbib}
+
+\appendix
+
+\section{Full Yahtzee Scoring Rules}
+\label{app:scoring}
+Next we define the indicator functions for each of the scoring categories:
+
+\begin{align*}
+\mathbb{I}_{3\mathrm{k}}(\mathbf{d})
+&= \mathbb{I}\bigl\{ \max_{v} n_v(\mathbf{d}) \ge 3 \bigr\} \\[4pt]
+\mathbb{I}_{4\mathrm{k}}(\mathbf{d})
+&= \mathbb{I}\bigl\{ \max_{v} n_v(\mathbf{d}) \ge 4 \bigr\} \\[6pt]
+\mathbb{I}_{\mathrm{full}}(\mathbf{d})
+&= \mathbb{I}\Bigl\{
+  \exists i, j \in \{1, \mathellipsis, 6 \} \ \text{with} \ n_i(\mathbf{d}) = 3 \land n_j(\mathbf{d}) = 2
+\Bigr\} \\[6pt]
+\mathbb{I}_{\mathrm{ss}}(\mathbf{d})
+&= \mathbb{I}\Bigl\{
+   \exists k \in \{1,2,3\} \ \text{with}\
+   \sum_{v=k}^{k+3} \mathbb{I}\{n_v(\mathbf{d}) > 0\} = 4
+   \Bigr\} \\[6pt]
+\mathbb{I}_{\mathrm{ls}}(\mathbf{d})
+&= \mathbb{I}\Bigl\{
+   \exists k \in \{1,2\} \ \text{with}\
+   \sum_{v=k}^{k+4} \mathbb{I}\{n_v(\mathbf{d}) > 0\} = 5
+   \Bigr\} \\[6pt]
+\mathbb{I}_{\mathrm{yahtzee}}(\mathbf{d})
+  &= \mathbb{I}\bigl\{\max_v n_v(\mathbf{d}) = 5\bigr\}
+\end{align*}
+
+The potential score for each category can then be defined as:
+\begin{align*}
+f_j(\mathbf{d})   &= j \cdot n_j(\mathbf{d}), \qquad j \in \{1,\dots,6\} \\[4pt]
+f_7(\mathbf{d})   &= \mathbf{1}^\top \mathbf{d} \cdot \mathbb{I}_{3\mathrm{k}}(\mathbf{d}) \\[4pt]
+f_8(\mathbf{d})   &= \mathbf{1}^\top \mathbf{d} \cdot \mathbb{I}_{4\mathrm{k}}(\mathbf{d}) \\[4pt]
+f_9(\mathbf{d})   &= 25 \cdot \mathbb{I}_{\mathrm{full}}(\mathbf{d}) \\[4pt]
+f_{10}(\mathbf{d})&= 30 \cdot \mathbb{I}_{\mathrm{ss}}(\mathbf{d}) \\[4pt]
+f_{11}(\mathbf{d})&= 40 \cdot \mathbb{I}_{\mathrm{ls}}(\mathbf{d}) \\[4pt]
+f_{12}(\mathbf{d})&= 50 \cdot \mathbb{I}_{\mathrm{yahtzee}}(\mathbf{d}) \\[4pt]
+f_{13}(\mathbf{d})&= \mathbf{1}^\top \cdot \mathbf{d} \\[4pt]
+\mathbf{f}(\mathbf{d}) &=
+\bigl(f_1(\mathbf{d}), f_2(\mathbf{d}), \ldots, f_{13}(\mathbf{d})\bigr)
+\end{align*}
 
 \end{document}
