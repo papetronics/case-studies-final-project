@@ -144,7 +144,7 @@ class TurnScoreMaximizer(nn.Module):
         
         ## 46 model inputs:
         #   - Dice [30]: One-hot encoding of 5 dice (6 sides each) = 5 * 6 = 30
-        #   - Rolls Used [3]: One-hot encoding of rolls used (0, 1, 2) = 3  (always 2 in this scenario)
+        #   - Rolls Used [3]: One-hot encoding of rolls used (0, 1, 2) = 3 
         #   - Available Categories [13]: One-hot encoding of available scoring categories = 13
         #   - Current Phase [1]: Current phase of the game (0: rolling, 1: scoring) = 1
         #   - Dice Counts [6]: Counts of each die face (1-6) = 6
