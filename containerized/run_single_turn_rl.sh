@@ -34,6 +34,7 @@ docker run --rm \
   --activation-function Swish \
   --learning-rate 0.00075 \
   --min-lr-ratio 0.0001 \
-  --gamma 0.97
+  --gamma-min 0.0 \
+  --gamma-max 1.0
 
 echo "✅ Done."
