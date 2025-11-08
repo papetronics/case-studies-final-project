@@ -10,14 +10,14 @@ from gymnasium import spaces
 import numpy as np
 from typing import Any
 
-from src.scoring_helper import get_all_scores
+from src.utilities.scoring_helper import get_all_scores
             
 from gymnasium.envs.registration import register
     
 register(
-    id='Yahtzee-v1',
-    entry_point='src.C_single_turn_score_maximizer.yahtzee_env:YahtzeeEnv',
-    max_episode_steps=3,  # 3 rounds: roll, roll, score
+    id='FullYahtzee-v1',
+    entry_point='src.full_yahtzee_env:YahtzeeEnv',
+    max_episode_steps=39,  # 3 rounds: roll, roll, score X 13 categories = 39 steps
 )
 
 @dataclass
@@ -29,28 +29,21 @@ class DiceState:
         self.rolls_used = 0  # Track rolls used instead of remaining (0, 1, 2)
         self.phase = 0  # 0: rolling phase, 1: scoring phase
         
+        self.score_sheet: np.ndarray = np.zeros(13, dtype=np.int32)
         # Initialize the scoresheet to randomly pick 0->12 categories being full,
         # then randomly pick which categories are full
         # 1 = available, 0 = filled
         self.score_sheet_available_mask: np.ndarray = np.ones(13, dtype=np.int32)
-        self.randomly_fill_scoresheet()
+        self.score_sheet_available_mask[:] = 1
 
         self.__state = {
             "dice": self.dice,
             "rolls_used": self.rolls_used,
             "phase": self.phase,
+            "score_sheet": self.score_sheet,
             "score_sheet_available_mask": self.score_sheet_available_mask  # 1 if available, 0 if filled
         }
-    
-    def randomly_fill_scoresheet(self) -> None:
-        """Randomly fill the score sheet."""
-        self.score_sheet_available_mask[:] = 1
-        num_filled = np.random.randint(0, 12)  # 0 to 11 inclusive
-        # fill chance category with 90% probability
-        if np.random.rand() < 0.9:
-            self.score_sheet_available_mask[12] = 0
-        filled_indices = np.random.choice(12, size=num_filled, replace=False)
-        self.score_sheet_available_mask[filled_indices] = 0
+
 
     def observation(self) -> dict:
         """Convert to observation format."""
@@ -67,7 +60,8 @@ class DiceState:
         self.dice[:] = np.random.randint(1, 7, size=self.NUM_DICE)
         self.dice.sort()  # Sort in-place
 
-        self.randomly_fill_scoresheet()
+        self.score_sheet_available_mask[:] = 1
+        self.score_sheet[:] = 0
 
     def roll_dice(self, roll_mask: np.ndarray) -> None:
         """Roll the dice, holding those indicated by the hold_mask."""
@@ -88,12 +82,31 @@ class DiceState:
 
     def score_dice(self, category: int) -> int:
         """Score the dice for the given category and update the scoresheet."""
+
+        current_upper_score = np.sum(self.score_sheet[0:6]) 
+
         score, _ = get_all_scores(self.dice, self.score_sheet_available_mask)
-        if self.score_sheet_available_mask[category] == 1:
-            self.score_sheet_available_mask[category] = 0  # Mark as filled
-            return score[category] 
-        else:
+        if self.score_sheet_available_mask[category] != 1:
             raise ValueError("Category already filled.")
+        self.score_sheet_available_mask[category] = 0  # Mark as filled
+        self.score_sheet[category] = score[category]
+
+        # new upper score after scoring
+        new_upper_score = np.sum(self.score_sheet[0:6])
+
+        # Check for upper section bonus
+        bonus = 0
+        if current_upper_score < 63 and new_upper_score >= 63:
+            bonus = 35  # Bonus category is index 12
+
+        # Reset dice for next turn
+        self.rolls_used = 0
+        self.phase = 0 
+        self.dice[:] = np.random.randint(1, 7, size=self.NUM_DICE)
+        self.dice.sort()
+
+        return score[category] + bonus
+            
 
 class YahtzeeEnv(gym.Env):
     """
@@ -111,6 +124,7 @@ class YahtzeeEnv(gym.Env):
         self.observation_space = spaces.Dict({
             "dice": spaces.Box(low=1, high=6, shape=(5,), dtype=np.int32), # the raw face values of the 5 dice
             "rolls_used": spaces.Discrete(3),  # 0, 1, or 2
+            "score_sheet": spaces.Box(low=0, high=100, shape=(13,), dtype=np.int32),  # 13 categories, scores from 0 to 100
             "score_sheet_available_mask": spaces.MultiBinary(13),  # 13 categories, 1 if available, 0 if filled,
             "phase": spaces.Discrete(2)  # 0: rolling phase, 1: scoring phase
         })
@@ -131,14 +145,14 @@ class YahtzeeEnv(gym.Env):
         if self.state.rolls_used < 2:
             # action is the hold mask for the dice
             self.state.roll_dice(action["hold_mask"])
-            terminated = False
         else:
             # Final scoring action
             score_category = action["score_category"]
             reward = self.state.score_dice(score_category)
             # Here we would compute the score for the chosen category
             # For now, we just terminate the episode
-            terminated = True
+
+        terminated = self.state.score_sheet_available_mask.sum() == 0
 
         observation = self.state.observation()
         return observation, reward, terminated, False, self.info
@@ -165,3 +179,7 @@ class YahtzeeEnv(gym.Env):
         """Close the environment."""
         # TODO: Clean up any resources
         pass
+
+    def observe(self) -> dict:
+        """Return the current observation."""
+        return self.state.observation()
