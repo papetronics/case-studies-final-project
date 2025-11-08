@@ -1,8 +1,8 @@
 import torch
 import numpy as np
 
-from src.B_supervised_scorer.model import observation_to_tensor
-from src.utilities.scoring_helper import get_all_scores
+from B_supervised_scorer.model import observation_to_tensor
+from utilities.scoring_helper import get_all_scores
 
 
 class GreedyScoringDataset(torch.utils.data.Dataset):

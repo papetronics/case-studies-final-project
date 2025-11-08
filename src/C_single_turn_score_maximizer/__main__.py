@@ -1,0 +1,98 @@
+#!/usr/bin/env python
+import torch
+
+import pytorch_lightning as L
+
+from C_single_turn_score_maximizer.trainer import SingleTurnScoreMaximizerREINFORCETrainer
+from utilities.return_calculators import MonteCarloReturnCalculator
+from utilities.dummy_dataset import DummyDataset
+from utilities.initialize import initialize, finish, ConfigParam
+
+def main():
+    # Define configuration schema
+    config_params = [
+        ConfigParam('mode', str, 'train', 'Mode to run (train or test)', choices=['train', 'test']),
+        ConfigParam('epochs', int, 50, 'Number of training epochs'),
+        ConfigParam('episodes_per_batch', int, 32, 'Episodes per training batch', display_name='Episodes per batch'),
+        ConfigParam('learning_rate', float, 1e-3, 'Learning rate', display_name='Learning rate'),
+        ConfigParam('hidden_size', int, 64, 'Hidden layer size', display_name='Hidden size'),
+        ConfigParam('num_hidden', int, 1, 'Number of hidden layers', display_name='Num hidden layers'),
+        ConfigParam('dataset_size', int, 10000, 'Dataset size', display_name='Dataset size'),
+        ConfigParam('checkpoint_path', str, None, 'Path to model checkpoint for evaluation', display_name='Checkpoint path'),
+        ConfigParam('activation_function', str, 'GELU', 'Activation function to use in the model', 
+                   choices=['ReLU', 'GELU', 'CELU', 'PReLU', 'ELU', 'Tanh', 'LeakyReLU', 'Softplus', 'Softsign', 'Mish', 'Swish', 'SeLU'],
+                   display_name='Activation function'),
+        ConfigParam('min_lr_ratio', float, 0.001, 'Ratio of minimum learning rate to initial learning rate (for cosine annealing)', display_name='Min LR ratio'),
+    ]
+    
+    # Initialize project with configuration
+    wandb_run, config, logger = initialize(
+        scenario_name='single_turn_score_maximizer',
+        config_params=config_params,
+        description='Yahtzee Single Turn Score Maximizer RL',
+        logger_name='rl-training'
+    )
+    
+    # Extract config values for easy access
+    mode = config['mode']
+    epochs = config['epochs']
+    episodes_per_batch = config['episodes_per_batch']
+    learning_rate = config['learning_rate']
+    hidden_size = config['hidden_size']
+    num_hidden = config['num_hidden']
+    dataset_size = config['dataset_size']
+    checkpoint_path = config['checkpoint_path']
+    activation_function = config['activation_function']
+    min_lr_ratio = config['min_lr_ratio']
+
+    if mode == 'test':
+        # Test mode
+        from C_single_turn_score_maximizer.test_episode import main as test_episode_main
+        test_episode_main(checkpoint_path=checkpoint_path)
+    else:
+        # Create return calculator and model
+        return_calculator = MonteCarloReturnCalculator()
+        model = SingleTurnScoreMaximizerREINFORCETrainer(
+            hidden_size=hidden_size,
+            learning_rate=learning_rate,
+            episodes_per_batch=episodes_per_batch,
+            return_calculator=return_calculator,
+            num_hidden=num_hidden,
+            dropout_rate=0.1,
+            activation_function=activation_function,
+            max_epochs=epochs,
+            min_lr_ratio=min_lr_ratio
+        )
+            
+        # Create trainer
+        trainer = L.Trainer(
+            max_epochs=epochs,
+            logger=logger,
+            enable_checkpointing=True,
+            log_every_n_steps=1,
+            accelerator='auto',  # Will use GPU if available
+            devices='auto',
+            check_val_every_n_epoch=1,  # Run validation every epoch
+        )
+        
+        # Create dummy dataloader (required by Lightning but not used)
+        dummy_dataset = DummyDataset(size=dataset_size//episodes_per_batch)
+        train_dataloader = torch.utils.data.DataLoader(dummy_dataset, batch_size=1, num_workers=15)
+        
+        # Create dummy validation dataloader
+        val_dummy_dataset = DummyDataset(size=1)  # Just one batch for validation
+        val_dataloader = torch.utils.data.DataLoader(val_dummy_dataset, batch_size=1, num_workers=15)
+        
+        # Train with validation
+        trainer.fit(model, train_dataloader, val_dataloader)
+
+        # Run a test episode after training
+        from C_single_turn_score_maximizer.test_episode import main as test_episode_main
+        test_episode_main(model=model.policy_net, interactive=False)
+    
+    print("Process completed!")
+
+    finish(wandb_run)
+
+if __name__ == "__main__":
+    main()

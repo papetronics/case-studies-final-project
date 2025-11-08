@@ -1,0 +1,23 @@
+program: src/C_single_turn_score_maximizer/main.py
+method: bayes
+metric:
+  goal: maximize
+  name: val/mean_total_score
+parameters:
+  epochs:
+     values: [50]
+  episodes_per_batch:
+     values: [13, 26, 39, 52]
+  learning_rate:
+     values: [0.01, 0.0075, 0.005, 0.0025, 0.001, 0.00075, 0.0005, 0.00025, 0.0001]
+  hidden_size:
+     values: [64, 128, 192, 256, 320, 384, 448, 512]
+  num_hidden:
+     values: [1, 2, 3, 4, 5, 6]
+  dataset_size:
+     values: [1300]
+early_terminate:
+  type: hyperband
+  s: 3
+  eta: 3
+  max_iter: 81

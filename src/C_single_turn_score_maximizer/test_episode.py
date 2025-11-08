@@ -2,11 +2,11 @@ import gymnasium as gym
 import torch
 import os
 import sys
-import src.environment.full_yahtzee_env
-from src.C_single_turn_score_maximizer.model import TurnScoreMaximizer
-from src.C_single_turn_score_maximizer.trainer import SingleTurnScoreMaximizerREINFORCETrainer
-from src.utilities.return_calculators import ReturnCalculator, MonteCarloReturnCalculator
-from src.utilities.scoring_helper import ScoreCategory, get_all_scores
+import environments.full_yahtzee_env
+from C_single_turn_score_maximizer.model import TurnScoreMaximizer
+from C_single_turn_score_maximizer.trainer import SingleTurnScoreMaximizerREINFORCETrainer
+from utilities.return_calculators import ReturnCalculator, MonteCarloReturnCalculator
+from utilities.scoring_helper import ScoreCategory, get_all_scores
 
 def clear_screen():
     """Clear the terminal screen"""

@@ -12,12 +12,12 @@ class SupervisedScorerTrainer(L.LightningModule):
     
     def __init__(
         self,
-        hidden_size: int = 64,
-        learning_rate: float = 1e-3,
-        batch_size: int = 32,
-        dataset_size: int = 10000,
-        num_hidden: int = 1,
-        dropout_rate: float = 0.1
+        hidden_size: int,
+        learning_rate: float,
+        batch_size: int,
+        dataset_size: int,
+        num_hidden: int,
+        dropout_rate: float = 0.1,
     ):
         super().__init__()
         

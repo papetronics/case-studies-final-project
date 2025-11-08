@@ -1,3 +1,5 @@
-.venv
 .github
+.venv
+.vscode
+logs
 paper

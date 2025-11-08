@@ -11,8 +11,10 @@ COPY --link requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy all necessary Python scripts for the W&B job
-COPY --link main.py ./
 COPY --link src ./src
 
-# Runs the main script when the container starts
-ENTRYPOINT ["python", "/workspace/main.py"]
+# Set working directory to src so everything runs relative to src
+WORKDIR /workspace/src
+
+# Default entrypoint - can be overridden by docker run command
+ENTRYPOINT []

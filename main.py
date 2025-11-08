@@ -1,4 +1,15 @@
 #!/usr/bin/env python
+"""
+DEPRECATED: This unified main.py is deprecated and kept for backwards compatibility only.
+
+Instead, use the scenario-specific main.py files:
+- For dice maximizer: src/A_dice_maximizer/main.py
+- For supervised scorer: src/B_supervised_scorer/main.py
+- For single turn score maximizer: src/C_single_turn_score_maximizer/main.py
+
+These individual main.py files have scoped-down argument parsing and wandb config
+for their specific scenarios, making them more suitable for W&B sweep configuration.
+"""
 import os
 import torch
 import wandb
@@ -11,23 +22,18 @@ from src.C_single_turn_score_maximizer.trainer import SingleTurnScoreMaximizerRE
 
 from src.utilities.return_calculators import MonteCarloReturnCalculator
 from src.utilities.dummy_dataset import DummyDataset
-
-def maybe_init_wandb():
-    """
-    Only initialize wandb if running inside a wandb launch agent or job.
-    """
-    is_launch = os.getenv("WANDB_JOB_NAME") or os.getenv("WANDB_RUN_ID")
-    if is_launch:
-        print("✅ Detected W&B launch agent context.")
-        run = wandb.init()
-        return run
-    else:
-        print("⚡ No W&B job context — skipping wandb.init() to avoid polluting real runs.")
-        return None
+from src.utilities.initialize import initialize
 
 def main():
-    # Initialize wandb first to check for config
-    wandb_run = maybe_init_wandb()
+    print("⚠️  DEPRECATION WARNING: This unified main.py is deprecated!")
+    print("   Please use the scenario-specific main.py files instead:")
+    print("   - For dice maximizer: src/A_dice_maximizer/main.py")
+    print("   - For supervised scorer: src/B_supervised_scorer/main.py")
+    print("   - For single turn score maximizer: src/C_single_turn_score_maximizer/main.py")
+    print("   Continuing with legacy behavior...\n")
+    
+    # Initialize project (wandb and system info)
+    wandb_run = initialize()
     
     # Set up argument Parser with defaults
     parser = argparse.ArgumentParser(description='Yahtzee RL')
@@ -92,16 +98,6 @@ def main():
     print(f"Num hidden layers: {num_hidden}")
     print(f"Dataset size: {dataset_size}")
     print(f"Activation function: {activation_function}")
-
-    print("\n=== System Info ===")
-    print("CUDA available:", torch.cuda.is_available())
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"Using device: {device}")
-    if torch.cuda.is_available():
-        print("GPU count:", torch.cuda.device_count())
-        print("GPU name:", torch.cuda.get_device_name(0))
-    else:
-        print("No GPU detected!")
 
     print(f"\n=== Starting Monte Carlo Training ===")
     print(f"Epochs: {epochs}")
