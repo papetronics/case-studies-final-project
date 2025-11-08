@@ -1,8 +1,32 @@
-import numpy as np
 from dataclasses import dataclass
+from typing import ClassVar
+
+import numpy as np
+from numpy.typing import NDArray
+
+FULL_HOUSE_SCORE: int = 25
+SMALL_STRAIGHT_SCORE: int = 30
+LARGE_STRAIGHT_SCORE: int = 40
+YAHTZEE_SCORE: int = 50
+
+NUMBER_OF_DICE: int = 5
+NUMBER_OF_DICE_SIDES: int = 6
+
+MINIMUM_UPPER_SCORE_FOR_BONUS: int = 63
+BONUS_POINTS: int = 35
+
+DICE_COUNT_PAIR: int = 2
+DICE_COUNT_THREE_OF_A_KIND: int = 3
+DICE_COUNT_FOUR_OF_A_KIND: int = 4
+DICE_COUNT_YAHTZEE: int = 5
+
+NUMBER_OF_CATEGORIES: int = 13
+
 
 @dataclass
 class ScoreCategory:
+    """Yahtzee scoring categories with their numeric identifiers and labels."""
+
     ONES: int = 0
     TWOS: int = 1
     THREES: int = 2
@@ -17,7 +41,7 @@ class ScoreCategory:
     YAHTZEE: int = 11
     CHANCE: int = 12
 
-    LABELS = [
+    LABELS: ClassVar[list[str]] = [
         "Ones",
         "Twos",
         "Threes",
@@ -30,42 +54,60 @@ class ScoreCategory:
         "Small Straight",
         "Large Straight",
         "Yahtzee",
-        "Chance"
+        "Chance",
     ]
 
-def get_all_scores(dice: np.ndarray, open_scores: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Given a set of dice, compute the raw score for all categories and soft targets for max scoring."""
+
+def get_all_scores(
+    dice: NDArray[np.int_], open_scores: NDArray[np.int_]
+) -> tuple[NDArray[np.int_], NDArray[np.float32]]:
+    """Given a set of dice, compute the raw score for all categories and soft targets for max scoring.
+
+    Args:
+        dice: Array of shape (5,) containing dice values
+        open_scores: Array of shape (13,) containing binary flags for open categories
+
+    Returns
+    -------
+        Tuple of (masked_scores, max_scoring_target) both of shape (13,)
+    """
     # Count occurrences of each die face (1-6)
     counts = np.bincount(dice, minlength=7)[1:]  # Ignore index 0
     upper_scores = counts * np.arange(1, 7)
 
     # Calculate scores for lower section
-    three_of_a_kind = np.sum(dice) if np.any(counts >= 3) else 0
-    four_of_a_kind = np.sum(dice) if np.any(counts >= 4) else 0
-    full_house = 25 if (np.any(counts == 3) and np.any(counts == 2)) else 0
-    small_straight = 30 if (has_small_straight(counts)) else 0
-    large_straight = 40 if (has_large_straight(counts)) else 0
-    yahtzee = 50 if np.any(counts == 5) else 0
+    three_of_a_kind = np.sum(dice) if np.any(counts >= DICE_COUNT_THREE_OF_A_KIND) else 0
+    four_of_a_kind = np.sum(dice) if np.any(counts >= DICE_COUNT_FOUR_OF_A_KIND) else 0
+    full_house = (
+        FULL_HOUSE_SCORE
+        if (np.any(counts == DICE_COUNT_THREE_OF_A_KIND) and np.any(counts == DICE_COUNT_PAIR))
+        else 0
+    )
+    small_straight = SMALL_STRAIGHT_SCORE if (has_small_straight(counts)) else 0
+    large_straight = LARGE_STRAIGHT_SCORE if (has_large_straight(counts)) else 0
+    yahtzee = YAHTZEE_SCORE if np.any(counts == DICE_COUNT_YAHTZEE) else 0
     chance = np.sum(dice)
 
-    lower_scores = np.array([
-        three_of_a_kind,
-        four_of_a_kind,
-        full_house,
-        small_straight,
-        large_straight,
-        yahtzee,
-        chance
-    ])
+    lower_scores = np.array(
+        [
+            three_of_a_kind,
+            four_of_a_kind,
+            full_house,
+            small_straight,
+            large_straight,
+            yahtzee,
+            chance,
+        ]
+    )
 
-    all_scores = np.concatenate([upper_scores, lower_scores])
-    
+    all_scores: NDArray[np.int_] = np.concatenate([upper_scores, lower_scores])
+
     # Create soft targets for max scoring - handle multiple max values
     masked_scores = all_scores * open_scores
     max_score = np.max(masked_scores)
-    
+
     # Create soft targets: 1.0 for all categories that achieve max score, 0.0 otherwise
-    max_scoring_target = np.zeros(13, dtype=np.float32)
+    max_scoring_target = np.zeros(NUMBER_OF_CATEGORIES, dtype=np.float32)
     if max_score > 0:  # Avoid division by zero when all scores are 0
         max_scoring_target = (masked_scores == max_score).astype(np.float32)
         # Normalize so probabilities sum to 1
@@ -73,19 +115,27 @@ def get_all_scores(dice: np.ndarray, open_scores: np.ndarray) -> tuple[np.ndarra
     else:
         # When all scores are 0, all open categories are equally valid
         max_scoring_target = open_scores.astype(np.float32)
-        max_scoring_target = max_scoring_target / np.sum(max_scoring_target)
+        max_scoring_target /= np.sum(max_scoring_target, dtype=np.float32)
 
     return masked_scores, max_scoring_target
+
 
 def has_small_straight(counts: np.ndarray) -> bool:
     """Check for small straight (4 consecutive numbers)."""
     straights = [
         counts[0:4],  # 1-4
         counts[1:5],  # 2-5
-        counts[2:6]   # 3-6
+        counts[2:6],  # 3-6
     ]
     return any(np.all(straight >= 1) for straight in straights)
+
 
 def has_large_straight(counts: np.ndarray) -> bool:
     """Check for large straight (5 consecutive numbers)."""
     return bool(np.all(counts[0:5] >= 1) or np.all(counts[1:6] >= 1))
+
+
+def has_bonus(scores: np.ndarray) -> bool:
+    """Check if the upper section bonus has been achieved."""
+    upper_total = np.sum(scores[:NUMBER_OF_DICE_SIDES])
+    return bool(upper_total >= MINIMUM_UPPER_SCORE_FOR_BONUS)

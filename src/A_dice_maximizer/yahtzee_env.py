@@ -1,40 +1,44 @@
-"""
-Yahtzee Gymnasium Environment
-
-A blank template for the Yahtzee environment implementation.
-"""
-
 from dataclasses import dataclass
+from typing import Any, Literal, TypedDict, cast
+
 import gymnasium as gym
-from gymnasium import spaces
 import numpy as np
-from typing import Any
-
-
+from gymnasium import spaces
 from gymnasium.envs.registration import register
-    
+
+
+class Observation(TypedDict):
+    """Observation from the Yahtzee environment."""
+
+    dice: np.ndarray
+    rolls_used: int
+
+
+Action = np.ndarray  # MultiBinary(5) - array of 5 binary values for each die
+
 register(
-    id='Yahtzee-v0',
-    entry_point='A_dice_maximizer.yahtzee_env:YahtzeeEnv',
+    id="Yahtzee-v0",
+    entry_point="A_dice_maximizer.yahtzee_env:YahtzeeEnv",
     max_episode_steps=13,  # 13 rounds in Yahtzee
 )
 
+
 @dataclass
 class DiceState:
+    """Class to represent the state of the dice in Yahtzee."""
+
     NUM_DICE: int = 5
-    
-    def __post_init__(self):
+
+    def __post_init__(self) -> None:
+        """Initialize the dice state."""
         self.dice: np.ndarray = np.zeros(self.NUM_DICE, dtype=np.int32)
         self.rolls_used = 0  # Track rolls used instead of remaining (0, 1, 2)
-        self.__state = {
-            "dice": self.dice,
-            "rolls_used": self.rolls_used
-        }
-    
-    def observation(self) -> dict:
+        self.__state: Observation = {"dice": self.dice, "rolls_used": self.rolls_used}
+
+    def observation(self) -> Observation:
         """Convert to observation format."""
         # Update the state dict with current values
-        self.__state['rolls_used'] = self.rolls_used
+        self.__state["rolls_used"] = self.rolls_used
         return self.__state
 
     def reset(self) -> None:
@@ -49,7 +53,7 @@ class DiceState:
         # Only roll dice that aren't held (where roll_mask is 1)
         # Convert to boolean array for proper indexing
         num_to_roll = np.sum(roll_mask)
-        
+
         if num_to_roll > 0:
             # Generate only the random numbers we need
             new_rolls = np.random.randint(1, 7, size=num_to_roll)
@@ -59,35 +63,44 @@ class DiceState:
         self.rolls_used += 1
         self.dice.sort()  # Sort in-place after rolling
 
-class YahtzeeEnv(gym.Env):
+
+class YahtzeeEnv(gym.Env[Observation, Action]):
     """
     Yahtzee environment for Gymnasium.
-    
+
     This is a blank template - implementation to be added later.
     """
-    
-    metadata = {"render_modes": ["human"], "render_fps": 4}
-    info = {}
-    
-    def __init__(self, render_mode=None) -> None:
+
+    metadata = {"render_modes": ["human"], "render_fps": 4}  # noqa: RUF012
+    info: dict[str, Any] = {}  # noqa: RUF012
+    observation_space: spaces.Space[Observation]
+    action_space: spaces.Space[Action]
+
+    def __init__(self, render_mode: Literal["human"] | None = None) -> None:  # noqa: ARG002
         """Initialize the Yahtzee environment."""
         # Define observation and action spaces
-        self.observation_space = spaces.Dict({
-            "dice": spaces.Box(low=1, high=6, shape=(5,), dtype=np.int32),
-            "rolls_used": spaces.Discrete(3),  # 0, 1, or 2
-        })
-        self.action_space = spaces.MultiBinary(5)  # 5 binary values, one for each die, 1 means re-roll, 0 means hold
+        observation_space = spaces.Dict(
+            {
+                "dice": spaces.Box(low=1, high=6, shape=(5,), dtype=np.int32),
+                "rolls_used": spaces.Discrete(3),  # 0, 1, or 2
+            }
+        )
+        action_space = spaces.MultiBinary(
+            5
+        )  # 5 binary values, one for each die, 1 means re-roll, 0 means hold
+
+        self.observation_space = cast("spaces.Space[Observation]", observation_space)
+        self.action_space = cast("spaces.Space[Action]", action_space)
 
         self.state: DiceState = DiceState()
-    
-    def step(self, action) -> tuple[dict, float, bool, bool, dict]:
-        """Execute one time step within the environment."""
 
+    def step(self, action: Action) -> tuple[Observation, float, bool, bool, dict[str, Any]]:
+        """Execute one time step within the environment."""
         # action is the hold mask for the dice
         self.state.roll_dice(action)
         observation = self.state.observation()
-        terminated = self.state.rolls_used == 2
-        
+        terminated = self.state.rolls_used == 2  # noqa: PLR2004
+
         # Give reward as sum of dice when episode terminates
         reward = np.sum(self.state.dice) if terminated else 0.0
 
@@ -98,19 +111,19 @@ class YahtzeeEnv(gym.Env):
         *,
         seed: int | None = None,
         options: dict[str, Any] | None = None,
-    ) -> tuple[dict, dict[str, Any]]:  # type: ignore
+    ) -> tuple[Observation, dict[str, Any]]:
         """Reset the environment to an initial state."""
         super().reset(seed=seed, options=options)
-        
+
         self.state.reset()
-        
+
         return self.state.observation(), self.info
-    
+
     def render(self) -> None:
         """Render the environment."""
         # TODO: Implement rendering
         pass
-    
+
     def close(self) -> None:
         """Close the environment."""
         # TODO: Clean up any resources
