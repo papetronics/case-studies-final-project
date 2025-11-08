@@ -5,7 +5,9 @@ from B_supervised_scorer.model import observation_to_tensor
 from utilities.scoring_helper import get_all_scores
 
 
-class GreedyScoringDataset(torch.utils.data.Dataset):
+class GreedyScoringDataset(
+    torch.utils.data.Dataset[tuple[torch.Tensor, torch.Tensor, torch.Tensor]]
+):
     """Dataset for generating greedy scoring samples."""
 
     def __init__(self, size: int = 1000):

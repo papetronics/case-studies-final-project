@@ -11,6 +11,15 @@
     "[python]": {
         "editor.defaultFormatter": "charliermarsh.ruff"
     },
+    "python.analysis.diagnosticMode": "openFilesOnly",
+    "python.analysis.typeCheckingMode": "basic", // or "strict" for Pyright/Pylance
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+    "mypy.runUsingActiveInterpreter": true,
+    "mypy.dmypyExecutable": "${workspaceFolder}/.venv/bin/dmypy",
+    "mypy.configFile": "pyproject.toml",
+    "mypy.targets": [
+        "src"
+    ],
     "latex-workshop.latex.tools": [
         {
             "name": "pdflatex",

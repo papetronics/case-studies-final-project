@@ -5,6 +5,7 @@ from typing import Any
 
 import torch
 from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
+from pytorch_lightning.loggers import logger as lightning_logger
 
 import wandb
 
@@ -120,6 +121,7 @@ def initialize(  # noqa: C901, PLR0912, PLR0915
         print(f"{display_name}: {value}")
 
     # Set up logger
+    logger: lightning_logger.Logger
     if use_wandb:
         logger = WandbLogger(
             project=f"{wandb_project_prefix}-{scenario_name}",

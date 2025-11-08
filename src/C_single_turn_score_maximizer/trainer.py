@@ -1,10 +1,11 @@
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, SupportsFloat, cast
 
 import gymnasium as gym
 import numpy as np
 import pytorch_lightning as lightning
 import torch
 
+from src.environments.full_yahtzee_env import Action, Observation
 from utilities.episode import Episode
 from utilities.return_calculators import MonteCarloReturnCalculator, ReturnCalculator
 
@@ -34,30 +35,26 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
 
         self.save_hyperparameters(ignore=["return_calculator"])
 
-        self.policy_net = TurnScoreMaximizer(
+        self.policy_net: TurnScoreMaximizer = TurnScoreMaximizer(
             hidden_size=hidden_size,
             num_hidden=num_hidden,
             dropout_rate=dropout_rate,
             activation_function=activation_function,
         )
 
-        self.learning_rate = learning_rate
-        self.episodes_per_batch = episodes_per_batch
-        self.baseline_alpha = baseline_alpha
-        self.max_epochs = max_epochs
-        self.min_lr_ratio = min_lr_ratio
+        self.learning_rate: float = learning_rate
+        self.episodes_per_batch: int = episodes_per_batch
+        self.baseline_alpha: float = baseline_alpha
+        self.max_epochs: int = max_epochs
+        self.min_lr_ratio: float = min_lr_ratio
 
-        self.return_calculator = return_calculator or MonteCarloReturnCalculator()
+        self.return_calculator: ReturnCalculator = return_calculator or MonteCarloReturnCalculator()
 
-        self.baseline = 0.0
+        self.baseline: float = 0.0
 
-        self.env = gym.make("FullYahtzee-v1")
+        self.env: gym.Env[Observation, Action] = gym.make("FullYahtzee-v1")
         self.env.reset()
-        self.full_env = gym.make("FullYahtzee-v1")  # For validation
-
-    def forward(self, observation: dict[str, Any]) -> torch.Tensor:
-        """Forward pass through the policy network."""
-        return self.policy_net(observation)
+        self.full_env: gym.Env[Observation, Action] = gym.make("FullYahtzee-v1")  # For validation
 
     def collect_episode(self) -> Episode:
         """Collect a single episode using the current policy."""
@@ -68,19 +65,20 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         # This is a bit of a hack, the environment supports full turns, but our model is single-turn
         # so we are just going to cut it off after 3 steps and pretend that is an episode.
         # we reset the environment whenever it terminates, that brings us back to an empty scoresheet.
-        reward = 0.0
+        reward: SupportsFloat = 0.0
 
         for _ in range(3):  # roll, roll, score
             actions, log_probs = self.policy_net.sample_observation(observation)
             rolling_action_tensor, scoring_action_tensor = actions
             rolling_log_prob, scoring_log_prob = log_probs
 
-            action = {}
+            action: Action
             if observation["phase"] == 0:
                 action = {"hold_mask": rolling_action_tensor.cpu().numpy().astype(bool)}
                 log_prob = rolling_log_prob
             else:
-                action = {"score_category": scoring_action_tensor.cpu().item()}
+                score_category: int = int(scoring_action_tensor.cpu().item())
+                action = {"score_category": score_category}
                 log_prob = scoring_log_prob
 
             episode.add_step(observation, action, log_prob)
@@ -108,11 +106,12 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
                 actions, _ = self.policy_net.sample_observation(observation)
                 rolling_action_tensor, scoring_action_tensor = actions
 
-                action = {}
+                action: Action
                 if observation["phase"] == 0:
                     action = {"hold_mask": rolling_action_tensor.cpu().numpy().astype(bool)}
                 else:
-                    action = {"score_category": scoring_action_tensor.cpu().item()}
+                    score_category: int = int(scoring_action_tensor.cpu().item())
+                    action = {"score_category": score_category}
 
             observation, reward, terminated, truncated, _ = self.full_env.step(action)
             total_score += float(reward)
@@ -174,7 +173,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
 
         return policy_loss
 
-    def configure_optimizers(self):  # type: ignore  # noqa: ANN201
+    def configure_optimizers(self):  # noqa: ANN201
         """Configure optimizers and learning rate schedulers."""
         optimizer = torch.optim.Adam(self.policy_net.parameters(), lr=self.learning_rate)
         scheduler = torch.optim.lr_scheduler.LinearLR(

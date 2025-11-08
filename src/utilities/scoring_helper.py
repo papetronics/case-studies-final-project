@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 import numpy as np
+from numpy.typing import NDArray
 
 FULL_HOUSE_SCORE: int = 25
 SMALL_STRAIGHT_SCORE: int = 30
@@ -57,8 +58,19 @@ class ScoreCategory:
     ]
 
 
-def get_all_scores(dice: np.ndarray, open_scores: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Given a set of dice, compute the raw score for all categories and soft targets for max scoring."""
+def get_all_scores(
+    dice: NDArray[np.int_], open_scores: NDArray[np.int_]
+) -> tuple[NDArray[np.int_], NDArray[np.float32]]:
+    """Given a set of dice, compute the raw score for all categories and soft targets for max scoring.
+
+    Args:
+        dice: Array of shape (5,) containing dice values
+        open_scores: Array of shape (13,) containing binary flags for open categories
+
+    Returns
+    -------
+        Tuple of (masked_scores, max_scoring_target) both of shape (13,)
+    """
     # Count occurrences of each die face (1-6)
     counts = np.bincount(dice, minlength=7)[1:]  # Ignore index 0
     upper_scores = counts * np.arange(1, 7)
@@ -88,7 +100,7 @@ def get_all_scores(dice: np.ndarray, open_scores: np.ndarray) -> tuple[np.ndarra
         ]
     )
 
-    all_scores = np.concatenate([upper_scores, lower_scores])
+    all_scores: NDArray[np.int_] = np.concatenate([upper_scores, lower_scores])
 
     # Create soft targets for max scoring - handle multiple max values
     masked_scores = all_scores * open_scores
@@ -103,7 +115,7 @@ def get_all_scores(dice: np.ndarray, open_scores: np.ndarray) -> tuple[np.ndarra
     else:
         # When all scores are 0, all open categories are equally valid
         max_scoring_target = open_scores.astype(np.float32)
-        max_scoring_target = max_scoring_target / np.sum(max_scoring_target)
+        max_scoring_target /= np.sum(max_scoring_target, dtype=np.float32)
 
     return masked_scores, max_scoring_target
 
@@ -126,4 +138,4 @@ def has_large_straight(counts: np.ndarray) -> bool:
 def has_bonus(scores: np.ndarray) -> bool:
     """Check if the upper section bonus has been achieved."""
     upper_total = np.sum(scores[:NUMBER_OF_DICE_SIDES])
-    return upper_total >= MINIMUM_UPPER_SCORE_FOR_BONUS
+    return bool(upper_total >= MINIMUM_UPPER_SCORE_FOR_BONUS)

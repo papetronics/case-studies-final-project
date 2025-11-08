@@ -1,10 +1,12 @@
-from typing import Any
+from typing import Generic, TypeVar
 
-import numpy as np
 import torch
 
+ObsType = TypeVar("ObsType")
+ActType = TypeVar("ActType")
 
-class Episode:
+
+class Episode(Generic[ObsType, ActType]):
     """
     Class to store episode data for reinforcement learning.
 
@@ -12,14 +14,12 @@ class Episode:
     """
 
     def __init__(self) -> None:
-        self.states: list[dict[str, Any]] = []
-        self.actions: list[np.ndarray | dict] = []
+        self.states: list[ObsType] = []
+        self.actions: list[ActType] = []
         self.log_probs: list[torch.Tensor] = []
         self.reward: float = 0.0
 
-    def add_step(
-        self, state: dict[str, Any], action: np.ndarray | dict, log_prob: torch.Tensor
-    ) -> None:
+    def add_step(self, state: ObsType, action: ActType, log_prob: torch.Tensor) -> None:
         """Add a step to the episode."""
         self.states.append(state)
         self.actions.append(action)

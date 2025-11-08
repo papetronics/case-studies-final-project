@@ -1,10 +1,12 @@
 import os
 
 import gymnasium as gym
+import numpy as np
 import torch
 
 from C_single_turn_score_maximizer.model import TurnScoreMaximizer
 from C_single_turn_score_maximizer.trainer import SingleTurnScoreMaximizerREINFORCETrainer
+from environments.full_yahtzee_env import Action, Observation
 from utilities.scoring_helper import (
     BONUS_POINTS,
     MINIMUM_UPPER_SCORE_FOR_BONUS,
@@ -29,7 +31,7 @@ def main(
     interactive: bool = True,
 ) -> None:
     """Run a single episode in the Yahtzee environment using a trained model."""
-    env = gym.make("FullYahtzee-v1")
+    env: gym.Env[Observation, Action] = gym.make("FullYahtzee-v1")
 
     # load the model from checkpoint path
     if checkpoint_path is not None:
@@ -44,14 +46,14 @@ def main(
 
 
 def run_episode(
-    env: gym.Env,
+    env: gym.Env[Observation, Action],
     model: TurnScoreMaximizer,
     interactive: bool = True,
 ) -> None:
     """Run a single episode in the Yahtzee environment using the provided model."""
     obs, _ = env.reset()
-    original_dice = obs["dice"].copy()
-    kept_dice = []
+    original_dice: np.ndarray = obs["dice"].copy()
+    kept_dice: list[int] = []
 
     clear_screen()
     print_game_state(obs, original_dice, kept_dice)
@@ -82,7 +84,7 @@ def run_episode(
             if interactive:
                 wait_for_enter()
 
-            obs, reward, done, truncated, info = env.step(action)
+            obs, reward, done, truncated, _ = env.step(action)
             total_reward += float(reward)
 
             # Update original dice for new turn if we just scored
@@ -108,7 +110,7 @@ def run_episode(
                 wait_for_enter()
 
 
-def print_scorecard(observation: dict) -> None:
+def print_scorecard(observation: Observation) -> None:
     """Print a pretty scorecard with current scores."""
     print("=" * 50)
     print("                   SCORECARD")
@@ -155,7 +157,9 @@ def print_scorecard(observation: dict) -> None:
     print("=" * 50)
 
 
-def print_dice_state(observation: dict, original_dice: list, kept_dice: list) -> None:
+def print_dice_state(
+    observation: Observation, original_dice: np.ndarray, kept_dice: list[int]
+) -> None:
     """Print current dice state."""
     print("\nDICE:")
     print("-" * 20)
@@ -176,7 +180,7 @@ def print_dice_state(observation: dict, original_dice: list, kept_dice: list) ->
         print("Phase: Scoring")
 
 
-def print_available_scores(observation: dict) -> None:
+def print_available_scores(observation: Observation) -> None:
     """Print available scoring categories with potential scores."""
     if observation["phase"] == 1:  # Only show in scoring phase
         possible_scores, _ = get_all_scores(
@@ -195,7 +199,9 @@ def print_available_scores(observation: dict) -> None:
                 print(f"{label:15s}: {score:2d} points")
 
 
-def print_game_state(observation: dict, original_dice: list, kept_dice: list) -> None:
+def print_game_state(
+    observation: Observation, original_dice: np.ndarray, kept_dice: list[int]
+) -> None:
     """Print the complete game state."""
     print_scorecard(observation)
     print_dice_state(observation, original_dice, kept_dice)
@@ -203,7 +209,7 @@ def print_game_state(observation: dict, original_dice: list, kept_dice: list) ->
 
 
 def print_action_description(
-    observation: dict,
+    observation: Observation,
     hold_action_tensor: torch.Tensor | None = None,
     scoring_action_tensor: torch.Tensor | None = None,
 ) -> None:

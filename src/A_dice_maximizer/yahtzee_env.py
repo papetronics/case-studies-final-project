@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, TypedDict, cast
 
 import gymnasium as gym
 import numpy as np
@@ -64,7 +64,7 @@ class DiceState:
         self.dice.sort()  # Sort in-place after rolling
 
 
-class YahtzeeEnv(gym.Env):
+class YahtzeeEnv(gym.Env[Observation, Action]):
     """
     Yahtzee environment for Gymnasium.
 
@@ -72,24 +72,29 @@ class YahtzeeEnv(gym.Env):
     """
 
     metadata = {"render_modes": ["human"], "render_fps": 4}  # noqa: RUF012
-    info = {}  # noqa: RUF012
+    info: dict[str, Any] = {}  # noqa: RUF012
+    observation_space: spaces.Space[Observation]
+    action_space: spaces.Space[Action]
 
     def __init__(self, render_mode: Literal["human"] | None = None) -> None:  # noqa: ARG002
         """Initialize the Yahtzee environment."""
         # Define observation and action spaces
-        self.observation_space = spaces.Dict(
+        observation_space = spaces.Dict(
             {
                 "dice": spaces.Box(low=1, high=6, shape=(5,), dtype=np.int32),
                 "rolls_used": spaces.Discrete(3),  # 0, 1, or 2
             }
         )
-        self.action_space = spaces.MultiBinary(
+        action_space = spaces.MultiBinary(
             5
         )  # 5 binary values, one for each die, 1 means re-roll, 0 means hold
 
+        self.observation_space = cast("spaces.Space[Observation]", observation_space)
+        self.action_space = cast("spaces.Space[Action]", action_space)
+
         self.state: DiceState = DiceState()
 
-    def step(self, action: Action) -> tuple[Observation, float, bool, bool, dict]:
+    def step(self, action: Action) -> tuple[Observation, float, bool, bool, dict[str, Any]]:
         """Execute one time step within the environment."""
         # action is the hold mask for the dice
         self.state.roll_dice(action)
@@ -106,7 +111,7 @@ class YahtzeeEnv(gym.Env):
         *,
         seed: int | None = None,
         options: dict[str, Any] | None = None,
-    ) -> tuple[Observation, dict[str, Any]]:  # type: ignore
+    ) -> tuple[Observation, dict[str, Any]]:
         """Reset the environment to an initial state."""
         super().reset(seed=seed, options=options)
 

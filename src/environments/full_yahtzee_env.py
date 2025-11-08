@@ -56,11 +56,19 @@ class AllRollsUsedError(Exception):
         return "All rolls have been used for this turn; cannot roll again."
 
 
-class Action(TypedDict):
-    """Action type for the Yahtzee environment."""
+class ScoringAction(TypedDict):
+    """Scoring action type for the Yahtzee environment."""
+
+    score_category: int
+
+
+class RollingAction(TypedDict):
+    """Rolling action type for the Yahtzee environment."""
 
     hold_mask: np.ndarray
-    score_category: int
+
+
+Action = ScoringAction | RollingAction
 
 
 class Observation(TypedDict):
@@ -146,7 +154,7 @@ class DiceState:
         new_upper_score = np.sum(self.score_sheet[0:6])
 
         # Check for upper section bonus
-        bonus = 0
+        bonus: int = 0
         if (
             current_upper_score < MINIMUM_UPPER_SCORE_FOR_BONUS
             and new_upper_score >= MINIMUM_UPPER_SCORE_FOR_BONUS
@@ -159,10 +167,11 @@ class DiceState:
         self.dice[:] = np.random.randint(1, 7, size=NUMBER_OF_DICE)
         self.dice.sort()
 
-        return score[category] + bonus
+        score_in_chosen_category: int = score[category]
+        return score_in_chosen_category + bonus
 
 
-class YahtzeeEnv(gym.Env):
+class YahtzeeEnv(gym.Env[Observation, Action]):
     """
     Yahtzee environment for Gymnasium.
 
@@ -170,12 +179,14 @@ class YahtzeeEnv(gym.Env):
     """
 
     metadata = {"render_modes": ["human"], "render_fps": 4}  # noqa: RUF012
-    info = {}  # noqa: RUF012
+    info: dict[str, Any] = {}  # noqa: RUF012
+    observation_space: spaces.Space[Observation]
+    action_space: spaces.Space[Action]
 
     def __init__(self, render_mode: Literal["human"] | None = None) -> None:  # noqa: ARG002
         """Initialize the Yahtzee environment."""
         # Define observation and action spaces
-        self.observation_space = spaces.Dict(
+        observation_space = spaces.Dict(
             {
                 "dice": spaces.Box(
                     low=1, high=6, shape=(5,), dtype=np.int32
@@ -190,7 +201,7 @@ class YahtzeeEnv(gym.Env):
                 "phase": spaces.Discrete(2),  # 0: rolling phase, 1: scoring phase
             }
         )
-        self.action_space = spaces.Dict(
+        action_space = spaces.Dict(
             {
                 "hold_mask": spaces.MultiBinary(
                     5
@@ -199,19 +210,29 @@ class YahtzeeEnv(gym.Env):
             }
         )
 
+        self.observation_space = cast("spaces.Space[Observation]", observation_space)
+        self.action_space = cast("spaces.Space[Action]", action_space)
+
         self.state: DiceState = DiceState()
 
-    def step(self, action: Action) -> tuple[Observation, float, bool, bool, dict]:
+    def step(self, action: Action) -> tuple[Observation, float, bool, bool, dict[str, Any]]:
         """Execute one time step within the environment."""
         terminated = False
         reward = 0.0
 
         if self.state.phase == Phase.ROLLING:
+            rolling_action: RollingAction = cast("RollingAction", action)
+            if "hold_mask" not in rolling_action:
+                raise ValueError()
+
             # action is the hold mask for the dice
-            self.state.roll_dice(action["hold_mask"])
+            self.state.roll_dice(rolling_action["hold_mask"])
         else:
+            scoring_action: ScoringAction = cast("ScoringAction", action)
+            if "score_category" not in scoring_action:
+                raise ValueError()
             # Final scoring action
-            score_category = action["score_category"]
+            score_category = scoring_action["score_category"]
             reward = self.state.score_dice(score_category)
             # Here we would compute the score for the chosen category
             # For now, we just terminate the episode
@@ -226,7 +247,7 @@ class YahtzeeEnv(gym.Env):
         *,
         seed: int | None = None,
         options: dict[str, Any] | None = None,
-    ) -> tuple[Observation, dict[str, Any]]:  # type: ignore
+    ) -> tuple[Observation, dict[str, Any]]:
         """Reset the environment to an initial state."""
         super().reset(seed=seed, options=options)
 

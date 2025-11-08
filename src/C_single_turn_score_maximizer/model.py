@@ -1,11 +1,12 @@
 from enum import Enum, IntEnum
-from typing import Literal
+from typing import Literal, cast
 
 import numpy as np
 import torch
 from torch import nn
 
-from src.environments.full_yahtzee_env import Observation
+from environments.full_yahtzee_env import Observation
+from src.utilities.sequential_block import SequentialBlock
 
 
 class ActivationFunction(Enum):
@@ -158,7 +159,7 @@ class Block(nn.Module):
         if dropout_rate > 0.0:
             layers.append(nn.Dropout(dropout_rate))
 
-        self.network = nn.Sequential(*layers)
+        self.network: SequentialBlock = SequentialBlock(*layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass through the block."""
@@ -176,7 +177,7 @@ class MaskedSoftmax(nn.Module):
     def forward(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         """Forward pass applying masked softmax."""
         x = x.masked_fill(mask == 0, self.mask_value)
-        return self.softmax(x)
+        return cast("torch.Tensor", self.softmax(x))
 
 
 class TurnScoreMaximizer(nn.Module):
@@ -215,19 +216,19 @@ class TurnScoreMaximizer(nn.Module):
         for _ in range(num_hidden - 1):
             layers.append(Block(hidden_size, hidden_size, dropout_rate, activation))  # noqa: PERF401
 
-        self.network = nn.Sequential(*layers)
+        self.network = SequentialBlock(*layers)
 
-        rolling_head_layers = []
+        rolling_head_layers: list[nn.Module] = []
         if dropout_rate > 0.0:
             rolling_head_layers.append(nn.Dropout(dropout_rate))
         rolling_head_layers.extend([nn.Linear(hidden_size, dice_output_size), nn.Sigmoid()])
-        self.rolling_head = nn.Sequential(*rolling_head_layers).to(self.device)
+        self.rolling_head = SequentialBlock(*rolling_head_layers).to(self.device)
 
-        scoring_head_layers = []
+        scoring_head_layers: list[nn.Module] = []
         if dropout_rate > 0.0:
             scoring_head_layers.append(nn.Dropout(dropout_rate))
         scoring_head_layers.append(nn.Linear(hidden_size, scoring_output_size))
-        self.scoring_head = nn.Sequential(*scoring_head_layers).to(self.device)
+        self.scoring_head = SequentialBlock(*scoring_head_layers).to(self.device)
         self.masked_softmax = MaskedSoftmax().to(self.device)
 
     @property
@@ -240,6 +241,10 @@ class TurnScoreMaximizer(nn.Module):
         return self.forward(
             observation_to_tensor(observation, self.bonus_flags).unsqueeze(0).to(self.device)
         )
+
+    def __call__(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """Call method to enable direct calls to the model."""
+        return self.forward(x)
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Forward pass through the model."""

@@ -1,7 +1,7 @@
 import torch
 
 
-class DummyDataset(torch.utils.data.Dataset):
+class DummyDataset(torch.utils.data.Dataset[torch.Tensor]):
     """
     A dummy dataset that returns a constant tensor.
 

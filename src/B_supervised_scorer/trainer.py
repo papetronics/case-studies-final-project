@@ -69,7 +69,7 @@ class SupervisedScorerTrainer(lightning.LightningModule):
         # )
 
         # Combined loss
-        loss = score_loss  # + max_scoring_loss
+        loss: torch.Tensor = score_loss  # + max_scoring_loss
 
         # Calculate MAE for score predictions
         mae = self.l1_loss(score_predictions, score_targets)
@@ -120,7 +120,7 @@ class SupervisedScorerTrainer(lightning.LightningModule):
         # )
 
         # Combined loss
-        loss = score_loss  # + max_scoring_loss
+        loss: torch.Tensor = score_loss  # + max_scoring_loss
 
         # Calculate MAE for score predictions
         mae = self.l1_loss(score_predictions, score_targets)
@@ -143,7 +143,7 @@ class SupervisedScorerTrainer(lightning.LightningModule):
 
         return loss
 
-    def configure_optimizers(self):  # type: ignore  # noqa: ANN201
+    def configure_optimizers(self):  # noqa: ANN201
         """Configure the optimizer and learning rate scheduler."""
         optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
@@ -163,13 +163,13 @@ class SupervisedScorerTrainer(lightning.LightningModule):
             },
         }
 
-    def train_dataloader(self) -> DataLoader:
+    def train_dataloader(self) -> DataLoader[tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
         """Create training dataloader."""
         return DataLoader(
             self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=15
         )
 
-    def val_dataloader(self) -> DataLoader:
+    def val_dataloader(self) -> DataLoader[tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
         """Create validation dataloader."""
         return DataLoader(
             self.val_dataset, batch_size=self.batch_size, shuffle=False, num_workers=15

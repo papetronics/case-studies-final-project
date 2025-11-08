@@ -4,9 +4,13 @@ import numpy as np
 import torch
 from torch import nn
 
+from utilities.sequential_block import SequentialBlock
+
 
 class DiceSumMaximizer(nn.Module):
     """Neural network model to maximize expected dice sum in Yahtzee."""
+
+    network: SequentialBlock
 
     def __init__(
         self, hidden_size: int, device: str = "cuda" if torch.cuda.is_available() else "cpu"
@@ -18,7 +22,7 @@ class DiceSumMaximizer(nn.Module):
         ## 33 model inputs:
         #   - Dice [30]: One-hot encoding of 5 dice (6 sides each) = 5 * 6 = 30
         #   - Rolls Used [3]: One-hot encoding of rolls used (0, 1, 2) = 3
-        self.network = nn.Sequential(
+        self.network: SequentialBlock = SequentialBlock(
             nn.Linear(33, hidden_size),
             nn.GELU(),
             nn.LayerNorm(hidden_size),
@@ -29,10 +33,14 @@ class DiceSumMaximizer(nn.Module):
             nn.Sigmoid(),
         ).to(device)
 
+    def __call__(self, observation: dict[str, Any]) -> torch.Tensor:
+        """Call method to enable direct calls to the model."""
+        return self.forward(observation)
+
     def forward(self, observation: dict[str, Any]) -> torch.Tensor:
         """Forward pass through the network."""
-        input_tensor = self._observation_to_tensor(observation)
-        output = self.network(input_tensor)
+        input_tensor: torch.Tensor = self._observation_to_tensor(observation)
+        output: torch.Tensor = self.network(input_tensor)
         return output.squeeze(0)
 
     def sample(self, observation: dict[str, Any]) -> tuple[torch.Tensor, torch.Tensor]:

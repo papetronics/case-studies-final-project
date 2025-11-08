@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from src.utilities.episode import Episode
+from utilities.episode import Episode
 
 
 class ReturnCalculator(ABC):

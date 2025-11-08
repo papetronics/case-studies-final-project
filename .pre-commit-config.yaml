@@ -5,3 +5,13 @@ repos:
       - id: ruff
         args: [--fix]      # lint + autofix (includes import sorting)
       - id: ruff-format    # formatter (Black-compatible)
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.13.0
+    hooks:
+      - id: mypy
+        entry: ./.venv/bin/python -m mypy
+        additional_dependencies:
+          # Add stubs your deps need; examples:
+          - types-requests
+          - types-python-dateutil
+          - types-PyYAML

@@ -29,6 +29,7 @@ ignore = [
   "D100",
   "D104",   # docstring on __init__ is redundant
   "ANN101", # allow untyped "self" defs for simplicity
+  "TCH001"
 ]
 
 [tool.ruff.lint.isort]
@@ -55,3 +56,15 @@ max-complexity = 10
 quote-style = "double"
 indent-style = "space"
 docstring-code-format = true
+
+[tool.mypy]
+python_version = "3.10"
+check_untyped_defs = true
+no_implicit_optional = true
+warn_return_any = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+disallow_any_generics = true
+disallow_subclassing_any = true
+ignore_missing_imports = true
+cache_dir = "~/.cache/mypy"     # default is ".mypy_cache"

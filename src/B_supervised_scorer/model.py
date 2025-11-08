@@ -1,8 +1,10 @@
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import torch
 from torch import nn
+
+from src.utilities.sequential_block import SequentialBlock
 
 
 def observation_to_tensor(observation: dict[str, Any]) -> torch.Tensor:
@@ -28,7 +30,7 @@ class Block(nn.Module):
         layers = [nn.Linear(in_features, out_features), nn.GELU(), nn.LayerNorm(out_features)]
         if dropout_rate > 0.0:
             layers.append(nn.Dropout(dropout_rate))
-        self.network = nn.Sequential(*layers)
+        self.network: SequentialBlock = SequentialBlock(*layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass through the block."""
@@ -47,7 +49,7 @@ class MaskedSoftmax(nn.Module):
         """Forward pass applying masked softmax."""
         # Apply the mask
         x = x.masked_fill(mask == 0, self.mask_value)
-        return self.softmax(x)
+        return cast("torch.Tensor", self.softmax(x))
 
 
 class SupervisedDiceScorer(nn.Module):
@@ -83,13 +85,13 @@ class SupervisedDiceScorer(nn.Module):
 
         self.network = nn.Sequential(*layers).to(device)
 
-        rolling_head_layers = []
+        rolling_head_layers: list[nn.Module] = []
         if dropout_rate > 0.0:
             rolling_head_layers.append(nn.Dropout(dropout_rate))
         rolling_head_layers.extend([nn.Linear(hidden_size, dice_output_size), nn.Sigmoid()])
         self.rolling_head = nn.Sequential(*rolling_head_layers)
 
-        scoring_head_layers = []
+        scoring_head_layers: list[nn.Module] = []
         if dropout_rate > 0.0:
             scoring_head_layers.append(nn.Dropout(dropout_rate))
         scoring_head_layers.append(nn.Linear(hidden_size, scoring_output_size))
@@ -97,7 +99,7 @@ class SupervisedDiceScorer(nn.Module):
         self.masked_softmax = MaskedSoftmax()
 
         # Add score prediction head for regression
-        score_prediction_layers = []
+        score_prediction_layers: list[nn.Module] = []
         if dropout_rate > 0.0:
             score_prediction_layers.append(nn.Dropout(dropout_rate))
         score_prediction_layers.append(nn.Linear(hidden_size, scoring_output_size))  # 13 raw scores
@@ -109,6 +111,10 @@ class SupervisedDiceScorer(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Forward pass through the model using observation dictionary."""
         return self.forward(observation_to_tensor(observation).unsqueeze(0).to(self.device))
+
+    def __call__(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Call method to enable direct calls to the model."""
+        return self.forward(x)
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Forward pass through the model."""
