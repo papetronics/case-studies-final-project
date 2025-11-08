@@ -4,21 +4,21 @@ import numpy as np
 from typing import Dict, Any, Optional
 
 import gymnasium as gym
-import src.A_dice_maximizer.yahtzee_env
+import A_dice_maximizer.yahtzee_env
 from .model import DiceSumMaximizer
-from src.utilities.return_calculators import ReturnCalculator, MonteCarloReturnCalculator
-from src.utilities.episode import Episode
+from utilities.return_calculators import ReturnCalculator, MonteCarloReturnCalculator
+from utilities.episode import Episode
 
 
 class REINFORCEWithBaselineTrainer(L.LightningModule):
     
     def __init__(
         self,
-        hidden_size: int = 64,
-        learning_rate: float = 1e-3,
-        episodes_per_batch: int = 32,
-        baseline_alpha: float = 0.1,
+        hidden_size: int,
+        learning_rate: float,
+        episodes_per_batch: int,
         return_calculator: Optional[ReturnCalculator] = None,
+        baseline_alpha: float = 0.1,
     ):
         super().__init__()
         

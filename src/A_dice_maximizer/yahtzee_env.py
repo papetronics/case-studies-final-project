@@ -15,7 +15,7 @@ from gymnasium.envs.registration import register
     
 register(
     id='Yahtzee-v0',
-    entry_point='src.A_dice_maximizer.yahtzee_env:YahtzeeEnv',
+    entry_point='A_dice_maximizer.yahtzee_env:YahtzeeEnv',
     max_episode_steps=13,  # 13 rounds in Yahtzee
 )
 
