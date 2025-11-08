@@ -1,4 +1,25 @@
 {
+    // Use Ruff for linting
+    "ruff.lint.enable": true,
+    // Format & fix on save (Ruff does import sorting too)
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+        "source.fixAll.ruff": "always",
+        "source.organizeImports.ruff": "always"
+    },
+    // Make Ruff the default formatter for Python files
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff"
+    },
+    "python.analysis.diagnosticMode": "openFilesOnly",
+    "python.analysis.typeCheckingMode": "basic", // or "strict" for Pyright/Pylance
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+    "mypy.runUsingActiveInterpreter": true,
+    "mypy.dmypyExecutable": "${workspaceFolder}/.venv/bin/dmypy",
+    "mypy.configFile": "pyproject.toml",
+    "mypy.targets": [
+        "src"
+    ],
     "latex-workshop.latex.tools": [
         {
             "name": "pdflatex",
@@ -59,7 +80,7 @@
         "*.blg",
         "*.idx",
         "*.ind",
-        "*.lof", 
+        "*.lof",
         "*.lot",
         "*.out",
         "*.toc",
