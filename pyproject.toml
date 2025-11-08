@@ -1,0 +1,19 @@
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+# Core flake8 rules + import sorting + pyupgrade + bugbear + small sims
+select = ["E", "F", "I", "UP", "B", "SIM"]
+# Let the formatter handle line length instead of E501
+ignore = ["E501"]
+
+# isort-compatible import sorting
+[tool.ruff.lint.isort]
+known-first-party = ["your_package_name"]
+
+# Black-compatible formatter
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+docstring-code-format = true

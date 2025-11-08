@@ -1,5 +1,7 @@
-import numpy as np
 from dataclasses import dataclass
+
+import numpy as np
+
 
 @dataclass
 class ScoreCategory:
@@ -30,8 +32,9 @@ class ScoreCategory:
         "Small Straight",
         "Large Straight",
         "Yahtzee",
-        "Chance"
+        "Chance",
     ]
+
 
 def get_all_scores(dice: np.ndarray, open_scores: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Given a set of dice, compute the raw score for all categories and soft targets for max scoring."""
@@ -48,22 +51,24 @@ def get_all_scores(dice: np.ndarray, open_scores: np.ndarray) -> tuple[np.ndarra
     yahtzee = 50 if np.any(counts == 5) else 0
     chance = np.sum(dice)
 
-    lower_scores = np.array([
-        three_of_a_kind,
-        four_of_a_kind,
-        full_house,
-        small_straight,
-        large_straight,
-        yahtzee,
-        chance
-    ])
+    lower_scores = np.array(
+        [
+            three_of_a_kind,
+            four_of_a_kind,
+            full_house,
+            small_straight,
+            large_straight,
+            yahtzee,
+            chance,
+        ]
+    )
 
     all_scores = np.concatenate([upper_scores, lower_scores])
-    
+
     # Create soft targets for max scoring - handle multiple max values
     masked_scores = all_scores * open_scores
     max_score = np.max(masked_scores)
-    
+
     # Create soft targets: 1.0 for all categories that achieve max score, 0.0 otherwise
     max_scoring_target = np.zeros(13, dtype=np.float32)
     if max_score > 0:  # Avoid division by zero when all scores are 0
@@ -77,14 +82,16 @@ def get_all_scores(dice: np.ndarray, open_scores: np.ndarray) -> tuple[np.ndarra
 
     return masked_scores, max_scoring_target
 
+
 def has_small_straight(counts: np.ndarray) -> bool:
     """Check for small straight (4 consecutive numbers)."""
     straights = [
         counts[0:4],  # 1-4
         counts[1:5],  # 2-5
-        counts[2:6]   # 3-6
+        counts[2:6],  # 3-6
     ]
     return any(np.all(straight >= 1) for straight in straights)
+
 
 def has_large_straight(counts: np.ndarray) -> bool:
     """Check for large straight (5 consecutive numbers)."""

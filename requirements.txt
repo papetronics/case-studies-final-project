@@ -4,3 +4,5 @@ wandb>=0.21.0
 torch>=2.0.0
 pytorch-lightning==2.5.5
 tensorboard==2.20.0
+ruff==0.14.4
+pre-commit==4.3.0
