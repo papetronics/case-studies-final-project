@@ -17,7 +17,7 @@ from utilities.scoring_helper import (
 
 register(
     id="FullYahtzee-v1",
-    entry_point="full_yahtzee_env:YahtzeeEnv",
+    entry_point="environments.full_yahtzee_env:YahtzeeEnv",
     max_episode_steps=39,  # 3 rounds: roll, roll, score X 13 categories = 39 steps
 )
 
@@ -99,16 +99,21 @@ class DiceState:
         self.__state: Observation = {
             "dice": self.dice,
             "rolls_used": self.rolls_used,
-            "phase": Phase.ROLLING,
+            "phase": self.phase,
             "score_sheet": self.score_sheet,
             "score_sheet_available_mask": self.score_sheet_available_mask,  # 1 if available, 0 if filled
         }
+
+    @property
+    def phase(self) -> Phase:
+        """Get the current phase based on rolls used."""
+        return Phase.SCORING if self.rolls_used == FINAL_ROLL else Phase.ROLLING
 
     def observation(self) -> Observation:
         """Convert to observation format."""
         # Update the state dict with current values
         self.__state["rolls_used"] = self.rolls_used
-        self.__state["phase"] = Phase.ROLLING if self.rolls_used < FINAL_ROLL else Phase.SCORING
+        self.__state["phase"] = self.phase
         return self.__state
 
     def reset(self) -> None:
@@ -163,7 +168,6 @@ class DiceState:
 
         # Reset dice for next turn
         self.rolls_used = 0
-        self.phase = 0
         self.dice[:] = np.random.randint(1, 7, size=NUMBER_OF_DICE)
         self.dice.sort()
 

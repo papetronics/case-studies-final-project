@@ -8,6 +8,7 @@ from utilities.episode import Episode
 from utilities.return_calculators import MonteCarloReturnCalculator, ReturnCalculator
 
 from .model import DiceSumMaximizer
+from .yahtzee_env import YahtzeeEnv  # noqa: F401
 
 
 class REINFORCEWithBaselineTrainer(lightning.LightningModule):

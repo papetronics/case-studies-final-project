@@ -1,18 +1,15 @@
-from typing import TYPE_CHECKING, SupportsFloat, cast
+from typing import SupportsFloat, cast
 
 import gymnasium as gym
 import numpy as np
 import pytorch_lightning as lightning
 import torch
 
-from src.environments.full_yahtzee_env import Action, Observation
+from environments.full_yahtzee_env import Action, Observation, YahtzeeEnv
 from utilities.episode import Episode
 from utilities.return_calculators import MonteCarloReturnCalculator, ReturnCalculator
 
 from .model import ActivationFunctionName, TurnScoreMaximizer
-
-if TYPE_CHECKING:
-    from environments.full_yahtzee_env import YahtzeeEnv
 
 
 class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):

@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from torch import nn
 
-from src.utilities.sequential_block import SequentialBlock
+from utilities.sequential_block import SequentialBlock
 
 
 def observation_to_tensor(observation: dict[str, Any]) -> torch.Tensor:
@@ -25,6 +25,8 @@ def observation_to_tensor(observation: dict[str, Any]) -> torch.Tensor:
 class Block(nn.Module):
     """Typical MLP block with Linear, GELU, LayerNorm, and optional Dropout."""
 
+    network: SequentialBlock
+
     def __init__(self, in_features: int, out_features: int, dropout_rate: float):
         super().__init__()
         layers = [nn.Linear(in_features, out_features), nn.GELU(), nn.LayerNorm(out_features)]
@@ -32,9 +34,14 @@ class Block(nn.Module):
             layers.append(nn.Dropout(dropout_rate))
         self.network: SequentialBlock = SequentialBlock(*layers)
 
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        """Call method to enable direct calls to the block."""
+        return self.forward(x)
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass through the block."""
-        return self.network(x)
+        output: torch.Tensor = self.network(x)
+        return output
 
 
 class MaskedSoftmax(nn.Module):
