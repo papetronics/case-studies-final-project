@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import pytorch_lightning as L
+import pytorch_lightning as lightning
 import torch
 
 from A_dice_maximizer.trainer import REINFORCEWithBaselineTrainer
@@ -8,7 +8,8 @@ from utilities.initialize import ConfigParam, finish, initialize
 from utilities.return_calculators import MonteCarloReturnCalculator
 
 
-def main():
+def main() -> None:
+    """Run training for Yahtzee dice maximization."""
     # Define configuration schema
     config_params = [
         ConfigParam("epochs", int, 50, "Number of training epochs"),
@@ -47,7 +48,7 @@ def main():
     )
 
     # Create trainer
-    trainer = L.Trainer(
+    trainer = lightning.Trainer(
         max_epochs=epochs,
         logger=logger,
         enable_checkpointing=True,

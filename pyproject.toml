@@ -1,18 +1,56 @@
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+fix = true
 
 [tool.ruff.lint]
-# Core flake8 rules + import sorting + pyupgrade + bugbear + small sims
-select = ["E", "F", "I", "UP", "B", "SIM"]
-# Let the formatter handle line length instead of E501
-ignore = ["E501"]
+select = [
+  "E",
+  "F",
+  "I",
+  "UP",
+  "B",
+  "SIM",
+  "N",
+  "D",
+  "ANN",
+  "TCH",
+  "C90",
+  "ARG",
+  "PL",
+  "TRY",
+  "PERF",
+  "RUF",
+]
+ignore = [
+  "E501",   # let formatter handle wrapping
+  "D203",
+  "D212",   # choose one blank-line convention
+  "D100",
+  "D104",   # docstring on __init__ is redundant
+  "ANN101", # allow untyped "self" defs for simplicity
+]
 
-# isort-compatible import sorting
 [tool.ruff.lint.isort]
 known-first-party = ["your_package_name"]
 
-# Black-compatible formatter
+[tool.ruff.lint.flake8-annotations]
+mypy-init-return = true
+suppress-dummy-args = true
+allow-star-arg-any = false
+ignore-fully-untyped = false
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy" # or "google"
+
+[tool.ruff.lint.pylint]
+max-args = 6
+max-branches = 12
+max-returns = 6
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"

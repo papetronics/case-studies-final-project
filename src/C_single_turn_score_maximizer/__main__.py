@@ -1,14 +1,16 @@
 #!/usr/bin/env python
-import pytorch_lightning as L
+import pytorch_lightning as lightning
 import torch
 
+from C_single_turn_score_maximizer import test_episode
 from C_single_turn_score_maximizer.trainer import SingleTurnScoreMaximizerREINFORCETrainer
 from utilities.dummy_dataset import DummyDataset
 from utilities.initialize import ConfigParam, finish, initialize
 from utilities.return_calculators import MonteCarloReturnCalculator
 
 
-def main():
+def main() -> None:
+    """Run training or testing for single-turn Yahtzee score maximization."""
     # Define configuration schema
     config_params = [
         ConfigParam("mode", str, "train", "Mode to run (train or test)", choices=["train", "test"]),
@@ -85,9 +87,7 @@ def main():
 
     if mode == "test":
         # Test mode
-        from C_single_turn_score_maximizer.test_episode import main as test_episode_main
-
-        test_episode_main(checkpoint_path=checkpoint_path)
+        test_episode.main(checkpoint_path=checkpoint_path)
     else:
         # Create return calculator and model
         return_calculator = MonteCarloReturnCalculator()
@@ -104,7 +104,7 @@ def main():
         )
 
         # Create trainer
-        trainer = L.Trainer(
+        trainer = lightning.Trainer(
             max_epochs=epochs,
             logger=logger,
             enable_checkpointing=True,
@@ -128,9 +128,7 @@ def main():
         trainer.fit(model, train_dataloader, val_dataloader)
 
         # Run a test episode after training
-        from C_single_turn_score_maximizer.test_episode import main as test_episode_main
-
-        test_episode_main(model=model.policy_net, interactive=False)
+        test_episode.main(model=model.policy_net, interactive=False)
 
     print("Process completed!")
 

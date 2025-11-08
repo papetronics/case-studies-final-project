@@ -1,11 +1,12 @@
 #!/usr/bin/env python
-import pytorch_lightning as L
+import pytorch_lightning as lightning
 
 from B_supervised_scorer.trainer import SupervisedScorerTrainer
 from utilities.initialize import ConfigParam, finish, initialize
 
 
-def main():
+def main() -> None:
+    """Run training for supervised Yahtzee score prediction."""
     # Define configuration schema
     config_params = [
         ConfigParam("epochs", int, 50, "Number of training epochs"),
@@ -50,7 +51,7 @@ def main():
     )
 
     # Create trainer
-    trainer = L.Trainer(
+    trainer = lightning.Trainer(
         max_epochs=epochs,
         logger=logger,
         enable_checkpointing=True,

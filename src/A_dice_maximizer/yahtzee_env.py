@@ -1,16 +1,20 @@
-"""
-Yahtzee Gymnasium Environment
-
-A blank template for the Yahtzee environment implementation.
-"""
-
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal, TypedDict
 
 import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 from gymnasium.envs.registration import register
+
+
+class Observation(TypedDict):
+    """Observation from the Yahtzee environment."""
+
+    dice: np.ndarray
+    rolls_used: int
+
+
+Action = np.ndarray  # MultiBinary(5) - array of 5 binary values for each die
 
 register(
     id="Yahtzee-v0",
@@ -21,14 +25,17 @@ register(
 
 @dataclass
 class DiceState:
+    """Class to represent the state of the dice in Yahtzee."""
+
     NUM_DICE: int = 5
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
+        """Initialize the dice state."""
         self.dice: np.ndarray = np.zeros(self.NUM_DICE, dtype=np.int32)
         self.rolls_used = 0  # Track rolls used instead of remaining (0, 1, 2)
-        self.__state = {"dice": self.dice, "rolls_used": self.rolls_used}
+        self.__state: Observation = {"dice": self.dice, "rolls_used": self.rolls_used}
 
-    def observation(self) -> dict:
+    def observation(self) -> Observation:
         """Convert to observation format."""
         # Update the state dict with current values
         self.__state["rolls_used"] = self.rolls_used
@@ -64,10 +71,10 @@ class YahtzeeEnv(gym.Env):
     This is a blank template - implementation to be added later.
     """
 
-    metadata = {"render_modes": ["human"], "render_fps": 4}
-    info = {}
+    metadata = {"render_modes": ["human"], "render_fps": 4}  # noqa: RUF012
+    info = {}  # noqa: RUF012
 
-    def __init__(self, render_mode=None) -> None:
+    def __init__(self, render_mode: Literal["human"] | None = None) -> None:  # noqa: ARG002
         """Initialize the Yahtzee environment."""
         # Define observation and action spaces
         self.observation_space = spaces.Dict(
@@ -82,13 +89,12 @@ class YahtzeeEnv(gym.Env):
 
         self.state: DiceState = DiceState()
 
-    def step(self, action) -> tuple[dict, float, bool, bool, dict]:
+    def step(self, action: Action) -> tuple[Observation, float, bool, bool, dict]:
         """Execute one time step within the environment."""
-
         # action is the hold mask for the dice
         self.state.roll_dice(action)
         observation = self.state.observation()
-        terminated = self.state.rolls_used == 2
+        terminated = self.state.rolls_used == 2  # noqa: PLR2004
 
         # Give reward as sum of dice when episode terminates
         reward = np.sum(self.state.dice) if terminated else 0.0
@@ -100,7 +106,7 @@ class YahtzeeEnv(gym.Env):
         *,
         seed: int | None = None,
         options: dict[str, Any] | None = None,
-    ) -> tuple[dict, dict[str, Any]]:  # type: ignore
+    ) -> tuple[Observation, dict[str, Any]]:  # type: ignore
         """Reset the environment to an initial state."""
         super().reset(seed=seed, options=options)
 

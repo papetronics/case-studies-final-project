@@ -1,26 +1,30 @@
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import gymnasium as gym
 import numpy as np
-import pytorch_lightning as L
+import pytorch_lightning as lightning
 import torch
 
-from environments.full_yahtzee_env import YahtzeeEnv
 from utilities.episode import Episode
 from utilities.return_calculators import MonteCarloReturnCalculator, ReturnCalculator
 
-from .model import TurnScoreMaximizer
+from .model import ActivationFunctionName, TurnScoreMaximizer
+
+if TYPE_CHECKING:
+    from environments.full_yahtzee_env import YahtzeeEnv
 
 
-class SingleTurnScoreMaximizerREINFORCETrainer(L.LightningModule):
-    def __init__(
+class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
+    """PyTorch Lightning trainer for single-turn Yahtzee score maximization using REINFORCE."""
+
+    def __init__(  # noqa: PLR0913
         self,
         hidden_size: int,
         learning_rate: float,
         episodes_per_batch: int,
         num_hidden: int,
         dropout_rate: float,
-        activation_function: str,
+        activation_function: ActivationFunctionName,
         max_epochs: int,
         min_lr_ratio: float,
         return_calculator: ReturnCalculator | None = None,
@@ -52,11 +56,13 @@ class SingleTurnScoreMaximizerREINFORCETrainer(L.LightningModule):
         self.full_env = gym.make("FullYahtzee-v1")  # For validation
 
     def forward(self, observation: dict[str, Any]) -> torch.Tensor:
+        """Forward pass through the policy network."""
         return self.policy_net(observation)
 
     def collect_episode(self) -> Episode:
+        """Collect a single episode using the current policy."""
         episode = Episode()
-        unwrapped: YahtzeeEnv = cast(YahtzeeEnv, self.env.unwrapped)
+        unwrapped: YahtzeeEnv = cast("YahtzeeEnv", self.env.unwrapped)
         observation = unwrapped.observe()
 
         # This is a bit of a hack, the environment supports full turns, but our model is single-turn
@@ -85,7 +91,6 @@ class SingleTurnScoreMaximizerREINFORCETrainer(L.LightningModule):
                 observation, _ = self.env.reset()
 
         episode.set_reward(float(reward))
-        # print ("Episode reward:", episode.reward)
 
         # sanity check: after 3 rolls we should always have rolls_used == 0 (new turn) and phase == 0
         assert observation["rolls_used"] == 0 and observation["phase"] == 0
@@ -117,7 +122,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(L.LightningModule):
 
         return total_score
 
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch: torch.Tensor, batch_idx: int) -> dict[str, float]:  # noqa: ARG002
         """Run validation using the full Yahtzee environment."""
         num_validation_games = 50
         total_scores = []
@@ -135,7 +140,8 @@ class SingleTurnScoreMaximizerREINFORCETrainer(L.LightningModule):
         # Return a dict for PyTorch Lightning compatibility
         return {"val_loss": -mean_total_score}  # Negative because higher scores are better
 
-    def training_step(self, batch, batch_idx):
+    def training_step(self, batch: torch.Tensor, batch_idx: int) -> torch.Tensor:  # noqa: ARG002
+        """Perform a training step using REINFORCE algorithm."""
         episodes = []
         total_reward = 0.0
 
@@ -168,7 +174,8 @@ class SingleTurnScoreMaximizerREINFORCETrainer(L.LightningModule):
 
         return policy_loss
 
-    def configure_optimizers(self):  # type: ignore
+    def configure_optimizers(self):  # type: ignore  # noqa: ANN201
+        """Configure optimizers and learning rate schedulers."""
         optimizer = torch.optim.Adam(self.policy_net.parameters(), lr=self.learning_rate)
         scheduler = torch.optim.lr_scheduler.LinearLR(
             optimizer,
@@ -185,10 +192,12 @@ class SingleTurnScoreMaximizerREINFORCETrainer(L.LightningModule):
             },
         }
 
-    def on_train_start(self):
+    def on_train_start(self) -> None:
+        """Initialize environments at the start of training."""
         pass
 
-    def on_train_end(self):
+    def on_train_end(self) -> None:
+        """Close environments at the end of training."""
         if self.env is not None:
             self.env.close()
         if self.full_env is not None:

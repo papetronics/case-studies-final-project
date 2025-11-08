@@ -6,13 +6,17 @@ from utilities.scoring_helper import get_all_scores
 
 
 class GreedyScoringDataset(torch.utils.data.Dataset):
-    def __init__(self, size=1000):
+    """Dataset for generating greedy scoring samples."""
+
+    def __init__(self, size: int = 1000):
         self.size = size
 
-    def __len__(self):
+    def __len__(self) -> int:
+        """Return the size of the dataset."""
         return self.size
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Generate a sample by computing the max scoring opportunity for random dice and open categories."""
         # Here we are going to generate a sample, any dice, we figure out what the max scoring opp is, thats the label
 
         # dice that we are going to use

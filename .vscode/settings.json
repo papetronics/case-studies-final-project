@@ -1,4 +1,16 @@
 {
+    // Use Ruff for linting
+    "ruff.lint.enable": true,
+    // Format & fix on save (Ruff does import sorting too)
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+        "source.fixAll.ruff": "always",
+        "source.organizeImports.ruff": "always"
+    },
+    // Make Ruff the default formatter for Python files
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff"
+    },
     "latex-workshop.latex.tools": [
         {
             "name": "pdflatex",
@@ -59,7 +71,7 @@
         "*.blg",
         "*.idx",
         "*.ind",
-        "*.lof", 
+        "*.lof",
         "*.lot",
         "*.out",
         "*.toc",

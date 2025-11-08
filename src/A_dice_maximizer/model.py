@@ -2,10 +2,12 @@ from typing import Any
 
 import numpy as np
 import torch
-import torch.nn as nn
+from torch import nn
 
 
 class DiceSumMaximizer(nn.Module):
+    """Neural network model to maximize expected dice sum in Yahtzee."""
+
     def __init__(
         self, hidden_size: int, device: str = "cuda" if torch.cuda.is_available() else "cpu"
     ):
@@ -28,11 +30,13 @@ class DiceSumMaximizer(nn.Module):
         ).to(device)
 
     def forward(self, observation: dict[str, Any]) -> torch.Tensor:
+        """Forward pass through the network."""
         input_tensor = self._observation_to_tensor(observation)
         output = self.network(input_tensor)
         return output.squeeze(0)
 
     def sample(self, observation: dict[str, Any]) -> tuple[torch.Tensor, torch.Tensor]:
+        """Sample an action based on the observation."""
         action_probs = self.forward(observation)
         action_dist = torch.distributions.Bernoulli(action_probs)
         action_tensor = action_dist.sample()

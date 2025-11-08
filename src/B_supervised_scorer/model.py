@@ -2,10 +2,11 @@ from typing import Any
 
 import numpy as np
 import torch
-import torch.nn as nn
+from torch import nn
 
 
 def observation_to_tensor(observation: dict[str, Any]) -> torch.Tensor:
+    """Convert observation dictionary to input tensor."""
     dice = observation["dice"]  # numpy array showing the actual dice, e.g. [1, 3, 5, 6, 2]
     rolls_used = observation["rolls_used"]  # integer: 0, 1, or 2
     available_categories = observation[
@@ -19,28 +20,38 @@ def observation_to_tensor(observation: dict[str, Any]) -> torch.Tensor:
     return torch.FloatTensor(input_vector)
 
 
+class Block(nn.Module):
+    """Typical MLP block with Linear, GELU, LayerNorm, and optional Dropout."""
+
+    def __init__(self, in_features: int, out_features: int, dropout_rate: float):
+        super().__init__()
+        layers = [nn.Linear(in_features, out_features), nn.GELU(), nn.LayerNorm(out_features)]
+        if dropout_rate > 0.0:
+            layers.append(nn.Dropout(dropout_rate))
+        self.network = nn.Sequential(*layers)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass through the block."""
+        return self.network(x)
+
+
+class MaskedSoftmax(nn.Module):
+    """Softmax layer that applies a mask before softmax."""
+
+    def __init__(self, mask_value: float = -float("inf")):
+        super().__init__()
+        self.mask_value = mask_value
+        self.softmax = nn.Softmax(dim=-1)
+
+    def forward(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
+        """Forward pass applying masked softmax."""
+        # Apply the mask
+        x = x.masked_fill(mask == 0, self.mask_value)
+        return self.softmax(x)
+
+
 class SupervisedDiceScorer(nn.Module):
-    class Block(nn.Module):
-        def __init__(self, in_features: int, out_features: int, dropout_rate: float):
-            super(SupervisedDiceScorer.Block, self).__init__()
-            layers = [nn.Linear(in_features, out_features), nn.GELU(), nn.LayerNorm(out_features)]
-            if dropout_rate > 0.0:
-                layers.append(nn.Dropout(dropout_rate))
-            self.network = nn.Sequential(*layers)
-
-        def forward(self, x: torch.Tensor) -> torch.Tensor:
-            return self.network(x)
-
-    class MaskedSoftmax(nn.Module):
-        def __init__(self, mask_value: float = -float("inf")):
-            super().__init__()
-            self.mask_value = mask_value
-            self.softmax = nn.Softmax(dim=-1)
-
-        def forward(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
-            # Apply the mask
-            x = x.masked_fill(mask == 0, self.mask_value)
-            return self.softmax(x)
+    """Neural network model for supervised Yahtzee scoring."""
 
     def __init__(
         self,
@@ -66,9 +77,9 @@ class SupervisedDiceScorer(nn.Module):
         dice_output_size = 5
         scoring_output_size = 13
 
-        layers = [SupervisedDiceScorer.Block(input_size, hidden_size, dropout_rate)]
+        layers = [Block(input_size, hidden_size, dropout_rate)]
         for _ in range(num_hidden - 1):
-            layers.append(SupervisedDiceScorer.Block(hidden_size, hidden_size, dropout_rate))
+            layers.append(Block(hidden_size, hidden_size, dropout_rate))  # noqa: PERF401
 
         self.network = nn.Sequential(*layers).to(device)
 
@@ -83,7 +94,7 @@ class SupervisedDiceScorer(nn.Module):
             scoring_head_layers.append(nn.Dropout(dropout_rate))
         scoring_head_layers.append(nn.Linear(hidden_size, scoring_output_size))
         self.scoring_head = nn.Sequential(*scoring_head_layers)
-        self.masked_softmax = SupervisedDiceScorer.MaskedSoftmax()
+        self.masked_softmax = MaskedSoftmax()
 
         # Add score prediction head for regression
         score_prediction_layers = []
@@ -96,9 +107,11 @@ class SupervisedDiceScorer(nn.Module):
     def forward_observation(
         self, observation: dict[str, Any]
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Forward pass through the model using observation dictionary."""
         return self.forward(observation_to_tensor(observation).unsqueeze(0).to(self.device))
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Forward pass through the model."""
         spine = self.network(x)
 
         rolling_output = self.rolling_head(spine)
@@ -113,11 +126,13 @@ class SupervisedDiceScorer(nn.Module):
     def sample_observation(
         self, observation: dict[str, Any]
     ) -> tuple[tuple[torch.Tensor, torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
+        """Sample an action based on the observation dictionary."""
         return self.sample(observation_to_tensor(observation).unsqueeze(0).to(self.device))
 
     def sample(
         self, x: torch.Tensor
     ) -> tuple[tuple[torch.Tensor, torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
+        """Sample an action based on the input tensor."""
         rolling_probs, scoring_probs, score_predictions = self.forward(x)
         rolling_dist = torch.distributions.Bernoulli(rolling_probs)
         rolling_tensor = rolling_dist.sample()

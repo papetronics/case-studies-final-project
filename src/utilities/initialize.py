@@ -1,7 +1,3 @@
-"""
-Initialization utilities for the Yahtzee RL project.
-"""
-
 import argparse
 import os
 from dataclasses import dataclass
@@ -29,13 +25,13 @@ class ConfigParam:
         return self.display_name or self.name.replace("_", " ").replace("-", " ").title()
 
 
-def initialize(
+def initialize(  # noqa: C901, PLR0912, PLR0915
     scenario_name: str,
     config_params: list[ConfigParam],
     description: str | None = None,
     wandb_project_prefix: str = "yahtzee",
     logger_name: str | None = None,
-):
+) -> tuple[Any, dict[str, Any], Any]:
     """
     Initialize the project with configuration management, wandb setup, logger setup, and system info.
 
@@ -46,7 +42,8 @@ def initialize(
         wandb_project_prefix: Prefix for wandb project name (default: "yahtzee")
         logger_name: Name for the logger (default: based on scenario)
 
-    Returns:
+    Returns
+    -------
         tuple: (wandb_run, config_dict, logger)
     """
     # Initialize wandb if running inside a wandb launch agent or job
@@ -72,7 +69,7 @@ def initialize(
     # Add log_dir parameter if not already present
     param_names = [param.name for param in config_params]
     if "log_dir" not in param_names:
-        config_params = config_params + [
+        config_params = config_params + [  # noqa: RUF005
             ConfigParam(
                 "log_dir", str, "./logs", "Directory for logs", display_name="Log directory"
             )
@@ -83,7 +80,7 @@ def initialize(
 
     # Add arguments dynamically
     for param in config_params:
-        arg_name = f'--{param.name.replace("_", "-")}'
+        arg_name = f"--{param.name.replace('_', '-')}"
         kwargs: dict[str, Any] = {"help": param.help}
 
         # Handle optional parameters (default None)
@@ -143,7 +140,8 @@ def initialize(
     return wandb_run, config, logger
 
 
-def finish(wandb_run):
+def finish(wandb_run) -> None:  # noqa: ANN001
+    """Finalize the training session."""
     print("Training completed!")
 
     if wandb_run is not None:

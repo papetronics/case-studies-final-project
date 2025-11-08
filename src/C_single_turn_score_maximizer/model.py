@@ -1,33 +1,69 @@
-from dataclasses import dataclass
-from typing import Any
+from enum import Enum, IntEnum
+from typing import Literal
 
 import numpy as np
 import torch
-import torch.nn as nn
+from torch import nn
+
+from src.environments.full_yahtzee_env import Observation
 
 
-@dataclass
-class BonusFlags:
+class ActivationFunction(Enum):
+    """Supported activation functions for the neural network."""
+
+    ReLU = nn.ReLU
+    GELU = nn.GELU
+    CELU = nn.CELU
+    PReLU = nn.PReLU
+    ELU = nn.ELU
+    Tanh = nn.Tanh
+    LeakyReLU = nn.LeakyReLU
+    Softplus = nn.Softplus
+    Softsign = nn.Softsign
+    Mish = nn.Mish
+    Swish = nn.SiLU
+    SeLU = nn.SELU
+
+
+ActivationFunctionName = Literal[
+    "ReLU",
+    "GELU",
+    "CELU",
+    "PReLU",
+    "ELU",
+    "Tanh",
+    "LeakyReLU",
+    "Softplus",
+    "Softsign",
+    "Mish",
+    "Swish",
+    "SeLU",
+]
+
+
+class BonusFlags(IntEnum):
+    """Flags for different bonus information to include in the model input."""
+
     ## The raw upper score 0-105
-    TOTAL_UPPER_SCORE = "total_upper_score"
+    TOTAL_UPPER_SCORE = 0
 
     ## The raw upper score normalized to [0, 1]
-    NORMALIZED_TOTAL_UPPER_SCORE = "normalized_total_upper_score"
+    NORMALIZED_TOTAL_UPPER_SCORE = 1
 
     ## Points away from bonus, i.e. max(0, 63-upper)
-    POINTS_AWAY_FROM_BONUS = "points_away_from_bonus"
+    POINTS_AWAY_FROM_BONUS = 2
 
     ## Percent progress towards bonus (0.0 to 1.0)
-    PERCENT_PROGRESS_TOWARDS_BONUS = "percent_progress_towards_bonus"
+    PERCENT_PROGRESS_TOWARDS_BONUS = 3
 
     ## Golf Scoring (sum each scored category as +/- from getting 3 dice of that category)
-    GOLF_SCORING = "golf_scoring"
+    GOLF_SCORING = 4
 
     ## Golf Scoring normalized to [-1, 1]
-    NORMALIZED_GOLF_SCORING = "normalized_golf_scoring"
+    NORMALIZED_GOLF_SCORING = 5
 
     ## Per-category score needed to achieve bonus
-    AVERAGE_SCORE_NEEDED_PER_OPEN_CATEGORY = "average_score_needed_per_open_category"
+    AVERAGE_SCORE_NEEDED_PER_OPEN_CATEGORY = 6
 
 
 UPPER_SCORE_THRESHOLD = 63
@@ -35,7 +71,8 @@ MAX_UPPER_SCORE = 5 * (1 + 2 + 3 + 4 + 5 + 6)  # 5 dice, each can contribute 1-6
 GOLF_TARGET = (np.arange(6) + 1) * 3  # Target score for golf scoring per category
 
 
-def observation_to_tensor(observation: dict[str, Any], bonusFlags: list[str]) -> torch.Tensor:
+def observation_to_tensor(observation: Observation, bonus_flags: set[BonusFlags]) -> torch.Tensor:
+    """Convert observation dictionary to input tensor for the model."""
     dice = observation["dice"]  # numpy array showing the actual dice, e.g. [1, 3, 5, 6, 2]
     dice_counts = np.bincount(dice, minlength=7)[1:]  # counts of dice faces from 1 to 6
     rolls_used = observation["rolls_used"]  # integer: 0, 1, or 2
@@ -58,24 +95,24 @@ def observation_to_tensor(observation: dict[str, Any], bonusFlags: list[str]) ->
         else golf_score / (MAX_UPPER_SCORE - UPPER_SCORE_THRESHOLD)
     )
 
-    if BonusFlags.TOTAL_UPPER_SCORE in bonusFlags:
+    if BonusFlags.TOTAL_UPPER_SCORE in bonus_flags:
         bonus_information.append(total_upper_score)
 
-    if BonusFlags.NORMALIZED_TOTAL_UPPER_SCORE in bonusFlags:
+    if BonusFlags.NORMALIZED_TOTAL_UPPER_SCORE in bonus_flags:
         bonus_information.append(total_upper_score / MAX_UPPER_SCORE)
 
-    if BonusFlags.POINTS_AWAY_FROM_BONUS in bonusFlags:
+    if BonusFlags.POINTS_AWAY_FROM_BONUS in bonus_flags:
         points_away = max(0, UPPER_SCORE_THRESHOLD - total_upper_score)
         bonus_information.append(points_away)
 
-    if BonusFlags.PERCENT_PROGRESS_TOWARDS_BONUS in bonusFlags:
+    if BonusFlags.PERCENT_PROGRESS_TOWARDS_BONUS in bonus_flags:
         percent_progress = min(1.0, total_upper_score / UPPER_SCORE_THRESHOLD)
         bonus_information.append(percent_progress)
 
-    if BonusFlags.GOLF_SCORING in bonusFlags:
+    if BonusFlags.GOLF_SCORING in bonus_flags:
         bonus_information.append(normalized_golf_score)
 
-    if BonusFlags.AVERAGE_SCORE_NEEDED_PER_OPEN_CATEGORY in bonusFlags:
+    if BonusFlags.AVERAGE_SCORE_NEEDED_PER_OPEN_CATEGORY in bonus_flags:
         num_open_categories = np.sum(available_categories[:6])  # Only upper categories
         if num_open_categories > 0:
             points_needed = max(0, UPPER_SCORE_THRESHOLD - total_upper_score)
@@ -102,67 +139,63 @@ def observation_to_tensor(observation: dict[str, Any], bonusFlags: list[str]) ->
     return torch.FloatTensor(input_vector)
 
 
+class Block(nn.Module):
+    """A basic MLP block with Linear, Activation, LayerNorm, and optional Dropout."""
+
+    def __init__(
+        self,
+        in_features: int,
+        out_features: int,
+        dropout_rate: float,
+        activation: type[nn.Module] = nn.PReLU,
+    ):
+        super().__init__()
+        layers = [
+            nn.Linear(in_features, out_features),
+            activation(),
+            nn.LayerNorm(out_features),
+        ]
+        if dropout_rate > 0.0:
+            layers.append(nn.Dropout(dropout_rate))
+
+        self.network = nn.Sequential(*layers)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass through the block."""
+        return self.network(x)
+
+
+class MaskedSoftmax(nn.Module):
+    """Softmax layer that applies a mask before softmax."""
+
+    def __init__(self, mask_value: float = -float("inf")):
+        super().__init__()
+        self.mask_value = mask_value
+        self.softmax = nn.Softmax(dim=-1)
+
+    def forward(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
+        """Forward pass applying masked softmax."""
+        x = x.masked_fill(mask == 0, self.mask_value)
+        return self.softmax(x)
+
+
 class TurnScoreMaximizer(nn.Module):
-    class Block(nn.Module):
-        def __init__(
-            self, in_features: int, out_features: int, dropout_rate: float, activation=nn.PReLU
-        ):
-            super(TurnScoreMaximizer.Block, self).__init__()
-            layers = [
-                nn.Linear(in_features, out_features),
-                activation(),
-                nn.LayerNorm(out_features),
-            ]
-            if dropout_rate > 0.0:
-                layers.append(nn.Dropout(dropout_rate))
-
-            self.network = nn.Sequential(*layers)
-
-        def forward(self, x: torch.Tensor) -> torch.Tensor:
-            return self.network(x)
-
-    class MaskedSoftmax(nn.Module):
-        def __init__(self, mask_value: float = -float("inf")):
-            super().__init__()
-            self.mask_value = mask_value
-            self.softmax = nn.Softmax(dim=-1)
-
-        def forward(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
-            # Apply the mask
-            x = x.masked_fill(mask == 0, self.mask_value)
-            return self.softmax(x)
+    """Neural network model for maximizing score in a single turn of Yahtzee."""
 
     def __init__(
         self,
         hidden_size: int,
         num_hidden: int,
         dropout_rate: float,
-        activation_function: str,
-        device: str = "cuda" if torch.cuda.is_available() else "cpu",
+        activation_function: ActivationFunctionName,
     ):
         super().__init__()
 
-        activation = {
-            "ReLU": nn.ReLU,
-            "GELU": nn.GELU,
-            "CELU": nn.CELU,
-            "PReLU": nn.PReLU,
-            "ELU": nn.ELU,
-            "Tanh": nn.Tanh,
-            "LeakyReLU": nn.LeakyReLU,
-            "Softplus": nn.Softplus,
-            "Softsign": nn.Softsign,
-            "Mish": nn.Mish,
-            "Swish": nn.SiLU,
-            "SeLU": nn.SELU,
-        }[activation_function]
-
-        if activation is None:
-            raise ValueError(f"Unsupported activation function: {activation_function}")
+        activation = ActivationFunction[activation_function].value
 
         self.dropout_rate = dropout_rate
 
-        self.bonus_flags = [BonusFlags.PERCENT_PROGRESS_TOWARDS_BONUS]
+        self.bonus_flags: set[BonusFlags] = {BonusFlags.PERCENT_PROGRESS_TOWARDS_BONUS}
 
         ## 46 model inputs:
         #   - Dice [30]: One-hot encoding of 5 dice (6 sides each) = 5 * 6 = 30
@@ -178,11 +211,9 @@ class TurnScoreMaximizer(nn.Module):
         dice_output_size = 5
         scoring_output_size = 13
 
-        layers = [TurnScoreMaximizer.Block(input_size, hidden_size, dropout_rate, activation)]
+        layers = [Block(input_size, hidden_size, dropout_rate, activation)]
         for _ in range(num_hidden - 1):
-            layers.append(
-                TurnScoreMaximizer.Block(hidden_size, hidden_size, dropout_rate, activation)
-            )
+            layers.append(Block(hidden_size, hidden_size, dropout_rate, activation))  # noqa: PERF401
 
         self.network = nn.Sequential(*layers)
 
@@ -197,19 +228,21 @@ class TurnScoreMaximizer(nn.Module):
             scoring_head_layers.append(nn.Dropout(dropout_rate))
         scoring_head_layers.append(nn.Linear(hidden_size, scoring_output_size))
         self.scoring_head = nn.Sequential(*scoring_head_layers).to(self.device)
-        self.masked_softmax = TurnScoreMaximizer.MaskedSoftmax().to(self.device)
+        self.masked_softmax = MaskedSoftmax().to(self.device)
 
     @property
     def device(self) -> torch.device:
         """Get the device of the model parameters."""
         return next(self.parameters()).device
 
-    def forward_observation(self, observation: dict[str, Any]) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward_observation(self, observation: Observation) -> tuple[torch.Tensor, torch.Tensor]:
+        """Forward pass through the model given an observation dictionary."""
         return self.forward(
             observation_to_tensor(observation, self.bonus_flags).unsqueeze(0).to(self.device)
         )
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """Forward pass through the model."""
         spine = self.network(x)
 
         rolling_output = self.rolling_head(spine)
@@ -221,8 +254,9 @@ class TurnScoreMaximizer(nn.Module):
         return rolling_output.squeeze(0), scoring_output.squeeze(0)
 
     def sample_observation(
-        self, observation: dict[str, Any]
+        self, observation: Observation
     ) -> tuple[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
+        """Sample an action given an observation dictionary."""
         return self.sample(
             observation_to_tensor(observation, self.bonus_flags).unsqueeze(0).to(self.device)
         )
@@ -230,6 +264,7 @@ class TurnScoreMaximizer(nn.Module):
     def sample(
         self, x: torch.Tensor
     ) -> tuple[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
+        """Sample an action given an input tensor."""
         rolling_probs, scoring_probs = self.forward(x)
         # print(rolling_probs)
         # print(scoring_probs)

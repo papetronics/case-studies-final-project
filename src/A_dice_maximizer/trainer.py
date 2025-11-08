@@ -1,7 +1,7 @@
 from typing import Any
 
 import gymnasium as gym
-import pytorch_lightning as L
+import pytorch_lightning as lightning
 import torch
 
 from utilities.episode import Episode
@@ -10,7 +10,9 @@ from utilities.return_calculators import MonteCarloReturnCalculator, ReturnCalcu
 from .model import DiceSumMaximizer
 
 
-class REINFORCEWithBaselineTrainer(L.LightningModule):
+class REINFORCEWithBaselineTrainer(lightning.LightningModule):
+    """PyTorch Lightning trainer for Yahtzee dice maximization using REINFORCE with baseline."""
+
     def __init__(
         self,
         hidden_size: int,
@@ -36,9 +38,11 @@ class REINFORCEWithBaselineTrainer(L.LightningModule):
         self.env = gym.make("Yahtzee-v0")
 
     def forward(self, observation: dict[str, Any]) -> torch.Tensor:
+        """Forward pass through the policy network."""
         return self.policy_net(observation)
 
     def collect_episode(self) -> Episode:
+        """Collect a single episode by interacting with the environment."""
         episode = Episode()
         observation, _ = self.env.reset()
 
@@ -58,7 +62,8 @@ class REINFORCEWithBaselineTrainer(L.LightningModule):
 
         return episode
 
-    def training_step(self, batch, batch_idx):
+    def training_step(self, batch: torch.Tensor, batch_idx: int) -> torch.Tensor:  # noqa: ARG002
+        """Perform a training step over a batch of episodes."""
         episodes = []
         total_reward = 0.0
 
@@ -88,12 +93,15 @@ class REINFORCEWithBaselineTrainer(L.LightningModule):
 
         return policy_loss
 
-    def configure_optimizers(self):
+    def configure_optimizers(self) -> torch.optim.Optimizer:
+        """Configure the optimizer for training."""
         return torch.optim.Adam(self.policy_net.parameters(), lr=self.learning_rate)
 
-    def on_train_start(self):
+    def on_train_start(self) -> None:
+        """Start training."""
         pass
 
-    def on_train_end(self):
+    def on_train_end(self) -> None:
+        """End training."""
         if self.env is not None:
             self.env.close()

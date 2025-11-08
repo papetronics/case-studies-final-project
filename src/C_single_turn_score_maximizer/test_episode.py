@@ -5,16 +5,21 @@ import torch
 
 from C_single_turn_score_maximizer.model import TurnScoreMaximizer
 from C_single_turn_score_maximizer.trainer import SingleTurnScoreMaximizerREINFORCETrainer
-from utilities.scoring_helper import ScoreCategory, get_all_scores
+from utilities.scoring_helper import (
+    BONUS_POINTS,
+    MINIMUM_UPPER_SCORE_FOR_BONUS,
+    ScoreCategory,
+    get_all_scores,
+)
 
 
-def clear_screen():
-    """Clear the terminal screen"""
+def clear_screen() -> None:
+    """Clear the terminal screen."""
     os.system("clear" if os.name == "posix" else "cls")
 
 
-def wait_for_enter():
-    """Wait for user to press enter"""
+def wait_for_enter() -> None:
+    """Wait for user to press enter."""
     input("\nPress Enter to continue...")
 
 
@@ -22,7 +27,8 @@ def main(
     checkpoint_path: str | None = None,
     model: TurnScoreMaximizer | None = None,
     interactive: bool = True,
-):
+) -> None:
+    """Run a single episode in the Yahtzee environment using a trained model."""
     env = gym.make("FullYahtzee-v1")
 
     # load the model from checkpoint path
@@ -30,8 +36,8 @@ def main(
         # Load the Lightning trainer from checkpoint
         trainer = SingleTurnScoreMaximizerREINFORCETrainer.load_from_checkpoint(checkpoint_path)
         model = trainer.policy_net
-    else:
-        model = model if model else TurnScoreMaximizer()
+    elif model is None:
+        raise ValueError("Either checkpoint_path or model must be provided.")  # noqa: TRY003
 
     model.eval()
     run_episode(env, model, interactive)
@@ -41,7 +47,8 @@ def run_episode(
     env: gym.Env,
     model: TurnScoreMaximizer,
     interactive: bool = True,
-):
+) -> None:
+    """Run a single episode in the Yahtzee environment using the provided model."""
     obs, _ = env.reset()
     original_dice = obs["dice"].copy()
     kept_dice = []
@@ -101,8 +108,8 @@ def run_episode(
                 wait_for_enter()
 
 
-def print_scorecard(observation: dict):
-    """Print a pretty scorecard with current scores"""
+def print_scorecard(observation: dict) -> None:
+    """Print a pretty scorecard with current scores."""
     print("=" * 50)
     print("                   SCORECARD")
     print("=" * 50)
@@ -122,7 +129,7 @@ def print_scorecard(observation: dict):
 
     print("-" * 25)
     print(f"Upper Total     : [{upper_total:2d}]")
-    bonus = 35 if upper_total >= 63 else 0
+    bonus = BONUS_POINTS if upper_total >= MINIMUM_UPPER_SCORE_FOR_BONUS else 0
     print(f"Bonus (63+)     : [{bonus:2d}]")
     print(f"Upper w/Bonus   : [{upper_total + bonus:2d}]")
 
@@ -148,8 +155,8 @@ def print_scorecard(observation: dict):
     print("=" * 50)
 
 
-def print_dice_state(observation: dict, original_dice: list, kept_dice: list):
-    """Print current dice state"""
+def print_dice_state(observation: dict, original_dice: list, kept_dice: list) -> None:
+    """Print current dice state."""
     print("\nDICE:")
     print("-" * 20)
 
@@ -169,8 +176,8 @@ def print_dice_state(observation: dict, original_dice: list, kept_dice: list):
         print("Phase: Scoring")
 
 
-def print_available_scores(observation: dict):
-    """Print available scoring categories with potential scores"""
+def print_available_scores(observation: dict) -> None:
+    """Print available scoring categories with potential scores."""
     if observation["phase"] == 1:  # Only show in scoring phase
         possible_scores, _ = get_all_scores(
             observation["dice"], observation["score_sheet_available_mask"]
@@ -188,8 +195,8 @@ def print_available_scores(observation: dict):
                 print(f"{label:15s}: {score:2d} points")
 
 
-def print_game_state(observation: dict, original_dice: list, kept_dice: list):
-    """Print the complete game state"""
+def print_game_state(observation: dict, original_dice: list, kept_dice: list) -> None:
+    """Print the complete game state."""
     print_scorecard(observation)
     print_dice_state(observation, original_dice, kept_dice)
     print_available_scores(observation)
@@ -199,8 +206,8 @@ def print_action_description(
     observation: dict,
     hold_action_tensor: torch.Tensor | None = None,
     scoring_action_tensor: torch.Tensor | None = None,
-):
-    """Print what action the model is taking"""
+) -> None:
+    """Print what action the model is taking."""
     print("\n" + "=" * 50)
     if hold_action_tensor is not None:
         # Rolling action
@@ -210,9 +217,9 @@ def print_action_description(
 
         for i, die_value in enumerate(observation["dice"]):
             if hold_mask[i]:  # This die will be re-rolled
-                reroll_dice.append(f"Die {i+1}({die_value})")
+                reroll_dice.append(f"Die {i + 1}({die_value})")
             else:  # This die will be kept
-                keep_dice.append(f"Die {i+1}({die_value})")
+                keep_dice.append(f"Die {i + 1}({die_value})")
 
         print("🎲 MODEL ACTION: Rolling dice")
         if keep_dice:
