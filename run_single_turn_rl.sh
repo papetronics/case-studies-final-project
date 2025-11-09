@@ -11,4 +11,5 @@ set -e
   --dataset-size 1300 \
   --activation-function Swish \
   --learning-rate 0.00075 \
-  --min-lr-ratio 0.0001
+  --min-lr-ratio 0.0001 \
+  --gamma 0.995

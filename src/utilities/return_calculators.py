@@ -21,6 +21,13 @@ class MonteCarloReturnCalculator(ReturnCalculator):
     def calculate_returns(self, episode: Episode) -> list[float]:
         """Calculate returns for each time step in the episode using Monte Carlo method."""
         num_steps = len(episode.states)
-        episode_return = float(episode.reward)
-        returns = [episode_return] * num_steps
+        returns: list[float] = []
+
+        # Calculate returns backward from the final step
+        g: float = 0  # Initialize return
+        for t in reversed(range(num_steps)):
+            # For the last step, add the episode reward
+            g = float(episode.reward) if t == num_steps - 1 else self.gamma * g
+            returns.insert(0, g)
+
         return returns

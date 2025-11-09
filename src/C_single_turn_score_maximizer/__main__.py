@@ -63,6 +63,13 @@ def main() -> None:
             "Ratio of minimum learning rate to initial learning rate (for cosine annealing)",
             display_name="Min LR ratio",
         ),
+        ConfigParam(
+            "gamma",
+            float,
+            1.0,
+            "Discount factor for reward calculation",
+            display_name="Discount factor",
+        ),
     ]
 
     # Initialize project with configuration
@@ -84,13 +91,14 @@ def main() -> None:
     checkpoint_path = config["checkpoint_path"]
     activation_function = config["activation_function"]
     min_lr_ratio = config["min_lr_ratio"]
+    gamma = config["gamma"]
 
     if mode == "test":
         # Test mode
         test_episode.main(checkpoint_path=checkpoint_path)
     else:
         # Create return calculator and model
-        return_calculator = MonteCarloReturnCalculator()
+        return_calculator = MonteCarloReturnCalculator(gamma=gamma)
         model = SingleTurnScoreMaximizerREINFORCETrainer(
             hidden_size=hidden_size,
             learning_rate=learning_rate,
