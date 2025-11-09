@@ -12,4 +12,5 @@ set -e
   --activation-function Swish \
   --learning-rate 0.00075 \
   --min-lr-ratio 0.0001 \
-  --gamma 0.995
+  --gamma-min 0.9 \
+  --gamma-max 1.0

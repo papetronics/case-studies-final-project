@@ -14,20 +14,20 @@ def main() -> None:
     # Define configuration schema
     config_params = [
         ConfigParam("mode", str, "train", "Mode to run (train or test)", choices=["train", "test"]),
-        ConfigParam("epochs", int, 50, "Number of training epochs"),
+        ConfigParam("epochs", int, 500, "Number of training epochs"),
         ConfigParam(
             "episodes_per_batch",
             int,
-            32,
+            52,
             "Episodes per training batch",
             display_name="Episodes per batch",
         ),
-        ConfigParam("learning_rate", float, 1e-3, "Learning rate", display_name="Learning rate"),
-        ConfigParam("hidden_size", int, 64, "Hidden layer size", display_name="Hidden size"),
+        ConfigParam("learning_rate", float, 0.00075, "Learning rate", display_name="Learning rate"),
+        ConfigParam("hidden_size", int, 384, "Hidden layer size", display_name="Hidden size"),
         ConfigParam(
-            "num_hidden", int, 1, "Number of hidden layers", display_name="Num hidden layers"
+            "num_hidden", int, 3, "Number of hidden layers", display_name="Num hidden layers"
         ),
-        ConfigParam("dataset_size", int, 10000, "Dataset size", display_name="Dataset size"),
+        ConfigParam("dataset_size", int, 1300, "Dataset size", display_name="Dataset size"),
         ConfigParam(
             "checkpoint_path",
             str,
@@ -38,7 +38,7 @@ def main() -> None:
         ConfigParam(
             "activation_function",
             str,
-            "GELU",
+            "Swish",
             "Activation function to use in the model",
             choices=[
                 "ReLU",
@@ -59,15 +59,22 @@ def main() -> None:
         ConfigParam(
             "min_lr_ratio",
             float,
-            0.001,
+            0.0001,
             "Ratio of minimum learning rate to initial learning rate (for cosine annealing)",
             display_name="Min LR ratio",
         ),
         ConfigParam(
-            "gamma",
+            "gamma_max",
             float,
             1.0,
-            "Discount factor for reward calculation",
+            "Discount factor for reward calculation (max, end)",
+            display_name="Discount factor",
+        ),
+        ConfigParam(
+            "gamma_min",
+            float,
+            0.9,
+            "Discount factor for reward calculation (min, start)",
             display_name="Discount factor",
         ),
     ]
@@ -91,14 +98,15 @@ def main() -> None:
     checkpoint_path = config["checkpoint_path"]
     activation_function = config["activation_function"]
     min_lr_ratio = config["min_lr_ratio"]
-    gamma = config["gamma"]
+    gamma_min = config["gamma_min"]
+    gamma_max = config["gamma_max"]
 
     if mode == "test":
         # Test mode
         test_episode.main(checkpoint_path=checkpoint_path)
     else:
         # Create return calculator and model
-        return_calculator = MonteCarloReturnCalculator(gamma=gamma)
+        return_calculator = MonteCarloReturnCalculator()
         model = SingleTurnScoreMaximizerREINFORCETrainer(
             hidden_size=hidden_size,
             learning_rate=learning_rate,
@@ -109,6 +117,8 @@ def main() -> None:
             activation_function=activation_function,
             max_epochs=epochs,
             min_lr_ratio=min_lr_ratio,
+            gamma_min=gamma_min,
+            gamma_max=gamma_max,
         )
 
         # Create trainer

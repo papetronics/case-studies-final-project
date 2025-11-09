@@ -25,6 +25,8 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         activation_function: ActivationFunctionName,
         max_epochs: int,
         min_lr_ratio: float,
+        gamma_max: float,
+        gamma_min: float,
         return_calculator: ReturnCalculator | None = None,
         baseline_alpha: float = 0.1,
     ):
@@ -44,8 +46,11 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         self.baseline_alpha: float = baseline_alpha
         self.max_epochs: int = max_epochs
         self.min_lr_ratio: float = min_lr_ratio
+        self.gamma_max: float = gamma_max
+        self.gamma_min: float = gamma_min
 
         self.return_calculator: ReturnCalculator = return_calculator or MonteCarloReturnCalculator()
+        self.return_calculator.gamma = self.gamma_min
 
         self.baseline: float = 0.0
 
@@ -187,6 +192,18 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
                 "frequency": 1,  # Check every epoch
             },
         }
+
+    def on_train_epoch_start(self) -> None:
+        """Update gamma linearly from gamma_min to gamma_max over training."""
+        if self.max_epochs > 1:
+            # Linear interpolation from gamma_min to gamma_max
+            progress = self.current_epoch / (self.max_epochs - 1)
+            current_gamma = self.gamma_min + progress * (self.gamma_max - self.gamma_min)
+        else:
+            current_gamma = self.gamma_max
+
+        self.return_calculator.gamma = current_gamma
+        self.log("train/gamma", current_gamma, prog_bar=False)
 
     def on_train_start(self) -> None:
         """Initialize environments at the start of training."""
