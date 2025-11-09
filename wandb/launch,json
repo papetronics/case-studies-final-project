@@ -1,0 +1,17 @@
+{
+  "args": [
+    "--scenario",
+    "single_turn_score_maximizer"
+  ],
+  "entry_point": [],
+  "run_config": {
+    "epochs": 25,
+    "episodes_per_batch": 52,
+    "learning_rate": 0.00075,
+    "hidden_size": 384, 
+    "num_hidden": 3,
+    "dataset_size": 1300,
+    "activation_function": "Swish",
+    "min_lr_ratio": 0.01
+  }
+}
