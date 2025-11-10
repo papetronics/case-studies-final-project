@@ -151,7 +151,9 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
             episodes.append(episode)
             total_reward += episode.reward
 
-        policy_loss = torch.tensor([0.0], device=self.device)
+        # Collect all advantages and log probabilities
+        advantages = []
+        log_probs_list = []
 
         for episode in episodes:
             returns = self.return_calculator.calculate_returns(episode)
@@ -159,7 +161,21 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
             for step_idx, log_prob in enumerate(episode.log_probs):
                 step_return = returns[step_idx]
                 advantage = step_return - self.baseline
-                policy_loss -= log_prob * advantage
+                advantages.append(advantage)
+                log_probs_list.append(log_prob)
+
+        # Convert to tensor and normalize advantages
+        advantages_tensor = torch.tensor(advantages, device=self.device)
+        normalized_advantages = (advantages_tensor - advantages_tensor.mean()) / (
+            advantages_tensor.std() + 1e-8
+        )
+
+        # Calculate policy loss with normalized advantages
+        policy_loss = torch.tensor([0.0], device=self.device)
+        for log_prob, normalized_advantage in zip(
+            log_probs_list, normalized_advantages, strict=True
+        ):
+            policy_loss -= log_prob * normalized_advantage
 
         policy_loss /= self.episodes_per_batch
 
