@@ -35,7 +35,7 @@ class GreedyScoringDataset(
         open_indices = np.random.choice(13, size=num_open, replace=False)
         open_scores[open_indices] = 1
 
-        all_scores, max_scoring_target = get_all_scores(dice, open_scores)
+        all_scores, max_scoring_target, _ = get_all_scores(dice, open_scores)
         observation = {"dice": dice, "available_categories": open_scores, "rolls_used": 2}
 
         return (

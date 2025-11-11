@@ -183,7 +183,7 @@ def print_dice_state(
 def print_available_scores(observation: Observation) -> None:
     """Print available scoring categories with potential scores."""
     if observation["phase"] == 1:  # Only show in scoring phase
-        possible_scores, _ = get_all_scores(
+        possible_scores, _, _ = get_all_scores(
             observation["dice"], observation["score_sheet_available_mask"]
         )
 

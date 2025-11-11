@@ -11,6 +11,7 @@ from utilities.scoring_helper import (
     BONUS_POINTS,
     MINIMUM_UPPER_SCORE_FOR_BONUS,
     NUMBER_OF_DICE,
+    YAHTZEE_BONUS_SCORE,
     ScoreCategory,
     get_all_scores,
 )
@@ -149,7 +150,7 @@ class DiceState:
         """Score the dice for the given category and update the scoresheet."""
         current_upper_score = np.sum(self.score_sheet[0:6])
 
-        score, _ = get_all_scores(self.dice, self.score_sheet_available_mask)
+        score, _, joker_rules_active = get_all_scores(self.dice, self.score_sheet_available_mask)
         if self.score_sheet_available_mask[category] != 1:
             raise CategoryAlreadyFilledError(category)
         self.score_sheet_available_mask[category] = 0  # Mark as filled
@@ -172,7 +173,11 @@ class DiceState:
         self.dice.sort()
 
         score_in_chosen_category: int = score[category]
-        return score_in_chosen_category + bonus
+        return (
+            score_in_chosen_category
+            + bonus
+            + (YAHTZEE_BONUS_SCORE if joker_rules_active and score_in_chosen_category != 0 else 0)
+        )
 
 
 class YahtzeeEnv(gym.Env[Observation, Action]):
