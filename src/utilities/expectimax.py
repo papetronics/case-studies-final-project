@@ -6,7 +6,7 @@ import numpy as np
 from numpy.typing import NDArray
 from tqdm import tqdm
 
-from .scoring_helper import ScoreCategory, get_all_scores
+from .scoring_helper import get_all_scores
 
 DiceType = tuple[int, int, int, int, int]
 ActionType = tuple[int, int, int, int, int]
@@ -48,8 +48,7 @@ def build_transitions(
     """
     transitions: dict[DiceType, dict[ActionType, dict[DiceType, float]]] = {}
 
-    print("Building transition model...")
-    for dice in tqdm(dice_states, total=len(dice_states)):
+    for dice in dice_states:
         transitions[dice] = {}
 
         for action in dice_masks:
@@ -102,11 +101,16 @@ def build_r2_cache(
 ) -> dict[DiceType, tuple[int, int]]:
     """Build a cache of all possible dice states to their best score and category."""
     r2_cache: dict[DiceType, tuple[int, int]] = {}
-    for dice in tqdm(dice_states, total=len(dice_states)):
+    for dice in dice_states:
         if dice not in r2_cache:
             dice_array = np.array(dice, dtype=np.int_)
             scores, _ = get_all_scores(dice_array, open_scores=open_scores)
-            best_category: int = int(scores.argmax())
+
+            # Mask closed categories by setting them to -1 for argmax selection
+            scores_masked = scores.copy()
+            scores_masked[open_scores == 0] = -1
+
+            best_category: int = int(scores_masked.argmax())
             best_score: int = scores[best_category]
             r2_cache[dice] = (best_category, best_score)
 
@@ -121,7 +125,7 @@ def build_r1_cache(
 ) -> dict[DiceType, tuple[ActionType, float]]:
     """Build a cache for all possible dice states at depth 1."""
     r1_cache: dict[DiceType, tuple[ActionType, float]] = {}
-    for dice in tqdm(dice_states, total=len(dice_states)):
+    for dice in dice_states:
         if dice in r1_cache:
             continue
 
@@ -148,43 +152,37 @@ def build_r1_cache(
 
 
 def build_r0_cache(
-    dice_states: set[DiceType],
+    dice: DiceType,
     dice_masks: list[ActionType],
     transitions: dict[DiceType, dict[ActionType, dict[DiceType, float]]],
     r1_cache: dict[DiceType, tuple[ActionType, float]],
-) -> dict[DiceType, tuple[ActionType, float]]:
-    """Build a cache for all possible dice states at depth 0."""
-    r0_cache: dict[DiceType, tuple[ActionType, float]] = {}
-    for dice in tqdm(dice_states, total=len(dice_states)):
-        if dice in r0_cache:
-            continue
+) -> tuple[ActionType, float]:
+    """Build the best action and value for a specific dice state at depth 0."""
+    action_values: NDArray[np.float32] = np.zeros(len(dice_masks), dtype=np.float32)
 
-        action_values: NDArray[np.float32] = np.zeros(len(dice_masks), dtype=np.float32)
+    for i, action in enumerate(dice_masks):
+        # Use transition probabilities to compute expected value
+        expected_value = 0.0
+        transition_probs = transitions[dice][action]
 
-        for i, action in enumerate(dice_masks):
-            # Use transition probabilities to compute expected value
-            expected_value = 0.0
-            transition_probs = transitions[dice][action]
+        for next_dice, probability in transition_probs.items():
+            _, best_value = r1_cache[next_dice]
+            expected_value += probability * best_value
 
-            for next_dice, probability in transition_probs.items():
-                _, best_value = r1_cache[next_dice]
-                expected_value += probability * best_value
+        action_values[i] = expected_value
 
-            action_values[i] = expected_value
+    # max
+    best_action_i = int(action_values.argmax())
+    best_action: ActionType = dice_masks[best_action_i]
+    best_action_value: float = action_values[best_action_i]
 
-        # max
-        best_action_i = int(action_values.argmax())
-        best_action: ActionType = dice_masks[best_action_i]
-        best_action_value: float = action_values[best_action_i]
-        r0_cache[dice] = (best_action, best_action_value)
-
-    return r0_cache
+    return (best_action, best_action_value)
 
 
 def expectimax_dp(
     dice: DiceType,
     roll_count: int,
-    r0_cache: dict[DiceType, tuple[ActionType, float]],
+    r0_result: tuple[ActionType, float] | None,
     r1_cache: dict[DiceType, tuple[ActionType, float]],
     r2_cache: dict[DiceType, tuple[int, int]],
 ) -> tuple[ActionType | int, float]:
@@ -198,7 +196,9 @@ def expectimax_dp(
     state_key: DiceType = cast("DiceType", tuple(sorted_dice))
 
     if roll_count == 0:
-        best_action, expected_value = r0_cache[state_key]
+        if r0_result is None:
+            raise RuntimeError("r0_result not initialized")  # noqa: TRY003
+        best_action, expected_value = r0_result
         return best_action, expected_value
     elif roll_count == 1:
         best_action, expected_value = r1_cache[state_key]
@@ -219,23 +219,40 @@ class ExpectimaxAgent:
         self.dice_masks = list(all_dice_masks())
         self.transitions = build_transitions(self.dice_states, self.dice_masks)
 
-        self.r0_cache: dict[DiceType, tuple[ActionType, float]] | None = None
+        # Global cache for r1 and r2 caches keyed by scoresheet mask
+        # This allows reuse across multiple games for common scoresheet states
+        self.scoresheet_cache: dict[
+            tuple[int, ...],
+            tuple[dict[DiceType, tuple[ActionType, float]], dict[DiceType, tuple[int, int]]],
+        ] = {}
+
+        self.r0_result: tuple[ActionType, float] | None = None
         self.r1_cache: dict[DiceType, tuple[ActionType, float]] | None = None
         self.r2_cache: dict[DiceType, tuple[int, int]] | None = None
 
-    def init_round(self, scoresheet: NDArray[np.int_]) -> None:
-        """Initialize caches for a new round based on the current scoresheet.
+    def init_round(self, dice: DiceType, scoresheet: NDArray[np.int_]) -> None:
+        """Initialize caches for a new round based on the current dice and scoresheet.
 
         Args:
+            dice: Current dice state at the start of the round
             scoresheet: Array indicating which categories are still open (1) or filled (0)
         """
-        self.r2_cache = build_r2_cache(self.dice_states, scoresheet)
-        self.r1_cache = build_r1_cache(
-            self.dice_states, self.dice_masks, self.transitions, self.r2_cache
-        )
-        self.r0_cache = build_r0_cache(
-            self.dice_states, self.dice_masks, self.transitions, self.r1_cache
-        )
+        # Convert scoresheet to tuple for use as dict key
+        scoresheet_key = tuple(scoresheet.tolist())
+
+        # Check if we've already computed r1 and r2 caches for this scoresheet
+        if scoresheet_key in self.scoresheet_cache:
+            self.r1_cache, self.r2_cache = self.scoresheet_cache[scoresheet_key]
+        else:
+            # Compute and cache r1 and r2 for this scoresheet
+            self.r2_cache = build_r2_cache(self.dice_states, scoresheet)
+            self.r1_cache = build_r1_cache(
+                self.dice_states, self.dice_masks, self.transitions, self.r2_cache
+            )
+            self.scoresheet_cache[scoresheet_key] = (self.r1_cache, self.r2_cache)
+
+        # Always compute r0 for the specific dice state
+        self.r0_result = build_r0_cache(dice, self.dice_masks, self.transitions, self.r1_cache)
 
     def select_action(self, dice: DiceType, roll_count: int) -> tuple[ActionType | int, float]:
         """Select the best action for the current dice state and roll count.
@@ -250,34 +267,50 @@ class ExpectimaxAgent:
             - If roll_count < 2: best_action is an ActionType (hold mask)
             - If roll_count == 2: best_action is an int (category to score)
         """
-        if self.r0_cache is None or self.r1_cache is None or self.r2_cache is None:
+        if self.r0_result is None or self.r1_cache is None or self.r2_cache is None:
             raise RuntimeError("Caches not initialized. Call init_round() first.")  # noqa: TRY003
 
-        return expectimax_dp(dice, roll_count, self.r0_cache, self.r1_cache, self.r2_cache)
+        return expectimax_dp(dice, roll_count, self.r0_result, self.r1_cache, self.r2_cache)
 
 
 if __name__ == "__main__":
-    # Test the agent
+    import gymnasium as gym  # noqa: I001
+    from environments.full_yahtzee_env import YahtzeeEnv, RollingAction, ScoringAction
+
     agent = ExpectimaxAgent()
+    env: YahtzeeEnv = cast("YahtzeeEnv", gym.make("FullYahtzee-v1"))
 
-    # Initialize for a new round with all categories open
-    open_scores = np.ones(13, dtype=np.int_)
-    agent.init_round(open_scores)
+    num_games = 1000
+    all_rewards = []
 
-    # Test dice state
-    dice = (1, 1, 6, 6, 6)
+    for _ in tqdm(range(num_games)):
+        obs, _ = env.reset()
+        dice_tuple = tuple(sorted(obs["dice"]))
+        agent.init_round(dice_tuple, obs["score_sheet_available_mask"])
 
-    # Test roll 0
-    action, value = agent.select_action(dice, roll_count=0)
-    print(f"Roll 0 - dice {dice}: best action = {action}, expected value = {value:.2f}")
+        total_reward = 0.0
+        terminated = False
 
-    # Test roll 1
-    action, value = agent.select_action(dice, roll_count=1)
-    print(f"Roll 1 - dice {dice}: best action = {action}, expected value = {value:.2f}")
+        while not terminated:
+            dice_tuple = tuple(sorted(obs["dice"]))
+            action, exp_value = agent.select_action(dice_tuple, obs["rolls_used"])
 
-    # Test roll 2 (scoring)
-    action, value = agent.select_action(dice, roll_count=2)
-    print(
-        f"Roll 2 - dice {dice}: best category = {ScoreCategory.LABELS[int(action)] if isinstance(action, int) else action}, "
-        f"score = {value:.2f}"
-    )
+            if isinstance(action, tuple):
+                hold_mask: np.ndarray = np.array(action, dtype=np.bool)
+                r_act: RollingAction = {"hold_mask": hold_mask}
+                obs, reward, terminated, _, _ = env.step(r_act)
+            else:
+                s_act: ScoringAction = {"score_category": action}
+                obs, reward, terminated, _, _ = env.step(s_act)
+
+            total_reward += float(reward)
+
+            if not terminated and obs["phase"] == 0 and obs["rolls_used"] == 0:
+                dice_tuple = tuple(sorted(obs["dice"]))
+                agent.init_round(dice_tuple, obs["score_sheet_available_mask"])
+
+        all_rewards.append(total_reward)
+
+    rewards_array = np.array(all_rewards)
+    print(f"Mean score: {rewards_array.mean():.2f}")
+    print(f"Std dev: {rewards_array.std():.2f}")
