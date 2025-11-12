@@ -64,13 +64,15 @@ def run_episode(
 
     with torch.no_grad():
         while True:
-            actions, _ = model.sample_observation(obs)
+            actions, _, v_est = model.sample_observation(obs)
             hold_action_tensor, scoring_action_tensor = actions
 
             action = {
                 "hold_mask": hold_action_tensor.cpu().numpy().astype(bool),
                 "score_category": scoring_action_tensor.cpu().item(),
             }
+
+            print(f"\nValue Estimate of Current State: {v_est.item():.2f}")
 
             # Track dice state for display
             if obs["phase"] == 0:

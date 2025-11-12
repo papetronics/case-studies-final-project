@@ -17,13 +17,17 @@ class Episode(Generic[ObsType, ActType]):
         self.states: list[ObsType] = []
         self.actions: list[ActType] = []
         self.log_probs: list[torch.Tensor] = []
+        self.v_ests: list[torch.Tensor] = []
         self.reward: float = 0.0
 
-    def add_step(self, state: ObsType, action: ActType, log_prob: torch.Tensor) -> None:
+    def add_step(
+        self, state: ObsType, action: ActType, log_prob: torch.Tensor, v_est: torch.Tensor
+    ) -> None:
         """Add a step to the episode."""
         self.states.append(state)
         self.actions.append(action)
         self.log_probs.append(log_prob)
+        self.v_ests.append(v_est)
 
     def set_reward(self, reward: float) -> None:
         """Set the final reward for the episode."""

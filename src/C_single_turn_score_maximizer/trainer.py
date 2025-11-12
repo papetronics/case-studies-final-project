@@ -70,7 +70,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         reward: SupportsFloat = 0.0
 
         for _ in range(3):  # roll, roll, score
-            actions, log_probs = self.policy_net.sample_observation(observation)
+            actions, log_probs, v_est = self.policy_net.sample_observation(observation)
             rolling_action_tensor, scoring_action_tensor = actions
             rolling_log_prob, scoring_log_prob = log_probs
 
@@ -83,7 +83,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
                 action = {"score_category": score_category}
                 log_prob = scoring_log_prob
 
-            episode.add_step(observation, action, log_prob)
+            episode.add_step(observation, action, log_prob, v_est)
 
             observation, reward, terminated, truncated, _ = self.env.step(action)
 
@@ -105,7 +105,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         while True:
             # Use the trained policy to select actions
             with torch.no_grad():
-                actions, _ = self.policy_net.sample_observation(observation)
+                actions, _, _ = self.policy_net.sample_observation(observation)
                 rolling_action_tensor, scoring_action_tensor = actions
 
                 action: Action
@@ -143,26 +143,32 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
 
     def training_step(self, batch: torch.Tensor, batch_idx: int) -> torch.Tensor:  # noqa: ARG002
         """Perform a training step using REINFORCE algorithm."""
-        episodes = []
         total_reward = 0.0
-
-        for _ in range(self.episodes_per_batch):
-            episode: Episode = self.collect_episode()
-            episodes.append(episode)
-            total_reward += episode.reward
 
         # Collect all advantages and log probabilities
         advantages = []
         log_probs_list = []
+        v_ests_list = []
+        returns_list = []
 
-        for episode in episodes:
+        for _ in range(self.episodes_per_batch):
+            episode: Episode = self.collect_episode()
+            total_reward += episode.reward
+
             returns = self.return_calculator.calculate_returns(episode)
 
             for step_idx, log_prob in enumerate(episode.log_probs):
                 step_return = returns[step_idx]
-                advantage = step_return - self.baseline
+                v_est = episode.v_ests[step_idx]
+
+                advantage = (
+                    step_return - v_est.item()
+                )  # use item so we don't double backprop through v_est
+
                 advantages.append(advantage)
                 log_probs_list.append(log_prob)
+                v_ests_list.append(v_est)
+                returns_list.append(step_return)
 
         # Convert to tensor and normalize advantages
         advantages_tensor = torch.tensor(advantages, device=self.device)
@@ -180,16 +186,28 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         policy_loss /= self.episodes_per_batch
 
         avg_reward = total_reward / self.episodes_per_batch
+
+        # Calculate value loss (batched)
+
+        ## TODO: try huber loss torch.nn.functional.smooth_l1_loss
+        ## TODO: try centering:
+        # G = torch.tensor(returns_list, device=self.device, dtype=v_ests_list[0].dtype)
+        # Gc = G - G.mean()
+        # value_loss = torch.nn.functional.smooth_l1_loss(torch.stack(v_ests_list).squeeze(), Gc)
+        v_loss = torch.nn.functional.mse_loss(
+            torch.stack(v_ests_list).squeeze(), torch.tensor(returns_list, device=self.device)
+        )
         self.baseline = (1 - self.baseline_alpha) * self.baseline + self.baseline_alpha * avg_reward
 
         self.log("train/policy_loss", policy_loss, prog_bar=True)
         self.log("train/avg_reward", avg_reward, prog_bar=True)
         self.log("train/baseline", self.baseline, prog_bar=False)
+        self.log("train/v_loss", v_loss, prog_bar=False)
         # Log current learning rate
         current_lr = self.trainer.optimizers[0].param_groups[0]["lr"]
         self.log("lr", current_lr, prog_bar=False)
 
-        return policy_loss
+        return policy_loss + 0.05 * v_loss
 
     def configure_optimizers(self):  # noqa: ANN201
         """Configure optimizers and learning rate schedulers."""
