@@ -19,8 +19,9 @@ echo "✅ Image built successfully: $IMAGE_NAME"
 
 echo "🚀 Running container..."
 
-# Ensure logs directory exists with correct permissions
+# Ensure logs and checkpoints directories exist with correct permissions
 mkdir -p "$(pwd)/logs"
+mkdir -p "$(pwd)/checkpoints"
 
 # Determine if we need interactive mode (for test scripts)
 DOCKER_FLAGS="--rm --gpus all"
@@ -32,6 +33,7 @@ fi
 docker run $DOCKER_FLAGS \
   -u "$(id -u):$(id -g)" \
   -v "$(pwd)/logs":/workspace/logs \
+  -v "$(pwd)/checkpoints":/opt/ml/checkpoints \
   -v /etc/passwd:/etc/passwd:ro \
   -v /etc/group:/etc/group:ro \
   -e WANDB_MODE=offline \
