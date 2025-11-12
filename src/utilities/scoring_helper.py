@@ -71,7 +71,7 @@ def get_all_scores(
 
     Returns
     -------
-        Tuple of (masked_scores, max_scoring_target, joker_rules_active) both of shape (13,)
+        Tuple of (masked_scores, max_scoring_target, joker_rules_active) where the first two have shape (13,) and the third is a boolean
     """
     # Count occurrences of each die face (1-6)
     counts = np.bincount(dice, minlength=7)[1:]  # Ignore index 0
