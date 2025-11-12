@@ -134,9 +134,10 @@ def main() -> None:
 
         ckpt_cb = ModelCheckpoint(
             dirpath=checkpoint_dir,
-            save_last=True,
-            save_top_k=0,
-            every_n_train_steps=1000,  # or every_n_epochs=1
+            save_last=True,  # keep only last.ckpt (rolling)
+            save_top_k=0,  # do NOT keep k-best; disables metric-based saves
+            every_n_epochs=1,  # save at end of every training epoch
+            save_on_train_epoch_end=True,
         )
 
         # Create trainer
