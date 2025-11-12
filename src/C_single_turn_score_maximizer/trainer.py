@@ -189,7 +189,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
 
         # Calculate value loss (batched)
         v_loss = torch.nn.functional.mse_loss(
-            torch.stack(v_ests_list), torch.tensor(returns_list, device=self.device)
+            torch.stack(v_ests_list).squeeze(), torch.tensor(returns_list, device=self.device)
         )
         self.baseline = (1 - self.baseline_alpha) * self.baseline + self.baseline_alpha * avg_reward
 
