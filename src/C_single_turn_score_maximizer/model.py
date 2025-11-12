@@ -6,7 +6,7 @@ import torch
 from torch import nn
 
 from environments.full_yahtzee_env import Observation
-from src.utilities.scoring_helper import YAHTZEE_SCORE, ScoreCategory
+from utilities.scoring_helper import YAHTZEE_SCORE, ScoreCategory
 from utilities.sequential_block import SequentialBlock
 
 
