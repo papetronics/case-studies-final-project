@@ -188,6 +188,12 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         avg_reward = total_reward / self.episodes_per_batch
 
         # Calculate value loss (batched)
+
+        ## TODO: try huber loss torch.nn.functional.smooth_l1_loss
+        ## TODO: try centering:
+        # G = torch.tensor(returns_list, device=self.device, dtype=v_ests_list[0].dtype)
+        # Gc = G - G.mean()
+        # value_loss = torch.nn.functional.smooth_l1_loss(torch.stack(v_ests_list).squeeze(), Gc)
         v_loss = torch.nn.functional.mse_loss(
             torch.stack(v_ests_list).squeeze(), torch.tensor(returns_list, device=self.device)
         )
@@ -201,7 +207,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         current_lr = self.trainer.optimizers[0].param_groups[0]["lr"]
         self.log("lr", current_lr, prog_bar=False)
 
-        return policy_loss + 0.5 * v_loss
+        return policy_loss + 0.05 * v_loss
 
     def configure_optimizers(self):  # noqa: ANN201
         """Configure optimizers and learning rate schedulers."""
