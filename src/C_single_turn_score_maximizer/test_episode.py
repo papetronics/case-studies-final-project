@@ -237,7 +237,7 @@ def print_action_description(
         # Scoring action
         category = scoring_action_tensor.cpu().item()
         category_name = ScoreCategory.LABELS[int(category)]
-        possible_scores, _ = get_all_scores(
+        possible_scores, _, _ = get_all_scores(
             observation["dice"], observation["score_sheet_available_mask"]
         )
         score = possible_scores[int(category)]
