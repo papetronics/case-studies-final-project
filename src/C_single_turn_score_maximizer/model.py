@@ -6,6 +6,7 @@ import torch
 from torch import nn
 
 from environments.full_yahtzee_env import Observation
+from src.utilities.scoring_helper import YAHTZEE_SCORE, ScoreCategory
 from utilities.sequential_block import SequentialBlock
 
 
@@ -125,6 +126,8 @@ def observation_to_tensor(observation: Observation, bonus_flags: set[BonusFlags]
     dice_onehot = np.eye(6)[dice - 1].flatten()
     rolls_onehot = np.eye(3)[rolls_used]
 
+    has_earned_yahtzee = observation["score_sheet"][ScoreCategory.YAHTZEE] == YAHTZEE_SCORE
+
     # print(available_categories)
 
     input_vector = np.concatenate(
@@ -134,6 +137,7 @@ def observation_to_tensor(observation: Observation, bonus_flags: set[BonusFlags]
             rolls_onehot,
             np.array(bonus_information),
             [phase],
+            [has_earned_yahtzee],
             available_categories,
         ]
     )
@@ -209,7 +213,9 @@ class TurnScoreMaximizer(nn.Module):
         #   - Available Categories [13]: One-hot encoding of available scoring categories = 13
         #   - Current Phase [1]: Current phase of the game (0: rolling, 1: scoring) = 1
         #   - Dice Counts [6]: Counts of each die face (1-6) = 6
-        input_size = 30 + 3 + 13 + 1 + 6 + len(self.bonus_flags)
+        #   - Bonus Information [varies]: Various bonus-related inputs = len(self.bonus_flags)
+        #   - Has Earned Yahtzee [1]: Whether the player has already scored a Yahtzee = 1
+        input_size = 30 + 3 + 13 + 1 + 6 + len(self.bonus_flags) + 1
 
         ## 18 Model outputs:
         #   - Action Probabilities [5]: Probability of re-rolling each of the 5 dice
