@@ -243,10 +243,10 @@ class TurnScoreMaximizer(nn.Module):
         self.masked_softmax = MaskedSoftmax().to(self.device)
 
         value_head_layers: list[nn.Module] = [
-            Block(hidden_size, hidden_size, dropout_rate, activation),
+            Block(hidden_size, hidden_size, 0.0, activation),
         ]
-        if dropout_rate > 0.0:
-            value_head_layers.append(nn.Dropout(dropout_rate))
+        # if dropout_rate > 0.0:
+        #    value_head_layers.append(nn.Dropout(dropout_rate))
         value_head_layers.append(nn.Linear(hidden_size, 1))
         value_head_layers.append(nn.ELU())
 
