@@ -82,6 +82,13 @@ def main() -> None:
             "Discount factor for reward calculation (min, start)",
             display_name="Discount factor",
         ),
+        ConfigParam(
+            "dropout_rate",
+            float,
+            0.1,
+            "Dropout rate for the model",
+            display_name="Dropout rate",
+        ),
     ]
 
     # Initialize project with configuration
@@ -105,6 +112,7 @@ def main() -> None:
     min_lr_ratio = config["min_lr_ratio"]
     gamma_min = config["gamma_min"]
     gamma_max = config["gamma_max"]
+    dropout_rate = config["dropout_rate"]
 
     if mode == "test":
         # Test mode
@@ -118,7 +126,7 @@ def main() -> None:
             episodes_per_batch=episodes_per_batch,
             return_calculator=return_calculator,
             num_hidden=num_hidden,
-            dropout_rate=0.1,
+            dropout_rate=dropout_rate,
             activation_function=activation_function,
             max_epochs=epochs,
             min_lr_ratio=min_lr_ratio,
