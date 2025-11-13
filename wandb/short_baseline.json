@@ -9,9 +9,9 @@
         "hidden_size": 384,
         "num_hidden": 3,
         "activation_function": "Swish",
-        "min_lr_ratio": 0.0001,
-        "gamma_min": 0.99,
+        "min_lr_ratio": 0.001,
+        "gamma_min": 0.95,
         "gamma_max": 1.0,
-        "dropout_rate": 0.05
+        "dropout_rate": 0.125
     }
 }
