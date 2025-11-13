@@ -1,10 +1,9 @@
-from typing import TYPE_CHECKING, SupportsFloat, cast
+from typing import TYPE_CHECKING, cast
 
 import gymnasium as gym
 import torch
 
 from environments.full_yahtzee_env import Action, Observation, YahtzeeEnv
-from utilities.episode import Episode
 from utilities.return_calculators import ReturnCalculator
 
 if TYPE_CHECKING:
@@ -56,16 +55,25 @@ class SelfPlayDataset(torch.utils.data.Dataset[torch.Tensor]):
         torch.Tensor
             A tensor of shape (3, 3) containing [return, log_prob, v_est] for each of the 3 steps
         """
-        episode = Episode()
         unwrapped: YahtzeeEnv = cast("YahtzeeEnv", self.env.unwrapped)
         observation = unwrapped.observe()
 
         # This is a bit of a hack, the environment supports full turns, but our model is single-turn
         # so we are just going to cut it off after 3 steps and pretend that is an episode.
         # we reset the environment whenever it terminates, that brings us back to an empty scoresheet.
-        reward: SupportsFloat = 0.0
 
-        for _ in range(3):  # roll, roll, score
+        # Pre-allocate tensors for the episode (3 steps)
+        num_steps = 3
+
+        # Get device from policy network
+        device = next(self.policy_net.parameters()).device
+
+        # Pre-allocate tensors for log_probs, v_ests, and rewards (preserves gradients with indexing)
+        log_probs_tensor = torch.zeros(num_steps, device=device)
+        v_ests_tensor = torch.zeros(num_steps, device=device)
+        rewards = torch.zeros(num_steps, dtype=torch.float32, device=device)
+
+        for step_idx in range(num_steps):  # roll, roll, score
             actions, log_probs, v_est = self.policy_net.sample_observation(observation)
             rolling_action_tensor, scoring_action_tensor = actions
             rolling_log_prob, scoring_log_prob = log_probs
@@ -79,40 +87,28 @@ class SelfPlayDataset(torch.utils.data.Dataset[torch.Tensor]):
                 action = {"score_category": score_category}
                 log_prob = scoring_log_prob
 
-            episode.add_step(observation, action, log_prob, v_est)
+            # Store log_prob and v_est using indexing (preserves gradients)
+            log_probs_tensor[step_idx] = log_prob.squeeze()
+            v_ests_tensor[step_idx] = v_est.squeeze()
 
             observation, reward, terminated, truncated, _ = self.env.step(action)
+            rewards[step_idx] = float(reward)
 
             if terminated or truncated:
                 observation, _ = self.env.reset()
 
-        episode.set_reward(float(reward))
-
         # sanity check: after 3 rolls we should always have rolls_used == 0 (new turn) and phase == 0
         assert observation["rolls_used"] == 0 and observation["phase"] == 0
 
-        # Calculate returns for this episode
-        returns = self.return_calculator.calculate_returns(episode)
+        # Calculate returns using Monte Carlo (backward pass): G_t = r_t + gamma * G_{t+1}
+        gamma = self.return_calculator.gamma
+        returns = torch.zeros(num_steps, dtype=torch.float32, device=device)
+        g = 0.0
+        for t in reversed(range(num_steps)):
+            g = rewards[t] + gamma * g
+            returns[t] = g
 
-        # Build a tensor of shape (3, 3) containing [return, log_prob, v_est] for each step
-        step_data = []
-        for step_idx in range(len(episode)):
-            step_return = returns[step_idx]
-            log_prob = episode.log_probs[step_idx]
-            v_est = episode.v_ests[step_idx]
-
-            # Stack: [return, log_prob, v_est]
-            # Keep tensors to preserve gradients - don't call .item()!
-            step_tensor = torch.stack(
-                [
-                    torch.tensor(step_return, dtype=torch.float32).to(log_prob.device),
-                    log_prob.squeeze(),
-                    v_est.squeeze(),
-                ]
-            )
-            step_data.append(step_tensor)
-
-        # Stack all steps: shape (3, 3)
-        episode_tensor = torch.stack(step_data)
+        # Build final tensor of shape (3, 3) containing [return, log_prob, v_est]
+        episode_tensor = torch.stack([returns, log_probs_tensor, v_ests_tensor], dim=1)
 
         return episode_tensor
