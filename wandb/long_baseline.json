@@ -3,8 +3,8 @@
   "entry_point": [],
   "run_config": {
     "epochs": 2000,
-    "games_per_epoch": 50,
-    "games_per_batch": 2,
+    "games_per_epoch": 100,
+    "games_per_batch": 4,
     "learning_rate": 0.0001,
     "hidden_size": 384,
     "num_hidden": 3,

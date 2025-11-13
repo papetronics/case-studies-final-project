@@ -53,8 +53,8 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         total_score = 0.0
 
         while True:
-            # Use the trained policy to select actions
             with torch.no_grad():
+                # Use the trained policy to select actions
                 actions, _, _ = self.policy_net.sample_observation(observation)
                 rolling_action_tensor, scoring_action_tensor = actions
 

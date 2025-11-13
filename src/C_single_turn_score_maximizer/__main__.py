@@ -40,14 +40,14 @@ def main() -> None:
         ConfigParam(
             "games_per_epoch",
             int,
-            50,
+            100,
             "Number of complete Yahtzee games per epoch",
             display_name="Games per epoch",
         ),
         ConfigParam(
             "games_per_batch",
             int,
-            2,
+            4,
             "Number of complete Yahtzee games per batch (must divide games_per_epoch evenly)",
             display_name="Games per batch",
         ),
@@ -101,14 +101,14 @@ def main() -> None:
         ConfigParam(
             "gamma_min",
             float,
-            0.9,
+            0.99,
             "Discount factor for reward calculation (min, start)",
             display_name="Discount factor",
         ),
         ConfigParam(
             "dropout_rate",
             float,
-            0.1,
+            0.05,
             "Dropout rate for the model",
             display_name="Dropout rate",
         ),
