@@ -21,11 +21,11 @@ def main() -> None:
         ConfigParam("mode", str, "train", "Mode to run (train or test)", choices=["train", "test"]),
         ConfigParam("epochs", int, 500, "Number of training epochs"),
         ConfigParam(
-            "episodes_per_batch",
+            "batch_size",
             int,
             52,
-            "Episodes per training batch",
-            display_name="Episodes per batch",
+            "Batch size for training",
+            display_name="Batch size",
         ),
         ConfigParam("learning_rate", float, 0.00075, "Learning rate", display_name="Learning rate"),
         ConfigParam("hidden_size", int, 384, "Hidden layer size", display_name="Hidden size"),
@@ -102,7 +102,7 @@ def main() -> None:
     # Extract config values for easy access
     mode = config["mode"]
     epochs = config["epochs"]
-    episodes_per_batch = config["episodes_per_batch"]
+    batch_size = config["batch_size"]
     learning_rate = config["learning_rate"]
     hidden_size = config["hidden_size"]
     num_hidden = config["num_hidden"]
@@ -123,7 +123,6 @@ def main() -> None:
         model = SingleTurnScoreMaximizerREINFORCETrainer(
             hidden_size=hidden_size,
             learning_rate=learning_rate,
-            episodes_per_batch=episodes_per_batch,
             return_calculator=return_calculator,
             num_hidden=num_hidden,
             dropout_rate=dropout_rate,
@@ -164,20 +163,20 @@ def main() -> None:
         train_dataset = SelfPlayDataset(
             policy_net=model.policy_net,
             return_calculator=return_calculator,
-            size=dataset_size // episodes_per_batch,
+            size=dataset_size,
         )
         train_dataloader = torch.utils.data.DataLoader(
-            train_dataset, batch_size=episodes_per_batch, num_workers=0
+            train_dataset, batch_size=batch_size, num_workers=0
         )
 
         # Create validation dataset (just one batch)
         val_dataset = SelfPlayDataset(
             policy_net=model.policy_net,
             return_calculator=return_calculator,
-            size=episodes_per_batch,
+            size=batch_size,
         )
         val_dataloader = torch.utils.data.DataLoader(
-            val_dataset, batch_size=episodes_per_batch, num_workers=0
+            val_dataset, batch_size=batch_size, num_workers=0
         )
 
         # Train with validation

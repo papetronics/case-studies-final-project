@@ -24,7 +24,7 @@ class SelfPlayDataset(torch.utils.data.Dataset[torch.Tensor]):
         self,
         policy_net: "TurnScoreMaximizer",
         return_calculator: ReturnCalculator,
-        size: int = 1000,
+        size: int,
     ) -> None:
         """
         Initialize the self-play dataset.
@@ -105,7 +105,7 @@ class SelfPlayDataset(torch.utils.data.Dataset[torch.Tensor]):
             # Keep tensors to preserve gradients - don't call .item()!
             step_tensor = torch.stack(
                 [
-                    torch.tensor(step_return, dtype=torch.float32),
+                    torch.tensor(step_return, dtype=torch.float32).to(log_prob.device),
                     log_prob.squeeze(),
                     v_est.squeeze(),
                 ]

@@ -3,7 +3,7 @@
     "entry_point": [],
     "run_config": {
         "epochs": 500,
-        "episodes_per_batch": 52,
+        "batch_size": 52,
         "learning_rate": 0.00075,
         "hidden_size": 384,
         "num_hidden": 3,

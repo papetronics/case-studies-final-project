@@ -16,7 +16,6 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         self,
         hidden_size: int,
         learning_rate: float,
-        episodes_per_batch: int,
         num_hidden: int,
         dropout_rate: float,
         activation_function: ActivationFunctionName,
@@ -38,7 +37,6 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         )
 
         self.learning_rate: float = learning_rate
-        self.episodes_per_batch: int = episodes_per_batch
         self.max_epochs: int = max_epochs
         self.min_lr_ratio: float = min_lr_ratio
         self.gamma_max: float = gamma_max
