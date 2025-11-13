@@ -6,8 +6,8 @@ import torch
 from pytorch_lightning.callbacks import ModelCheckpoint
 
 from C_single_turn_score_maximizer import test_episode
+from C_single_turn_score_maximizer.self_play_dataset import SelfPlayDataset
 from C_single_turn_score_maximizer.trainer import SingleTurnScoreMaximizerREINFORCETrainer
-from utilities.dummy_dataset import DummyDataset
 from utilities.initialize import ConfigParam, finish, initialize
 from utilities.return_calculators import MonteCarloReturnCalculator
 
@@ -152,14 +152,24 @@ def main() -> None:
             callbacks=[ckpt_cb],
         )
 
-        # Create dummy dataloader (required by Lightning but not used)
-        dummy_dataset = DummyDataset(size=dataset_size // episodes_per_batch)
-        train_dataloader = torch.utils.data.DataLoader(dummy_dataset, batch_size=1, num_workers=15)
+        # Create self-play dataset that collects episodes using the policy
+        train_dataset = SelfPlayDataset(
+            policy_net=model.policy_net,
+            return_calculator=return_calculator,
+            size=dataset_size // episodes_per_batch,
+        )
+        train_dataloader = torch.utils.data.DataLoader(
+            train_dataset, batch_size=episodes_per_batch, num_workers=0
+        )
 
-        # Create dummy validation dataloader
-        val_dummy_dataset = DummyDataset(size=1)  # Just one batch for validation
+        # Create validation dataset (just one batch)
+        val_dataset = SelfPlayDataset(
+            policy_net=model.policy_net,
+            return_calculator=return_calculator,
+            size=episodes_per_batch,
+        )
         val_dataloader = torch.utils.data.DataLoader(
-            val_dummy_dataset, batch_size=1, num_workers=15
+            val_dataset, batch_size=episodes_per_batch, num_workers=0
         )
 
         # Train with validation
