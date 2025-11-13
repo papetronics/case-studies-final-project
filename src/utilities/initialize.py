@@ -127,6 +127,7 @@ def initialize(  # noqa: C901, PLR0912, PLR0915
             project=f"{wandb_project_prefix}-{scenario_name}",
             name=logger_name or f"{scenario_name}-training",
             log_model=True,
+            experiment=wandb_run,  # Pass existing run to maintain step synchronization
         )
     else:
         # Get log_dir from config, fallback to default if not specified
