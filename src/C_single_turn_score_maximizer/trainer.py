@@ -71,12 +71,12 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
 
         for _ in range(3):  # roll, roll, score
             actions, log_probs, v_est = self.policy_net.sample_observation(observation)
-            rolling_action_tensor, scoring_action_tensor = actions
+            rolling_action, scoring_action_tensor = actions
             rolling_log_prob, scoring_log_prob = log_probs
 
             action: Action
             if observation["phase"] == 0:
-                action = {"hold_mask": rolling_action_tensor.cpu().numpy().astype(bool)}
+                action = {"hold_mask": np.array(rolling_action, dtype=bool)}
                 log_prob = rolling_log_prob
             else:
                 score_category: int = int(scoring_action_tensor.cpu().item())
@@ -106,11 +106,11 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
             # Use the trained policy to select actions
             with torch.no_grad():
                 actions, _, _ = self.policy_net.sample_observation(observation)
-                rolling_action_tensor, scoring_action_tensor = actions
+                rolling_action, scoring_action_tensor = actions
 
                 action: Action
                 if observation["phase"] == 0:
-                    action = {"hold_mask": rolling_action_tensor.cpu().numpy().astype(bool)}
+                    action = {"hold_mask": np.array(rolling_action, dtype=bool)}
                 else:
                     score_category: int = int(scoring_action_tensor.cpu().item())
                     action = {"score_category": score_category}

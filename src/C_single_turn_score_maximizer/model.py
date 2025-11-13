@@ -1,3 +1,4 @@
+from collections.abc import Generator
 from enum import Enum, IntEnum
 from typing import Literal, cast
 
@@ -41,6 +42,22 @@ ActivationFunctionName = Literal[
     "Swish",
     "SeLU",
 ]
+
+ActionType = tuple[int, int, int, int, int]
+
+
+def all_dice_masks() -> Generator[ActionType, None, None]:
+    """Generate all possible dice hold masks (5 dice, each can be held or not)."""
+    for i in [0, 1]:
+        for j in [0, 1]:
+            for k in [0, 1]:
+                for l in [0, 1]:  # noqa: E741
+                    for m in [0, 1]:
+                        yield (i, j, k, l, m)
+
+
+DICE_MASKS = list(all_dice_masks())
+assert len(DICE_MASKS) == 32  # 2^5 possible maskss  # noqa: PLR2004
 
 
 class BonusFlags(IntEnum):
@@ -218,9 +235,9 @@ class TurnScoreMaximizer(nn.Module):
         input_size = 30 + 3 + 13 + 1 + 6 + len(self.bonus_flags) + 1
 
         ## 18 Model outputs:
-        #   - Action Probabilities [5]: Probability of re-rolling each of the 5 dice
+        #   - Action Probabilities [32]: Probability of selecting a particular dice mask
         #   - Scoring probabilities [13]: Probability of selecting each scoring category
-        dice_output_size = 5
+        dice_output_size = len(DICE_MASKS)
         scoring_output_size = 13
 
         layers = [Block(input_size, hidden_size, dropout_rate, activation)]
@@ -292,7 +309,7 @@ class TurnScoreMaximizer(nn.Module):
 
     def sample_observation(
         self, observation: Observation
-    ) -> tuple[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
+    ) -> tuple[tuple[ActionType, torch.Tensor], tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
         """Sample an action given an observation dictionary."""
         return self.sample(
             observation_to_tensor(observation, self.bonus_flags).unsqueeze(0).to(self.device)
@@ -300,17 +317,19 @@ class TurnScoreMaximizer(nn.Module):
 
     def sample(
         self, x: torch.Tensor
-    ) -> tuple[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
+    ) -> tuple[tuple[ActionType, torch.Tensor], tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
         """Sample an action given an input tensor."""
         rolling_probs, scoring_probs, value_est = self.forward(x)
         # print(rolling_probs)
         # print(scoring_probs)
-        rolling_dist = torch.distributions.Bernoulli(rolling_probs)
+
+        rolling_dist = torch.distributions.Categorical(rolling_probs)
         rolling_tensor = rolling_dist.sample()
         rolling_log_prob = rolling_dist.log_prob(rolling_tensor).sum()
+        rolling_mask = DICE_MASKS[int(rolling_tensor.item())]
 
         scoring_dist = torch.distributions.Categorical(scoring_probs)
         scoring_tensor = scoring_dist.sample()
         scoring_log_prob = scoring_dist.log_prob(scoring_tensor).sum()
 
-        return (rolling_tensor, scoring_tensor), (rolling_log_prob, scoring_log_prob), value_est
+        return (rolling_mask, scoring_tensor), (rolling_log_prob, scoring_log_prob), value_est
