@@ -3,11 +3,11 @@
     "entry_point": [],
     "run_config": {
         "epochs": 500,
-        "batch_size": 52,
+        "games_per_epoch": 50,
+        "games_per_batch": 2,
         "learning_rate": 0.00075,
         "hidden_size": 384,
         "num_hidden": 3,
-        "dataset_size": 1300,
         "activation_function": "Swish",
         "min_lr_ratio": 0.0001,
         "gamma_min": 0.99,

@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import logging
 import os
 
 import pytorch_lightning as lightning
@@ -11,7 +12,23 @@ from C_single_turn_score_maximizer.trainer import SingleTurnScoreMaximizerREINFO
 from utilities.initialize import ConfigParam, finish, initialize
 from utilities.return_calculators import MonteCarloReturnCalculator
 
+log = logging.getLogger(__name__)
+
 CKPT_DIR: str = "/opt/ml/checkpoints"  # SageMaker restores this from S3 on restart
+
+# 1 game = 13 turns, 1 turn = 3 steps
+TURNS_PER_GAME: int = 13
+
+
+class InvalidBatchConfigurationError(ValueError):
+    """Exception raised when batch configuration is invalid."""
+
+    def __init__(self, games_per_batch: int, games_per_epoch: int) -> None:
+        batches_per_epoch = games_per_epoch / games_per_batch
+        super().__init__(
+            f"games_per_batch ({games_per_batch}) must divide games_per_epoch ({games_per_epoch}) evenly. "
+            f"Current configuration would result in {batches_per_epoch} batches per epoch."
+        )
 
 
 def main() -> None:
@@ -21,18 +38,24 @@ def main() -> None:
         ConfigParam("mode", str, "train", "Mode to run (train or test)", choices=["train", "test"]),
         ConfigParam("epochs", int, 500, "Number of training epochs"),
         ConfigParam(
-            "batch_size",
+            "games_per_epoch",
             int,
-            52,
-            "Batch size for training",
-            display_name="Batch size",
+            50,
+            "Number of complete Yahtzee games per epoch",
+            display_name="Games per epoch",
+        ),
+        ConfigParam(
+            "games_per_batch",
+            int,
+            2,
+            "Number of complete Yahtzee games per batch (must divide games_per_epoch evenly)",
+            display_name="Games per batch",
         ),
         ConfigParam("learning_rate", float, 0.00075, "Learning rate", display_name="Learning rate"),
         ConfigParam("hidden_size", int, 384, "Hidden layer size", display_name="Hidden size"),
         ConfigParam(
             "num_hidden", int, 3, "Number of hidden layers", display_name="Num hidden layers"
         ),
-        ConfigParam("dataset_size", int, 1300, "Dataset size", display_name="Dataset size"),
         ConfigParam(
             "checkpoint_path",
             str,
@@ -102,17 +125,33 @@ def main() -> None:
     # Extract config values for easy access
     mode = config["mode"]
     epochs = config["epochs"]
-    batch_size = config["batch_size"]
+    games_per_epoch = config["games_per_epoch"]
+    games_per_batch = config["games_per_batch"]
     learning_rate = config["learning_rate"]
     hidden_size = config["hidden_size"]
     num_hidden = config["num_hidden"]
-    dataset_size = config["dataset_size"]
     checkpoint_path = config["checkpoint_path"]
     activation_function = config["activation_function"]
     min_lr_ratio = config["min_lr_ratio"]
     gamma_min = config["gamma_min"]
     gamma_max = config["gamma_max"]
     dropout_rate = config["dropout_rate"]
+
+    # Calculate dataset_size and batch_size from games parameters
+
+    # Validate that games_per_batch divides games_per_epoch evenly
+    if games_per_epoch % games_per_batch != 0:
+        raise InvalidBatchConfigurationError(games_per_batch, games_per_epoch)
+
+    dataset_size = games_per_epoch * TURNS_PER_GAME
+    batch_size = games_per_batch * TURNS_PER_GAME
+    batches_per_epoch = games_per_epoch // games_per_batch
+
+    log.info(f"Configuration: {games_per_epoch} games/epoch, {games_per_batch} games/batch")
+    log.info(f"Calculated: dataset_size={dataset_size} turns, batch_size={batch_size} turns")
+    log.info(
+        f"Training: {batches_per_epoch} batches/epoch, {batches_per_epoch * epochs} total updates"
+    )
 
     if mode == "test":
         # Test mode
