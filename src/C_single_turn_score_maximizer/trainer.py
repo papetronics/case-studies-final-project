@@ -125,7 +125,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
 
     def validation_step(self, batch: torch.Tensor, batch_idx: int) -> dict[str, float]:  # noqa: ARG002
         """Run validation using the full Yahtzee environment."""
-        num_validation_games = 50
+        num_validation_games = 250
         total_scores = []
 
         for _ in range(num_validation_games):
