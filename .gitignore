@@ -48,4 +48,6 @@ __pycache__
 lightning_logs
 logs
 .nfs*
+
+
 checkpoints
