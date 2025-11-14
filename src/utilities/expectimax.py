@@ -104,7 +104,10 @@ def build_r2_cache(
     for dice in dice_states:
         if dice not in r2_cache:
             dice_array = np.array(dice, dtype=np.int_)
-            scores, _ = get_all_scores(dice_array, open_scores=open_scores)
+
+            scores, _, _ = get_all_scores(
+                dice_array, open_scores=open_scores
+            )  # todo implement yahtzee check
 
             # Mask closed categories by setting them to -1 for argmax selection
             scores_masked = scores.copy()

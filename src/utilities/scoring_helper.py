@@ -8,6 +8,7 @@ FULL_HOUSE_SCORE: int = 25
 SMALL_STRAIGHT_SCORE: int = 30
 LARGE_STRAIGHT_SCORE: int = 40
 YAHTZEE_SCORE: int = 50
+YAHTZEE_BONUS_SCORE: int = 100
 
 NUMBER_OF_DICE: int = 5
 NUMBER_OF_DICE_SIDES: int = 6
@@ -59,20 +60,23 @@ class ScoreCategory:
 
 
 def get_all_scores(
-    dice: NDArray[np.int_], open_scores: NDArray[np.int_]
-) -> tuple[NDArray[np.int_], NDArray[np.float32]]:
+    dice: NDArray[np.int_], open_scores: NDArray[np.int_], already_has_yahtzee: bool = False
+) -> tuple[NDArray[np.int_], NDArray[np.float32], bool]:
     """Given a set of dice, compute the raw score for all categories and soft targets for max scoring.
 
     Args:
         dice: Array of shape (5,) containing dice values
         open_scores: Array of shape (13,) containing binary flags for open categories
+        already_has_yahtzee: Whether the player has already scored a Yahtzee in this game
 
     Returns
     -------
-        Tuple of (masked_scores, max_scoring_target) both of shape (13,)
+        Tuple of (masked_scores, max_scoring_target, joker_rules_active) where the first two have shape (13,) and the third is a boolean
     """
     # Count occurrences of each die face (1-6)
     counts = np.bincount(dice, minlength=7)[1:]  # Ignore index 0
+    is_yahtzee = np.any(counts == DICE_COUNT_YAHTZEE)
+    joker_rules_active = is_yahtzee and already_has_yahtzee
     upper_scores = counts * np.arange(1, 7)
 
     # Calculate scores for lower section
@@ -80,11 +84,18 @@ def get_all_scores(
     four_of_a_kind = np.sum(dice) if np.any(counts >= DICE_COUNT_FOUR_OF_A_KIND) else 0
     full_house = (
         FULL_HOUSE_SCORE
-        if (np.any(counts == DICE_COUNT_THREE_OF_A_KIND) and np.any(counts == DICE_COUNT_PAIR))
+        if (
+            (np.any(counts == DICE_COUNT_THREE_OF_A_KIND) and np.any(counts == DICE_COUNT_PAIR))
+            or joker_rules_active
+        )
         else 0
     )
-    small_straight = SMALL_STRAIGHT_SCORE if (has_small_straight(counts)) else 0
-    large_straight = LARGE_STRAIGHT_SCORE if (has_large_straight(counts)) else 0
+    small_straight = (
+        SMALL_STRAIGHT_SCORE if (has_small_straight(counts) or joker_rules_active) else 0
+    )
+    large_straight = (
+        LARGE_STRAIGHT_SCORE if (has_large_straight(counts) or joker_rules_active) else 0
+    )
     yahtzee = YAHTZEE_SCORE if np.any(counts == DICE_COUNT_YAHTZEE) else 0
     chance = np.sum(dice)
 
@@ -117,7 +128,7 @@ def get_all_scores(
         max_scoring_target = open_scores.astype(np.float32)
         max_scoring_target /= np.sum(max_scoring_target, dtype=np.float32)
 
-    return masked_scores, max_scoring_target
+    return masked_scores, max_scoring_target, bool(joker_rules_active)
 
 
 def has_small_straight(counts: np.ndarray) -> bool:

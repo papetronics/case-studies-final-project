@@ -6,6 +6,7 @@ import torch
 from torch import nn
 
 from environments.full_yahtzee_env import Observation
+from utilities.scoring_helper import YAHTZEE_SCORE, ScoreCategory
 from utilities.sequential_block import SequentialBlock
 
 
@@ -125,6 +126,8 @@ def observation_to_tensor(observation: Observation, bonus_flags: set[BonusFlags]
     dice_onehot = np.eye(6)[dice - 1].flatten()
     rolls_onehot = np.eye(3)[rolls_used]
 
+    has_earned_yahtzee = observation["score_sheet"][ScoreCategory.YAHTZEE] == YAHTZEE_SCORE
+
     # print(available_categories)
 
     input_vector = np.concatenate(
@@ -134,6 +137,7 @@ def observation_to_tensor(observation: Observation, bonus_flags: set[BonusFlags]
             rolls_onehot,
             np.array(bonus_information),
             [phase],
+            [has_earned_yahtzee],
             available_categories,
         ]
     )
@@ -209,7 +213,9 @@ class TurnScoreMaximizer(nn.Module):
         #   - Available Categories [13]: One-hot encoding of available scoring categories = 13
         #   - Current Phase [1]: Current phase of the game (0: rolling, 1: scoring) = 1
         #   - Dice Counts [6]: Counts of each die face (1-6) = 6
-        input_size = 30 + 3 + 13 + 1 + 6 + len(self.bonus_flags)
+        #   - Bonus Information [varies]: Various bonus-related inputs = len(self.bonus_flags)
+        #   - Has Earned Yahtzee [1]: Whether the player has already scored a Yahtzee = 1
+        input_size = 30 + 3 + 13 + 1 + 6 + len(self.bonus_flags) + 1
 
         ## 18 Model outputs:
         #   - Action Probabilities [5]: Probability of re-rolling each of the 5 dice
@@ -218,54 +224,75 @@ class TurnScoreMaximizer(nn.Module):
         scoring_output_size = 13
 
         layers = [Block(input_size, hidden_size, dropout_rate, activation)]
-        for _ in range(num_hidden - 1):
+        for _ in range(num_hidden - 2):
             layers.append(Block(hidden_size, hidden_size, dropout_rate, activation))  # noqa: PERF401
 
         self.network = SequentialBlock(*layers)
 
-        rolling_head_layers: list[nn.Module] = []
+        self.action_spine = Block(hidden_size, hidden_size, dropout_rate, activation)
+
+        rolling_head_layers: list[nn.Module] = [
+            Block(hidden_size, hidden_size, dropout_rate, activation),
+        ]
         if dropout_rate > 0.0:
             rolling_head_layers.append(nn.Dropout(dropout_rate))
         rolling_head_layers.extend([nn.Linear(hidden_size, dice_output_size), nn.Sigmoid()])
         self.rolling_head = SequentialBlock(*rolling_head_layers).to(self.device)
 
-        scoring_head_layers: list[nn.Module] = []
+        scoring_head_layers: list[nn.Module] = [
+            Block(hidden_size, hidden_size, dropout_rate, activation),
+        ]
         if dropout_rate > 0.0:
             scoring_head_layers.append(nn.Dropout(dropout_rate))
         scoring_head_layers.append(nn.Linear(hidden_size, scoring_output_size))
         self.scoring_head = SequentialBlock(*scoring_head_layers).to(self.device)
         self.masked_softmax = MaskedSoftmax().to(self.device)
 
+        value_head_layers: list[nn.Module] = [
+            Block(hidden_size, hidden_size, 0.0, activation),
+        ]
+        # if dropout_rate > 0.0:
+        #    value_head_layers.append(nn.Dropout(dropout_rate))
+        value_head_layers.append(nn.Linear(hidden_size, 1))
+        value_head_layers.append(nn.ELU())
+
+        self.value_head = SequentialBlock(*value_head_layers).to(self.device)
+
     @property
     def device(self) -> torch.device:
         """Get the device of the model parameters."""
         return next(self.parameters()).device
 
-    def forward_observation(self, observation: Observation) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward_observation(
+        self, observation: Observation
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Forward pass through the model given an observation dictionary."""
         return self.forward(
             observation_to_tensor(observation, self.bonus_flags).unsqueeze(0).to(self.device)
         )
 
-    def __call__(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def __call__(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Call method to enable direct calls to the model."""
         return self.forward(x)
 
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Forward pass through the model."""
         spine = self.network(x)
 
         rolling_output = self.rolling_head(spine)
         scoring_output = self.scoring_head(spine)
 
+        # Value output
+        value_output = self.value_head(spine)
+
         # select last 13 inputs as mask
         scoring_output = self.masked_softmax(scoring_output, x[:, -13:])
 
-        return rolling_output.squeeze(0), scoring_output.squeeze(0)
+        return rolling_output.squeeze(0), scoring_output.squeeze(0), value_output.squeeze(0)
 
     def sample_observation(
         self, observation: Observation
-    ) -> tuple[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
+    ) -> tuple[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
         """Sample an action given an observation dictionary."""
         return self.sample(
             observation_to_tensor(observation, self.bonus_flags).unsqueeze(0).to(self.device)
@@ -273,9 +300,9 @@ class TurnScoreMaximizer(nn.Module):
 
     def sample(
         self, x: torch.Tensor
-    ) -> tuple[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor]]:
+    ) -> tuple[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
         """Sample an action given an input tensor."""
-        rolling_probs, scoring_probs = self.forward(x)
+        rolling_probs, scoring_probs, value_est = self.forward(x)
         # print(rolling_probs)
         # print(scoring_probs)
         rolling_dist = torch.distributions.Bernoulli(rolling_probs)
@@ -286,4 +313,4 @@ class TurnScoreMaximizer(nn.Module):
         scoring_tensor = scoring_dist.sample()
         scoring_log_prob = scoring_dist.log_prob(scoring_tensor).sum()
 
-        return (rolling_tensor, scoring_tensor), (rolling_log_prob, scoring_log_prob)
+        return (rolling_tensor, scoring_tensor), (rolling_log_prob, scoring_log_prob), value_est

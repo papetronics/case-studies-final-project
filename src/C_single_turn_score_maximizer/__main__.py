@@ -1,12 +1,34 @@
 #!/usr/bin/env python
+import logging
+import os
+
 import pytorch_lightning as lightning
 import torch
+from pytorch_lightning.callbacks import ModelCheckpoint
 
 from C_single_turn_score_maximizer import test_episode
+from C_single_turn_score_maximizer.self_play_dataset import SelfPlayDataset
 from C_single_turn_score_maximizer.trainer import SingleTurnScoreMaximizerREINFORCETrainer
-from utilities.dummy_dataset import DummyDataset
 from utilities.initialize import ConfigParam, finish, initialize
 from utilities.return_calculators import MonteCarloReturnCalculator
+
+log = logging.getLogger(__name__)
+
+CKPT_DIR: str = "/opt/ml/checkpoints"  # SageMaker restores this from S3 on restart
+
+# 1 game = 13 turns, 1 turn = 3 steps
+TURNS_PER_GAME: int = 13
+
+
+class InvalidBatchConfigurationError(ValueError):
+    """Exception raised when batch configuration is invalid."""
+
+    def __init__(self, games_per_batch: int, games_per_epoch: int) -> None:
+        batches_per_epoch = games_per_epoch / games_per_batch
+        super().__init__(
+            f"games_per_batch ({games_per_batch}) must divide games_per_epoch ({games_per_epoch}) evenly. "
+            f"Current configuration would result in {batches_per_epoch} batches per epoch."
+        )
 
 
 def main() -> None:
@@ -16,18 +38,24 @@ def main() -> None:
         ConfigParam("mode", str, "train", "Mode to run (train or test)", choices=["train", "test"]),
         ConfigParam("epochs", int, 500, "Number of training epochs"),
         ConfigParam(
-            "episodes_per_batch",
+            "games_per_epoch",
             int,
-            52,
-            "Episodes per training batch",
-            display_name="Episodes per batch",
+            100,
+            "Number of complete Yahtzee games per epoch",
+            display_name="Games per epoch",
+        ),
+        ConfigParam(
+            "games_per_batch",
+            int,
+            4,
+            "Number of complete Yahtzee games per batch (must divide games_per_epoch evenly)",
+            display_name="Games per batch",
         ),
         ConfigParam("learning_rate", float, 0.00075, "Learning rate", display_name="Learning rate"),
         ConfigParam("hidden_size", int, 384, "Hidden layer size", display_name="Hidden size"),
         ConfigParam(
             "num_hidden", int, 3, "Number of hidden layers", display_name="Num hidden layers"
         ),
-        ConfigParam("dataset_size", int, 1300, "Dataset size", display_name="Dataset size"),
         ConfigParam(
             "checkpoint_path",
             str,
@@ -77,6 +105,13 @@ def main() -> None:
             "Discount factor for reward calculation (min, start)",
             display_name="Discount factor",
         ),
+        ConfigParam(
+            "dropout_rate",
+            float,
+            0.1,
+            "Dropout rate for the model",
+            display_name="Dropout rate",
+        ),
     ]
 
     # Initialize project with configuration
@@ -90,16 +125,33 @@ def main() -> None:
     # Extract config values for easy access
     mode = config["mode"]
     epochs = config["epochs"]
-    episodes_per_batch = config["episodes_per_batch"]
+    games_per_epoch = config["games_per_epoch"]
+    games_per_batch = config["games_per_batch"]
     learning_rate = config["learning_rate"]
     hidden_size = config["hidden_size"]
     num_hidden = config["num_hidden"]
-    dataset_size = config["dataset_size"]
     checkpoint_path = config["checkpoint_path"]
     activation_function = config["activation_function"]
     min_lr_ratio = config["min_lr_ratio"]
     gamma_min = config["gamma_min"]
     gamma_max = config["gamma_max"]
+    dropout_rate = config["dropout_rate"]
+
+    # Calculate dataset_size and batch_size from games parameters
+
+    # Validate that games_per_batch divides games_per_epoch evenly
+    if games_per_epoch % games_per_batch != 0:
+        raise InvalidBatchConfigurationError(games_per_batch, games_per_epoch)
+
+    dataset_size = games_per_epoch * TURNS_PER_GAME
+    batch_size = games_per_batch * TURNS_PER_GAME
+    batches_per_epoch = games_per_epoch // games_per_batch
+
+    log.info(f"Configuration: {games_per_epoch} games/epoch, {games_per_batch} games/batch")
+    log.info(f"Calculated: dataset_size={dataset_size} turns, batch_size={batch_size} turns")
+    log.info(
+        f"Training: {batches_per_epoch} batches/epoch, {batches_per_epoch * epochs} total updates"
+    )
 
     if mode == "test":
         # Test mode
@@ -110,15 +162,28 @@ def main() -> None:
         model = SingleTurnScoreMaximizerREINFORCETrainer(
             hidden_size=hidden_size,
             learning_rate=learning_rate,
-            episodes_per_batch=episodes_per_batch,
             return_calculator=return_calculator,
             num_hidden=num_hidden,
-            dropout_rate=0.1,
+            dropout_rate=dropout_rate,
             activation_function=activation_function,
             max_epochs=epochs,
             min_lr_ratio=min_lr_ratio,
             gamma_min=gamma_min,
             gamma_max=gamma_max,
+        )
+
+        run_scope = os.getenv("WANDB_RUN_ID") or "local-run"
+
+        checkpoint_dir = os.path.join(CKPT_DIR, run_scope)
+        last = os.path.join(checkpoint_dir, "last.ckpt")
+        os.makedirs(checkpoint_dir, exist_ok=True)
+
+        ckpt_cb = ModelCheckpoint(
+            dirpath=checkpoint_dir,
+            save_last=True,  # keep only last.ckpt (rolling)
+            save_top_k=0,  # do NOT keep k-best; disables metric-based saves
+            every_n_epochs=1,  # save at end of every training epoch
+            save_on_train_epoch_end=True,
         )
 
         # Create trainer
@@ -130,20 +195,36 @@ def main() -> None:
             accelerator="auto",  # Will use GPU if available
             devices="auto",
             check_val_every_n_epoch=1,  # Run validation every epoch
+            callbacks=[ckpt_cb],
         )
 
-        # Create dummy dataloader (required by Lightning but not used)
-        dummy_dataset = DummyDataset(size=dataset_size // episodes_per_batch)
-        train_dataloader = torch.utils.data.DataLoader(dummy_dataset, batch_size=1, num_workers=15)
+        # Create self-play dataset that collects episodes using the policy
+        train_dataset = SelfPlayDataset(
+            policy_net=model.policy_net,
+            return_calculator=return_calculator,
+            size=dataset_size,
+        )
+        train_dataloader = torch.utils.data.DataLoader(
+            train_dataset, batch_size=batch_size, num_workers=0
+        )
 
-        # Create dummy validation dataloader
-        val_dummy_dataset = DummyDataset(size=1)  # Just one batch for validation
+        # Create validation dataset (just one batch)
+        val_dataset = SelfPlayDataset(
+            policy_net=model.policy_net,
+            return_calculator=return_calculator,
+            size=batch_size,
+        )
         val_dataloader = torch.utils.data.DataLoader(
-            val_dummy_dataset, batch_size=1, num_workers=15
+            val_dataset, batch_size=batch_size, num_workers=0
         )
 
         # Train with validation
-        trainer.fit(model, train_dataloader, val_dataloader)
+        trainer.fit(
+            model,
+            train_dataloader,
+            val_dataloader,
+            ckpt_path=last if os.path.exists(last) else None,
+        )
 
         # Run a test episode after training
         test_episode.main(model=model.policy_net, interactive=False)
