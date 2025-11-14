@@ -28,7 +28,6 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         gamma_max: float,
         gamma_min: float,
         return_calculator: ReturnCalculator | None = None,
-        baseline_alpha: float = 0.1,
     ):
         super().__init__()
 
@@ -43,7 +42,6 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
 
         self.learning_rate: float = learning_rate
         self.episodes_per_batch: int = episodes_per_batch
-        self.baseline_alpha: float = baseline_alpha
         self.max_epochs: int = max_epochs
         self.min_lr_ratio: float = min_lr_ratio
         self.gamma_max: float = gamma_max
@@ -51,8 +49,6 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
 
         self.return_calculator: ReturnCalculator = return_calculator or MonteCarloReturnCalculator()
         self.return_calculator.gamma = self.gamma_min
-
-        self.baseline: float = 0.0
 
         self.env: gym.Env[Observation, Action] = gym.make("FullYahtzee-v1")
         self.env.reset()
@@ -197,11 +193,9 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         v_loss = torch.nn.functional.mse_loss(
             torch.stack(v_ests_list).squeeze(), torch.tensor(returns_list, device=self.device)
         )
-        self.baseline = (1 - self.baseline_alpha) * self.baseline + self.baseline_alpha * avg_reward
 
         self.log("train/policy_loss", policy_loss, prog_bar=True)
         self.log("train/avg_reward", avg_reward, prog_bar=True)
-        self.log("train/baseline", self.baseline, prog_bar=False)
         self.log("train/v_loss", v_loss, prog_bar=False)
         # Log current learning rate
         current_lr = self.trainer.optimizers[0].param_groups[0]["lr"]
