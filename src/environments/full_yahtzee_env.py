@@ -14,7 +14,7 @@ from utilities.scoring_helper import (
     YAHTZEE_BONUS_SCORE,
     YAHTZEE_SCORE,
     ScoreCategory,
-    get_all_scores,
+    get_all_scores_with_target,
 )
 
 register(
@@ -62,6 +62,9 @@ class ScoringAction(TypedDict):
     """Scoring action type for the Yahtzee environment."""
 
     score_category: int
+
+
+ActionType = tuple[int, int, int, int, int]
 
 
 class RollingAction(TypedDict):
@@ -153,7 +156,7 @@ class DiceState:
 
         already_has_yahtzee = self.score_sheet[ScoreCategory.YAHTZEE] == YAHTZEE_SCORE
 
-        score, _, joker_rules_active = get_all_scores(
+        score, _, joker_rules_active = get_all_scores_with_target(
             self.dice, self.score_sheet_available_mask, already_has_yahtzee
         )
         if self.score_sheet_available_mask[category] != 1:

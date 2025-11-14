@@ -4,14 +4,20 @@ import gymnasium as gym
 import numpy as np
 import torch
 
-from C_single_turn_score_maximizer.model import ActionType, TurnScoreMaximizer
+from C_single_turn_score_maximizer.model import (
+    DICE_MASKS,
+    ActionType,
+    YahtzeeAgent,
+    phi,
+    sample_action,
+)
 from C_single_turn_score_maximizer.trainer import SingleTurnScoreMaximizerREINFORCETrainer
 from environments.full_yahtzee_env import Action, Observation
 from utilities.scoring_helper import (
     BONUS_POINTS,
     MINIMUM_UPPER_SCORE_FOR_BONUS,
     ScoreCategory,
-    get_all_scores,
+    get_all_scores_with_target,
 )
 
 
@@ -27,7 +33,7 @@ def wait_for_enter() -> None:
 
 def main(
     checkpoint_path: str | None = None,
-    model: TurnScoreMaximizer | None = None,
+    model: YahtzeeAgent | None = None,
     interactive: bool = True,
 ) -> None:
     """Run a single episode in the Yahtzee environment using a trained model."""
@@ -47,7 +53,7 @@ def main(
 
 def run_episode(
     env: gym.Env[Observation, Action],
-    model: TurnScoreMaximizer,
+    model: YahtzeeAgent,
     interactive: bool = True,
 ) -> None:
     """Run a single episode in the Yahtzee environment using the provided model."""
@@ -64,11 +70,13 @@ def run_episode(
 
     with torch.no_grad():
         while True:
-            actions, _, v_est = model.sample_observation(obs)
+            input_tensor = phi(obs, model.bonus_flags, model.device).unsqueeze(0)
+            rolling_probs, scoring_probs, v_est = model.forward(input_tensor)
+            actions, _, v_est = sample_action(rolling_probs, scoring_probs, v_est)
             rolling_action, scoring_action_tensor = actions
 
             action = {
-                "hold_mask": np.array(rolling_action, dtype=bool),
+                "hold_mask": np.array(DICE_MASKS[rolling_action.item()], dtype=bool),
                 "score_category": scoring_action_tensor.cpu().item(),
             }
 
@@ -185,7 +193,7 @@ def print_dice_state(
 def print_available_scores(observation: Observation) -> None:
     """Print available scoring categories with potential scores."""
     if observation["phase"] == 1:  # Only show in scoring phase
-        possible_scores, _, _ = get_all_scores(
+        possible_scores, _, _ = get_all_scores_with_target(
             observation["dice"], observation["score_sheet_available_mask"]
         )
 
@@ -239,7 +247,7 @@ def print_action_description(
         # Scoring action
         category = scoring_action_tensor.cpu().item()
         category_name = ScoreCategory.LABELS[int(category)]
-        possible_scores, _, _ = get_all_scores(
+        possible_scores, _, _ = get_all_scores_with_target(
             observation["dice"], observation["score_sheet_available_mask"]
         )
         score = possible_scores[int(category)]

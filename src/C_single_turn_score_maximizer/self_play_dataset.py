@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, TypedDict, cast
 
 import gymnasium as gym
 import numpy as np
@@ -7,24 +7,54 @@ import torch
 from environments.full_yahtzee_env import Action, Observation, YahtzeeEnv
 from utilities.return_calculators import ReturnCalculator
 
+from .model import DICE_MASKS, get_input_dimensions, phi, sample_action
+
 if TYPE_CHECKING:
-    from .model import TurnScoreMaximizer
+    from .model import YahtzeeAgent
 
 
-class SelfPlayDataset(torch.utils.data.Dataset[torch.Tensor]):
+class EpisodeBatch(TypedDict):
+    """Typed dict for episode batch data returned by the dataset.
+
+    Tensors are pre-flattened: (BATCH_SIZE * num_steps, ...) where:
+    - BATCH_SIZE = number of parallel episodes collected
+    - num_steps = 3 for our single-turn episodes (roll, roll, score)
+
+    The dataset collects in parallel with batched forward passes and flattens
+    before returning to avoid reshape operations in the trainer.
+    """
+
+    states: torch.Tensor  # (BATCH_SIZE*3, state_size) float32
+    rolling_actions: torch.Tensor  # (BATCH_SIZE*3, 5) int (binary mask)
+    scoring_actions: torch.Tensor  # (BATCH_SIZE*3,) int (category index 0-12)
+    rewards: torch.Tensor  # (BATCH_SIZE*3,) float32
+    next_states: torch.Tensor  # (BATCH_SIZE*3, state_size) float32
+    phases: torch.Tensor  # (BATCH_SIZE*3,) int (0=rolling, 1=scoring)
+
+
+class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
     """
     A dataset that collects episodes by playing against itself using the current policy.
 
     This dataset generates episodes on-the-fly by interacting with the Yahtzee environment
-    using the current policy network. Each episode represents a single turn (3 steps: roll, roll, score).
-    Returns a tensor of shape (3, 3) containing [return, log_prob, v_est] for each step.
+    using the current policy network. Each __getitem__ call collects a full batch of episodes
+    in parallel with batched forward passes for GPU efficiency.
+
+    Returns a dict of pre-flattened tensors with shapes (BATCH_SIZE*3, ...):
+      - "states": (BATCH_SIZE*3, state_size) - State tensor for each step
+      - "rolling_actions": (BATCH_SIZE*3, 5) - Binary mask for which dice to reroll
+      - "scoring_actions": (BATCH_SIZE*3,) - Category to score (0-12)
+      - "rewards": (BATCH_SIZE*3,) - Immediate rewards
+      - "next_states": (BATCH_SIZE*3, state_size) - Next state tensors
+      - "phases": (BATCH_SIZE*3,) - Phase indicator (0=rolling, 1=scoring)
     """
 
     def __init__(
         self,
-        policy_net: "TurnScoreMaximizer",
+        policy_net: "YahtzeeAgent",
         return_calculator: ReturnCalculator,
         size: int,
+        batch_size: int,
     ) -> None:
         """
         Initialize the self-play dataset.
@@ -32,84 +62,126 @@ class SelfPlayDataset(torch.utils.data.Dataset[torch.Tensor]):
         Args:
             policy_net: The policy network to use for collecting episodes
             return_calculator: The return calculator to compute returns for each episode
-            size: The number of episodes in the dataset (episodes per epoch)
+            size: The number of batches in the dataset (batches per epoch)
+            batch_size: The number of parallel episodes to collect per batch
         """
-        self.policy_net: TurnScoreMaximizer = policy_net
+        self.policy_net: YahtzeeAgent = policy_net
         self.return_calculator = return_calculator
         self.size = size
-        self.env: gym.Env[Observation, Action] = gym.make("FullYahtzee-v1")
-        self.env.reset()
+        self.batch_size = batch_size
+
+        # Create pool of environments for parallel collection
+        self.envs: list[gym.Env[Observation, Action]] = []
+        for _ in range(batch_size):
+            env = gym.make("FullYahtzee-v1")
+            env.reset()
+            self.envs.append(env)
 
     def __len__(self) -> int:
         """Return the size of the dataset."""
         return self.size
 
-    def __getitem__(self, idx: int) -> torch.Tensor:
+    def __getitem__(self, idx: int) -> EpisodeBatch:
         """
-        Collect and return a single episode's data as a tensor.
+        Collect and return a batch of episodes in parallel with batched forward passes.
 
         Args:
             idx: Index (not used, but required by Dataset interface)
 
         Returns
         -------
-        torch.Tensor
-            A tensor of shape (3, 3) containing [return, log_prob, v_est] for each of the 3 steps
+        EpisodeBatch
+            A dict containing pre-flattened batch episode data with keys:
+            - "states": (BATCH_SIZE*3, state_size) float32
+            - "rolling_actions": (BATCH_SIZE*3, 5) int
+            - "scoring_actions": (BATCH_SIZE*3,) int
+            - "rewards": (BATCH_SIZE*3,) float32
+            - "next_states": (BATCH_SIZE*3, state_size) float32
+            - "phases": (BATCH_SIZE*3,) int
         """
-        unwrapped: YahtzeeEnv = cast("YahtzeeEnv", self.env.unwrapped)
-        observation = unwrapped.observe()
+        # Get current observations from all environments
+        observations = []
+        for env in self.envs:
+            unwrapped: YahtzeeEnv = cast("YahtzeeEnv", env.unwrapped)
+            observations.append(unwrapped.observe())
 
-        # This is a bit of a hack, the environment supports full turns, but our model is single-turn
-        # so we are just going to cut it off after 3 steps and pretend that is an episode.
-        # we reset the environment whenever it terminates, that brings us back to an empty scoresheet.
-
-        # Pre-allocate tensors for the episode (3 steps)
         num_steps = 3
-
-        # Get device from policy network
         device = next(self.policy_net.parameters()).device
+        state_size = get_input_dimensions(self.policy_net.bonus_flags)
 
-        # Pre-allocate tensors for log_probs, v_ests, and rewards (preserves gradients with indexing)
-        log_probs_tensor = torch.zeros(num_steps, device=device)
-        v_ests_tensor = torch.zeros(num_steps, device=device)
-        rewards = torch.zeros(num_steps, dtype=torch.float32, device=device)
+        # Pre-allocate tensors for all episodes (BATCH_SIZE, 3, ...)
+        states = torch.zeros(
+            self.batch_size, num_steps, state_size, dtype=torch.float32, device=device
+        )
+        rolling_actions = torch.zeros(self.batch_size, num_steps, dtype=torch.long, device=device)
+        scoring_actions = torch.zeros(self.batch_size, num_steps, dtype=torch.long, device=device)
+        rewards = torch.zeros(self.batch_size, num_steps, dtype=torch.float32, device=device)
+        next_states = torch.zeros(
+            self.batch_size, num_steps, state_size, dtype=torch.float32, device=device
+        )
+        phases = torch.zeros(self.batch_size, num_steps, dtype=torch.long, device=device)
 
-        for step_idx in range(num_steps):  # roll, roll, score
-            actions, log_probs, v_est = self.policy_net.sample_observation(observation)
-            rolling_action, scoring_action_tensor = actions
-            rolling_log_prob, scoring_log_prob = log_probs
+        with torch.no_grad():  # No gradients needed during data collection
+            for step_idx in range(num_steps):  # roll, roll, score
+                # Batch convert all observations to state tensors
+                state_tensors = torch.stack(
+                    [phi(obs, self.policy_net.bonus_flags, device) for obs in observations]
+                )  # (BATCH_SIZE, state_size)
 
-            action: Action
-            if observation["phase"] == 0:
-                action = {"hold_mask": np.array(rolling_action, dtype=bool)}
-                log_prob = rolling_log_prob
-            else:
-                score_category: int = int(scoring_action_tensor.cpu().item())
-                action = {"score_category": score_category}
-                log_prob = scoring_log_prob
+                states[:, step_idx, :] = state_tensors
 
-            # Store log_prob and v_est using indexing (preserves gradients)
-            log_probs_tensor[step_idx] = log_prob.squeeze()
-            v_ests_tensor[step_idx] = v_est.squeeze()
+                # Single batched forward pass for all environments
+                rolling_probs, scoring_probs, _ = self.policy_net.forward(state_tensors)
 
-            observation, reward, terminated, truncated, _ = self.env.step(action)
-            rewards[step_idx] = float(reward)
+                # Sample actions for all environments
+                actions, _, _ = sample_action(
+                    rolling_probs, scoring_probs, torch.zeros(self.batch_size, device=device)
+                )
+                rolling_action_tensor, scoring_action_tensors = actions
 
-            if terminated or truncated:
-                observation, _ = self.env.reset()
+                rolling_actions[:, step_idx] = rolling_action_tensor.long()
+                scoring_actions[:, step_idx] = scoring_action_tensors.long()
 
-        # sanity check: after 3 rolls we should always have rolls_used == 0 (new turn) and phase == 0
-        assert observation["rolls_used"] == 0 and observation["phase"] == 0
+                # Step each environment and collect results
+                for env_idx, (env, obs) in enumerate(zip(self.envs, observations, strict=True)):
+                    phase = obs["phase"]
+                    phases[env_idx, step_idx] = phase
 
-        # Calculate returns using Monte Carlo (backward pass): G_t = r_t + gamma * G_{t+1}
-        gamma = self.return_calculator.gamma
-        returns = torch.zeros(num_steps, dtype=torch.float32, device=device)
-        g = 0.0
-        for t in reversed(range(num_steps)):
-            g = rewards[t] + gamma * g
-            returns[t] = g
+                    # Convert action based on phase
+                    action: Action
+                    if phase == 0:
+                        action = {
+                            "hold_mask": np.array(
+                                DICE_MASKS[int(rolling_action_tensor[env_idx].item())], dtype=bool
+                            )
+                        }
+                    else:
+                        score_category: int = int(scoring_action_tensors[env_idx].cpu().item())
+                        action = {"score_category": score_category}
 
-        # Build final tensor of shape (3, 3) containing [return, log_prob, v_est]
-        episode_tensor = torch.stack([returns, log_probs_tensor, v_ests_tensor], dim=1)
+                    # Step environment
+                    next_obs, reward, terminated, truncated, _ = env.step(action)
+                    rewards[env_idx, step_idx] = float(reward)
 
-        return episode_tensor
+                    # Get next state tensor
+                    next_state_tensor = phi(next_obs, self.policy_net.bonus_flags, device)
+                    next_states[env_idx, step_idx, :] = next_state_tensor
+
+                    # Update observation for next step
+                    if terminated or truncated:
+                        next_obs, _ = env.reset()
+                    observations[env_idx] = next_obs
+
+        # Sanity check: after 3 steps all envs should be at start of new turn
+        for obs in observations:
+            assert obs["rolls_used"] == 0 and obs["phase"] == 0
+
+        # Flatten batch and time dimensions: (BATCH_SIZE, 3, ...) -> (BATCH_SIZE*3, ...)
+        return {
+            "states": states.view(-1, state_size),
+            "rolling_actions": rolling_actions.view(-1),
+            "scoring_actions": scoring_actions.view(-1),
+            "rewards": rewards.view(-1),
+            "next_states": next_states.view(-1, state_size),
+            "phases": phases.view(-1),
+        }
