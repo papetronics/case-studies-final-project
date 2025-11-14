@@ -156,7 +156,7 @@ def main() -> None:
             log_every_n_steps=1,
             accelerator="auto",  # Will use GPU if available
             devices="auto",
-            check_val_every_n_epoch=1,  # Run validation every epoch
+            check_val_every_n_epoch=5,  # Run validation every 5 epochs
             callbacks=[ckpt_cb],
         )
 
