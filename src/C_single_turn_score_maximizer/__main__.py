@@ -41,7 +41,7 @@ def main() -> None:
         ConfigParam(
             "games_per_epoch",
             int,
-            100,
+            520,
             "Number of complete Yahtzee games per epoch",
             display_name="Games per epoch",
         ),
@@ -200,13 +200,16 @@ def main() -> None:
         )
 
         # Create self-play dataset that collects episodes using the policy
+        # Dataset now handles batching internally with parallel environments
         train_dataset = SelfPlayDataset(
             policy_net=model.policy_net,
             return_calculator=return_calculator,
-            size=dataset_size,
+            size=batches_per_epoch,  # Number of batches, not individual episodes
+            batch_size=batch_size,  # Number of parallel episodes per batch
         )
+        # DataLoader batch_size=1 with passthrough collate since dataset already returns full batches
         train_dataloader = torch.utils.data.DataLoader(
-            train_dataset, batch_size=batch_size, num_workers=0
+            train_dataset, batch_size=1, num_workers=0, collate_fn=lambda x: x[0]
         )
 
         # Create validation dataset (dummy since validation_step does its own game simulations)

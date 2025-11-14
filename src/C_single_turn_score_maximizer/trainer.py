@@ -150,30 +150,26 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
 
     def training_step(self, batch: EpisodeBatch, batch_idx: int) -> torch.Tensor:  # noqa: ARG002
         """Perform a training step using REINFORCE algorithm with vectorized operations."""
-        # batch is an EpisodeBatch dict with keys:
-        # - "states": (BATCH_SIZE, 3, state_size) float32
-        # - "rolling_actions": (BATCH_SIZE, 3, 5) int
-        # - "scoring_actions": (BATCH_SIZE, 3) int
-        # - "rewards": (BATCH_SIZE, 3) float32
-        # - "next_states": (BATCH_SIZE, 3, state_size) float32
-        # - "phases": (BATCH_SIZE, 3) int
+        # batch is an EpisodeBatch dict with pre-flattened tensors:
+        # - "states": (BATCH_SIZE*3, state_size) float32
+        # - "rolling_actions": (BATCH_SIZE*3, 5) int
+        # - "scoring_actions": (BATCH_SIZE*3,) int
+        # - "rewards": (BATCH_SIZE*3,) float32
+        # - "next_states": (BATCH_SIZE*3, state_size) float32
+        # - "phases": (BATCH_SIZE*3,) int
 
-        states = batch["states"]
-        rolling_actions = batch["rolling_actions"]
-        scoring_actions = batch["scoring_actions"]
-        rewards = batch["rewards"]
+        # Dataset pre-flattens, so we just extract directly
+        states_flat = batch["states"]
+        rolling_actions_flat = batch["rolling_actions"]
+        scoring_actions_flat = batch["scoring_actions"]
+        rewards_flat = batch["rewards"]
         # next_states = batch["next_states"]  # Not used yet
-        phases = batch["phases"]
+        phases_flat = batch["phases"]
 
-        batch_size = states.shape[0]
-        num_steps = states.shape[1]
-
-        # Reshape to (BATCH_SIZE * 3, ...) to process all steps together
-        states_flat = states.view(-1, states.shape[2])  # (BATCH_SIZE * 3, state_size)
-        rolling_actions_flat = rolling_actions.view(-1, 5)  # (BATCH_SIZE * 3, 5)
-        scoring_actions_flat = scoring_actions.view(-1)  # (BATCH_SIZE * 3,)
-        rewards_flat = rewards.view(-1)  # (BATCH_SIZE * 3,)
-        phases_flat = phases.view(-1)  # (BATCH_SIZE * 3,)
+        # Calculate batch_size and num_steps from flattened shape
+        total_steps = states_flat.shape[0]
+        num_steps = 3
+        batch_size = total_steps // num_steps
 
         # Forward pass through current policy to get probabilities and value estimates
         rolling_probs, scoring_probs, v_ests = self.policy_net.forward(states_flat)

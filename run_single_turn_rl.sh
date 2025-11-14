@@ -4,8 +4,8 @@ set -e
 # Build and run the single turn RL scenario
 ./build_image.sh C_single_turn_score_maximizer \
   --epochs 500 \
-  --games-per-epoch 100 \
-  --games-per-batch 4 \
+  --games-per-epoch 1040 \
+  --games-per-batch 8 \
   --log-dir /workspace/logs \
   --hidden-size 384 \
   --num-hidden 3 \
