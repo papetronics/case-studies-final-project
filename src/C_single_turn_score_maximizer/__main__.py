@@ -9,6 +9,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from C_single_turn_score_maximizer import test_episode
 from C_single_turn_score_maximizer.self_play_dataset import SelfPlayDataset
 from C_single_turn_score_maximizer.trainer import SingleTurnScoreMaximizerREINFORCETrainer
+from utilities.dummy_dataset import DummyDataset
 from utilities.initialize import ConfigParam, finish, initialize
 from utilities.return_calculators import MonteCarloReturnCalculator
 
@@ -194,7 +195,7 @@ def main() -> None:
             log_every_n_steps=1,
             accelerator="auto",  # Will use GPU if available
             devices="auto",
-            check_val_every_n_epoch=1,  # Run validation every epoch
+            check_val_every_n_epoch=5,  # Run validation every 5 epochs
             callbacks=[ckpt_cb],
         )
 
@@ -208,15 +209,9 @@ def main() -> None:
             train_dataset, batch_size=batch_size, num_workers=0
         )
 
-        # Create validation dataset (just one batch)
-        val_dataset = SelfPlayDataset(
-            policy_net=model.policy_net,
-            return_calculator=return_calculator,
-            size=batch_size,
-        )
-        val_dataloader = torch.utils.data.DataLoader(
-            val_dataset, batch_size=batch_size, num_workers=0
-        )
+        # Create validation dataset (dummy since validation_step does its own game simulations)
+        val_dataset = DummyDataset(size=1)
+        val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=1, num_workers=0)
 
         # Train with validation
         trainer.fit(

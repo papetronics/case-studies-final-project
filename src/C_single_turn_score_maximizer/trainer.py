@@ -47,46 +47,97 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         self.return_calculator: ReturnCalculator = return_calculator or MonteCarloReturnCalculator()
         self.return_calculator.gamma = self.gamma_min
 
-        self.full_env: gym.Env[Observation, Action] = gym.make("FullYahtzee-v1")  # For validation
+        self.validation_envs: list[gym.Env[Observation, Action]] = []  # Created on demand
 
-    def run_full_game_episode(self) -> float:
-        """Run a complete Yahtzee game using the full environment and return total score."""
-        observation, _ = self.full_env.reset()
-        total_score = 0.0
+    def run_batched_validation_games(self, num_games: int) -> list[float]:
+        """Run multiple Yahtzee games in parallel with batched forward passes.
 
-        while True:
-            with torch.no_grad():
-                # Use the trained policy to select actions
-                input_tensor = phi(
-                    observation, self.policy_net.bonus_flags, self.policy_net.device
-                ).unsqueeze(0)
-                rolling_probs, scoring_probs, v_est = self.policy_net.forward(input_tensor)
-                actions, _, _ = sample_action(rolling_probs, scoring_probs, v_est)
-                rolling_action_tensor, scoring_action_tensor = actions
+        Parameters
+        ----------
+        num_games : int
+            Number of parallel games to run
 
-                action: Action
-                if observation["phase"] == 0:
-                    action = {"hold_mask": rolling_action_tensor.cpu().numpy().astype(bool)}
-                else:
-                    score_category: int = int(scoring_action_tensor.cpu().item())
-                    action = {"score_category": score_category}
+        Returns
+        -------
+        list[float]
+            List of total scores for each game
+        """
+        # Create environments if needed
+        if len(self.validation_envs) < num_games:
+            for _ in range(num_games - len(self.validation_envs)):
+                self.validation_envs.append(gym.make("FullYahtzee-v1"))
 
-            observation, reward, terminated, truncated, _ = self.full_env.step(action)
-            total_score += float(reward)
+        # Reset all environments
+        observations = []
+        for env in self.validation_envs[:num_games]:
+            obs, _ = env.reset()
+            observations.append(obs)
 
-            if terminated or truncated:
-                break
+        # Track state for each game
+        active_indices = list(range(num_games))
+        total_scores = [0.0] * num_games
 
-        return total_score
+        # Run all games until completion
+        with torch.no_grad():
+            while active_indices:
+                # Gather observations from active games
+                active_observations = [observations[i] for i in active_indices]
+
+                # Batch convert observations to state tensors
+                state_tensors = torch.stack(
+                    [
+                        phi(obs, self.policy_net.bonus_flags, self.policy_net.device)
+                        for obs in active_observations
+                    ]
+                )  # (num_active, state_size)
+
+                # Single batched forward pass
+                rolling_probs, scoring_probs, v_ests = self.policy_net.forward(state_tensors)
+
+                # Sample actions for all active games
+                actions_list, _, _ = sample_action(rolling_probs, scoring_probs, v_ests)
+                rolling_action_tensors, scoring_action_tensors = actions_list
+
+                # Step each active environment
+                newly_inactive = []
+                for batch_idx, game_idx in enumerate(active_indices):
+                    obs = active_observations[batch_idx]
+                    env = self.validation_envs[game_idx]
+
+                    # Convert action based on phase
+                    action: Action
+                    if obs["phase"] == 0:
+                        action = {
+                            "hold_mask": rolling_action_tensors[batch_idx]
+                            .cpu()
+                            .numpy()
+                            .astype(bool)
+                        }
+                    else:
+                        score_category: int = int(scoring_action_tensors[batch_idx].cpu().item())
+                        action = {"score_category": score_category}
+
+                    # Step environment
+                    next_obs, reward, terminated, truncated, _ = env.step(action)
+                    total_scores[game_idx] += float(reward)
+
+                    if terminated or truncated:
+                        newly_inactive.append(game_idx)
+                    else:
+                        observations[game_idx] = next_obs
+
+                # Remove completed games from active list
+                for game_idx in newly_inactive:
+                    active_indices.remove(game_idx)
+
+        return total_scores
 
     def validation_step(self, batch: torch.Tensor, batch_idx: int) -> dict[str, float]:  # noqa: ARG002
-        """Run validation using the full Yahtzee environment."""
-        num_validation_games = 50
-        total_scores = []
+        """Run validation using batched parallel games."""
+        num_validation_games = 1000
 
-        for _ in range(num_validation_games):
-            score = self.run_full_game_episode()
-            total_scores.append(score)
+        # Run all games in parallel with batched forward passes
+        total_scores = self.run_batched_validation_games(num_validation_games)
 
         mean_total_score = float(np.mean(total_scores))
         std_total_score = float(np.std(total_scores))
@@ -128,8 +179,9 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         rolling_probs, scoring_probs, v_ests = self.policy_net.forward(states_flat)
 
         # Recompute log probabilities from stored actions
+        # Note: Bernoulli.log_prob expects float values, so cast rolling_actions to float
         rolling_dist = torch.distributions.Bernoulli(rolling_probs)
-        rolling_log_probs = rolling_dist.log_prob(rolling_actions_flat).sum(
+        rolling_log_probs = rolling_dist.log_prob(rolling_actions_flat.float()).sum(
             dim=1
         )  # (BATCH_SIZE * 3,)
 
@@ -212,6 +264,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         pass
 
     def on_train_end(self) -> None:
-        """Close environments at the end of training."""
-        if self.full_env is not None:
-            self.full_env.close()
+        """Close validation environments at the end of training."""
+        for env in self.validation_envs:
+            env.close()
+        self.validation_envs.clear()

@@ -11,7 +11,7 @@ from utilities.scoring_helper import (
     BONUS_POINTS,
     MINIMUM_UPPER_SCORE_FOR_BONUS,
     ScoreCategory,
-    get_all_scores,
+    get_all_scores_with_target,
 )
 
 
@@ -187,7 +187,7 @@ def print_dice_state(
 def print_available_scores(observation: Observation) -> None:
     """Print available scoring categories with potential scores."""
     if observation["phase"] == 1:  # Only show in scoring phase
-        possible_scores, _, _ = get_all_scores(
+        possible_scores, _, _ = get_all_scores_with_target(
             observation["dice"], observation["score_sheet_available_mask"]
         )
 
@@ -241,7 +241,7 @@ def print_action_description(
         # Scoring action
         category = scoring_action_tensor.cpu().item()
         category_name = ScoreCategory.LABELS[int(category)]
-        possible_scores, _, _ = get_all_scores(
+        possible_scores, _, _ = get_all_scores_with_target(
             observation["dice"], observation["score_sheet_available_mask"]
         )
         score = possible_scores[int(category)]
