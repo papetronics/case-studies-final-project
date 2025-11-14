@@ -70,10 +70,30 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
         self.batch_size = batch_size
 
         # Create pool of environments for parallel collection
+        # Stagger each environment to a different turn (0-12) to avoid temporal bias
         self.envs: list[gym.Env[Observation, Action]] = []
-        for _ in range(batch_size):
+        for env_idx in range(batch_size):
             env = gym.make("FullYahtzee-v1")
             env.reset()
+
+            # Advance environment to turn (env_idx % 13) using random actions
+            target_turn = env_idx % 13
+            unwrapped: YahtzeeEnv = cast("YahtzeeEnv", env.unwrapped)
+
+            # Number of scores filled = 13 - number of available categories
+            obs = unwrapped.observe()
+            num_scores_filled = 13 - int(obs["score_sheet_available_mask"].sum())
+
+            while num_scores_filled < target_turn:
+                # Use gym's action_space.sample() for random actions
+                action = env.action_space.sample()
+                _, _, terminated, truncated, _ = env.step(action)
+                if terminated or truncated:
+                    env.reset()
+                    break
+                obs = unwrapped.observe()
+                num_scores_filled = 13 - int(obs["score_sheet_available_mask"].sum())
+
             self.envs.append(env)
 
     def __len__(self) -> int:
