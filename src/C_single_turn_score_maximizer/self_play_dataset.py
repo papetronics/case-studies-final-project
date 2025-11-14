@@ -70,10 +70,45 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
         self.batch_size = batch_size
 
         # Create pool of environments for parallel collection
+        # Stagger each environment to a different turn (0-12) to avoid temporal bias
         self.envs: list[gym.Env[Observation, Action]] = []
-        for _ in range(batch_size):
+        for env_idx in range(batch_size):
             env = gym.make("FullYahtzee-v1")
             env.reset()
+
+            # Advance environment to turn (env_idx % 13) using random actions
+            target_turn = env_idx % 13
+            unwrapped: YahtzeeEnv = cast("YahtzeeEnv", env.unwrapped)
+
+            # Number of scores filled = 13 - number of available categories
+            obs = unwrapped.observe()
+            num_scores_filled = 13 - int(obs["score_sheet_available_mask"].sum())
+
+            while num_scores_filled < target_turn:
+                obs = unwrapped.observe()
+                # Sample action based on current phase
+                if obs["phase"] == 0:  # Rolling phase
+                    sampled = env.action_space.sample()
+                    action: Action = {"hold_mask": sampled["hold_mask"].astype(bool)}
+                else:  # Scoring phase
+                    # Sample from available categories
+                    available_categories = [
+                        i for i in range(13) if obs["score_sheet_available_mask"][i] == 1
+                    ]
+                    sampled = env.action_space.sample()
+                    score_category = int(sampled["score_category"])
+                    # Ensure we pick a valid category
+                    if score_category not in available_categories:
+                        score_category = available_categories[0] if available_categories else 0
+                    action = {"score_category": score_category}
+
+                _, _, terminated, truncated, _ = env.step(action)
+                if terminated or truncated:
+                    env.reset()
+                    break
+                obs = unwrapped.observe()
+                num_scores_filled = 13 - int(obs["score_sheet_available_mask"].sum())
+
             self.envs.append(env)
 
     def __len__(self) -> int:

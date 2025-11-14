@@ -10,8 +10,8 @@ set -e
   --hidden-size 384 \
   --num-hidden 3 \
   --activation-function Swish \
-  --learning-rate 0.00075 \
-  --min-lr-ratio 0.0001 \
+  --learning-rate 0.001 \
+  --min-lr-ratio 0.01 \
   --gamma-min 0.9 \
   --gamma-max 1.0 \
   --dropout-rate 0.1
