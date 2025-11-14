@@ -4,9 +4,10 @@ import pytorch_lightning as lightning
 import torch
 
 from environments.full_yahtzee_env import Action, Observation
+from utilities.activation_functions import ActivationFunctionName
 from utilities.return_calculators import MonteCarloReturnCalculator, ReturnCalculator
 
-from .model import ActivationFunctionName, TurnScoreMaximizer, phi, sample_action
+from .model import YahtzeeAgent, phi, sample_action
 
 
 class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
@@ -29,7 +30,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
 
         self.save_hyperparameters(ignore=["return_calculator"])
 
-        self.policy_net: TurnScoreMaximizer = TurnScoreMaximizer(
+        self.policy_net: YahtzeeAgent = YahtzeeAgent(
             hidden_size=hidden_size,
             num_hidden=num_hidden,
             dropout_rate=dropout_rate,

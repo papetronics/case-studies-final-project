@@ -4,7 +4,7 @@ import gymnasium as gym
 import numpy as np
 import torch
 
-from C_single_turn_score_maximizer.model import TurnScoreMaximizer, phi, sample_action
+from C_single_turn_score_maximizer.model import YahtzeeAgent, phi, sample_action
 from C_single_turn_score_maximizer.trainer import SingleTurnScoreMaximizerREINFORCETrainer
 from environments.full_yahtzee_env import Action, Observation
 from utilities.scoring_helper import (
@@ -27,7 +27,7 @@ def wait_for_enter() -> None:
 
 def main(
     checkpoint_path: str | None = None,
-    model: TurnScoreMaximizer | None = None,
+    model: YahtzeeAgent | None = None,
     interactive: bool = True,
 ) -> None:
     """Run a single episode in the Yahtzee environment using a trained model."""
@@ -47,7 +47,7 @@ def main(
 
 def run_episode(
     env: gym.Env[Observation, Action],
-    model: TurnScoreMaximizer,
+    model: YahtzeeAgent,
     interactive: bool = True,
 ) -> None:
     """Run a single episode in the Yahtzee environment using the provided model."""

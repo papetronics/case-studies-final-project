@@ -9,7 +9,7 @@ from utilities.return_calculators import ReturnCalculator
 from .model import phi, sample_action
 
 if TYPE_CHECKING:
-    from .model import TurnScoreMaximizer
+    from .model import YahtzeeAgent
 
 
 class SelfPlayDataset(torch.utils.data.Dataset[torch.Tensor]):
@@ -23,7 +23,7 @@ class SelfPlayDataset(torch.utils.data.Dataset[torch.Tensor]):
 
     def __init__(
         self,
-        policy_net: "TurnScoreMaximizer",
+        policy_net: "YahtzeeAgent",
         return_calculator: ReturnCalculator,
         size: int,
     ) -> None:
@@ -35,7 +35,7 @@ class SelfPlayDataset(torch.utils.data.Dataset[torch.Tensor]):
             return_calculator: The return calculator to compute returns for each episode
             size: The number of episodes in the dataset (episodes per epoch)
         """
-        self.policy_net: TurnScoreMaximizer = policy_net
+        self.policy_net: YahtzeeAgent = policy_net
         self.return_calculator = return_calculator
         self.size = size
         self.env: gym.Env[Observation, Action] = gym.make("FullYahtzee-v1")

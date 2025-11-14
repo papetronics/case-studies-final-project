@@ -1,46 +1,21 @@
-from enum import Enum, IntEnum
-from typing import Literal, cast
+from enum import IntEnum
 
 import numpy as np
 import torch
 from torch import nn
 
-from environments.full_yahtzee_env import Observation
-from utilities.scoring_helper import YAHTZEE_SCORE, ScoreCategory
+from environments.full_yahtzee_env import FINAL_ROLL, Observation
+from utilities.activation_functions import ActivationFunction, ActivationFunctionName
+from utilities.scoring_helper import (
+    NUMBER_OF_CATEGORIES,
+    NUMBER_OF_DICE,
+    NUMBER_OF_DICE_SIDES,
+    YAHTZEE_SCORE,
+    ScoreCategory,
+)
 from utilities.sequential_block import SequentialBlock
 
-
-class ActivationFunction(Enum):
-    """Supported activation functions for the neural network."""
-
-    ReLU = nn.ReLU
-    GELU = nn.GELU
-    CELU = nn.CELU
-    PReLU = nn.PReLU
-    ELU = nn.ELU
-    Tanh = nn.Tanh
-    LeakyReLU = nn.LeakyReLU
-    Softplus = nn.Softplus
-    Softsign = nn.Softsign
-    Mish = nn.Mish
-    Swish = nn.SiLU
-    SeLU = nn.SELU
-
-
-ActivationFunctionName = Literal[
-    "ReLU",
-    "GELU",
-    "CELU",
-    "PReLU",
-    "ELU",
-    "Tanh",
-    "LeakyReLU",
-    "Softplus",
-    "Softsign",
-    "Mish",
-    "Swish",
-    "SeLU",
-]
+from .modules import Block, RollingHead, ScoringHead, ValueHead
 
 
 class BonusFlags(IntEnum):
@@ -71,6 +46,29 @@ class BonusFlags(IntEnum):
 UPPER_SCORE_THRESHOLD = 63
 MAX_UPPER_SCORE = 5 * (1 + 2 + 3 + 4 + 5 + 6)  # 5 dice, each can contribute 1-6
 GOLF_TARGET = (np.arange(6) + 1) * 3  # Target score for golf scoring per category
+
+
+def get_input_dimensions(bonus_flags: set[BonusFlags]) -> int:
+    """Calculate the input dimension for the model based on bonus flags.
+
+    Model inputs:
+      - Dice [30]: One-hot encoding of 5 dice (6 sides each) = 5 * 6 = 30
+      - Rolls Used [3]: One-hot encoding of rolls used (0, 1, 2) = 3
+      - Available Categories [13]: One-hot encoding of available scoring categories = 13
+      - Current Phase [1]: Current phase of the game (0: rolling, 1: scoring) = 1
+      - Dice Counts [6]: Counts of each die face (1-6) = 6
+      - Bonus Information [varies]: Various bonus-related inputs = len(bonus_flags)
+      - Has Earned Yahtzee [1]: Whether the player has already scored a Yahtzee = 1
+    """
+    return int(
+        (NUMBER_OF_DICE * NUMBER_OF_DICE_SIDES)  # Dice one-hot
+        + (FINAL_ROLL + 1)  # Rolls used one-hot
+        + NUMBER_OF_CATEGORIES  # Available categories
+        + 1  # Current phase
+        + NUMBER_OF_DICE_SIDES  # Dice counts
+        + len(bonus_flags)  # Bonus information
+        + 1  # Has earned Yahtzee
+    )
 
 
 def phi(
@@ -163,52 +161,7 @@ def sample_action(
     return (rolling_tensor, scoring_tensor), (rolling_log_prob, scoring_log_prob), value_est
 
 
-class Block(nn.Module):
-    """A basic MLP block with Linear, Activation, LayerNorm, and optional Dropout."""
-
-    def __init__(
-        self,
-        in_features: int,
-        out_features: int,
-        dropout_rate: float,
-        activation: type[nn.Module] = nn.PReLU,
-    ):
-        super().__init__()
-        layers = [
-            nn.Linear(in_features, out_features),
-            activation(),
-            nn.LayerNorm(out_features),
-        ]
-        if dropout_rate > 0.0:
-            layers.append(nn.Dropout(dropout_rate))
-
-        self.network: SequentialBlock = SequentialBlock(*layers)
-
-    def __call__(self, x: torch.Tensor) -> torch.Tensor:
-        """Call method to enable direct calls to the block."""
-        return self.forward(x)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward pass through the block."""
-        output: torch.Tensor = self.network(x)
-        return output
-
-
-class MaskedSoftmax(nn.Module):
-    """Softmax layer that applies a mask before softmax."""
-
-    def __init__(self, mask_value: float = -float("inf")):
-        super().__init__()
-        self.mask_value = mask_value
-        self.softmax = nn.Softmax(dim=-1)
-
-    def forward(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
-        """Forward pass applying masked softmax."""
-        x = x.masked_fill(mask == 0, self.mask_value)
-        return cast("torch.Tensor", self.softmax(x))
-
-
-class TurnScoreMaximizer(nn.Module):
+class YahtzeeAgent(nn.Module):
     """Neural network model for maximizing score in a single turn of Yahtzee."""
 
     def __init__(
@@ -226,17 +179,9 @@ class TurnScoreMaximizer(nn.Module):
 
         self.bonus_flags: set[BonusFlags] = {BonusFlags.PERCENT_PROGRESS_TOWARDS_BONUS}
 
-        ## 46 model inputs:
-        #   - Dice [30]: One-hot encoding of 5 dice (6 sides each) = 5 * 6 = 30
-        #   - Rolls Used [3]: One-hot encoding of rolls used (0, 1, 2) = 3  (always 2 in this scenario)
-        #   - Available Categories [13]: One-hot encoding of available scoring categories = 13
-        #   - Current Phase [1]: Current phase of the game (0: rolling, 1: scoring) = 1
-        #   - Dice Counts [6]: Counts of each die face (1-6) = 6
-        #   - Bonus Information [varies]: Various bonus-related inputs = len(self.bonus_flags)
-        #   - Has Earned Yahtzee [1]: Whether the player has already scored a Yahtzee = 1
-        input_size = 30 + 3 + 13 + 1 + 6 + len(self.bonus_flags) + 1
+        input_size = get_input_dimensions(self.bonus_flags)
 
-        ## 18 Model outputs:
+        ## Model outputs:
         #   - Action Probabilities [5]: Probability of re-rolling each of the 5 dice
         #   - Scoring probabilities [13]: Probability of selecting each scoring category
         dice_output_size = 5
@@ -250,43 +195,18 @@ class TurnScoreMaximizer(nn.Module):
 
         self.action_spine = Block(hidden_size, hidden_size, dropout_rate, activation)
 
-        rolling_head_layers: list[nn.Module] = [
-            Block(hidden_size, hidden_size, dropout_rate, activation),
-        ]
-        if dropout_rate > 0.0:
-            rolling_head_layers.append(nn.Dropout(dropout_rate))
-        rolling_head_layers.extend([nn.Linear(hidden_size, dice_output_size), nn.Sigmoid()])
-        self.rolling_head = SequentialBlock(*rolling_head_layers).to(self.device)
-
-        scoring_head_layers: list[nn.Module] = [
-            Block(hidden_size, hidden_size, dropout_rate, activation),
-        ]
-        if dropout_rate > 0.0:
-            scoring_head_layers.append(nn.Dropout(dropout_rate))
-        scoring_head_layers.append(nn.Linear(hidden_size, scoring_output_size))
-        self.scoring_head = SequentialBlock(*scoring_head_layers).to(self.device)
-        self.masked_softmax = MaskedSoftmax().to(self.device)
-
-        value_head_layers: list[nn.Module] = [
-            Block(hidden_size, hidden_size, 0.0, activation),
-        ]
-        # if dropout_rate > 0.0:
-        #    value_head_layers.append(nn.Dropout(dropout_rate))
-        value_head_layers.append(nn.Linear(hidden_size, 1))
-        value_head_layers.append(nn.ELU())
-
-        self.value_head = SequentialBlock(*value_head_layers).to(self.device)
+        self.rolling_head = RollingHead(hidden_size, dice_output_size, dropout_rate, activation).to(
+            self.device
+        )
+        self.scoring_head = ScoringHead(
+            hidden_size, scoring_output_size, dropout_rate, activation
+        ).to(self.device)
+        self.value_head = ValueHead(hidden_size, activation).to(self.device)
 
     @property
     def device(self) -> torch.device:
         """Get the device of the model parameters."""
         return next(self.parameters()).device
-
-    def forward_observation(
-        self, observation: Observation
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Forward pass through the model given an observation dictionary."""
-        return self.forward(phi(observation, self.bonus_flags, self.device).unsqueeze(0))
 
     def __call__(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Call method to enable direct calls to the model."""
@@ -297,12 +217,8 @@ class TurnScoreMaximizer(nn.Module):
         spine = self.network(x)
 
         rolling_output = self.rolling_head(spine)
-        scoring_output = self.scoring_head(spine)
-
-        # Value output
+        # Select last 13 inputs as mask for scoring
+        scoring_output = self.scoring_head(spine, x[:, -13:])
         value_output = self.value_head(spine)
-
-        # select last 13 inputs as mask
-        scoring_output = self.masked_softmax(scoring_output, x[:, -13:])
 
         return rolling_output.squeeze(0), scoring_output.squeeze(0), value_output.squeeze(0)
