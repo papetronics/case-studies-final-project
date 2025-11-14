@@ -206,43 +206,45 @@ class YahtzeeAgent(nn.Module):
         # Initialize weights for better behavior at high learning rates
         self._initialize_weights()
 
+    @staticmethod
+    def _init_kaiming_linear(module: nn.Module) -> None:
+        """Initialize linear layers with Kaiming normal initialization."""
+        if isinstance(module, nn.Linear):
+            nn.init.kaiming_normal_(module.weight, mode="fan_in", nonlinearity="relu")
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+
+    @staticmethod
+    def _init_final_linear(module: nn.Module) -> None:
+        """Initialize final layer with small orthogonal gain."""
+        if isinstance(module, nn.Linear):
+            nn.init.orthogonal_(module.weight, gain=0.01)
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+
     def _initialize_weights(self) -> None:
         """Initialize network weights for high learning rate stability.
 
         Uses Kaiming fan-in initialization (good for ReLU/SiLU) for hidden layers
         and orthogonal initialization with small gains (0.01) for output layers.
         """
-
-        # Helper to initialize linear layers with Kaiming
-        def init_kaiming_linear(module: nn.Module) -> None:
-            if isinstance(module, nn.Linear):
-                nn.init.kaiming_normal_(module.weight, mode="fan_in", nonlinearity="relu")
-                if module.bias is not None:
-                    nn.init.zeros_(module.bias)
-
-        # Helper to initialize final layer with small orthogonal gain
-        def init_final_linear(module: nn.Module) -> None:
-            if isinstance(module, nn.Linear):
-                nn.init.orthogonal_(module.weight, gain=0.01)
-                if module.bias is not None:
-                    nn.init.zeros_(module.bias)
-
         # Initialize all hidden layers with Kaiming
-        self.network.apply(init_kaiming_linear)
-        self.action_spine.apply(init_kaiming_linear)
+        self.network.apply(self._init_kaiming_linear)
+        self.action_spine.apply(self._init_kaiming_linear)
 
         # Initialize head hidden layers (all but last)
         for head in [self.rolling_head, self.scoring_head, self.value_head]:
             modules_list = list(head.modules())
             for module in modules_list[:-1]:
-                init_kaiming_linear(module)
+                self._init_kaiming_linear(module)
 
         # Initialize final layers with small orthogonal gain
-        self.rolling_head[-1].apply(init_final_linear) if isinstance(
-            self.rolling_head[-1], nn.Linear
-        ) else self.rolling_head[-2].apply(init_final_linear)
-        self.scoring_head[-1].apply(init_final_linear)
-        self.value_head[-1].apply(init_final_linear)
+        # Find the last Linear layer in each head and apply final initialization
+        for head in [self.rolling_head, self.scoring_head, self.value_head]:
+            for module in reversed(list(head.modules())):
+                if isinstance(module, nn.Linear):
+                    self._init_final_linear(module)
+                    break
 
     @property
     def device(self) -> torch.device:
