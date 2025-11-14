@@ -9,6 +9,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from C_single_turn_score_maximizer import test_episode
 from C_single_turn_score_maximizer.self_play_dataset import SelfPlayDataset
 from C_single_turn_score_maximizer.trainer import SingleTurnScoreMaximizerREINFORCETrainer
+from utilities.dummy_dataset import DummyDataset
 from utilities.initialize import ConfigParam, finish, initialize
 from utilities.return_calculators import MonteCarloReturnCalculator
 
@@ -20,14 +21,30 @@ CKPT_DIR: str = "/opt/ml/checkpoints"  # SageMaker restores this from S3 on rest
 TURNS_PER_GAME: int = 13
 
 
-class InvalidBatchConfigurationError(ValueError):
-    """Exception raised when batch configuration is invalid."""
+class InvalidTrainingConfigurationError(ValueError):
+    """Exception raised when training configuration is invalid."""
+
+
+class GamesPerEpochNotDivisibleError(InvalidTrainingConfigurationError):
+    """Exception raised when games_per_epoch doesn't divide evenly by games_per_batch."""
+
+    def __init__(
+        self, total_train_games: int, epochs: int, games_per_epoch: int, games_per_batch: int
+    ) -> None:
+        super().__init__(
+            f"total_train_games ({total_train_games}) // epochs ({epochs}) = {games_per_epoch} games/epoch, "
+            f"which does not divide evenly by games_per_batch ({games_per_batch}). "
+            f"Please adjust parameters so that (total_train_games // epochs) % games_per_batch == 0."
+        )
+
+
+class BatchSizeTooLargeError(InvalidTrainingConfigurationError):
+    """Exception raised when games_per_batch is larger than games_per_epoch."""
 
     def __init__(self, games_per_batch: int, games_per_epoch: int) -> None:
-        batches_per_epoch = games_per_epoch / games_per_batch
         super().__init__(
-            f"games_per_batch ({games_per_batch}) must divide games_per_epoch ({games_per_epoch}) evenly. "
-            f"Current configuration would result in {batches_per_epoch} batches per epoch."
+            f"games_per_batch ({games_per_batch}) is larger than games_per_epoch ({games_per_epoch}). "
+            f"Either reduce games_per_batch, reduce epochs, or increase total_train_games."
         )
 
 
@@ -38,17 +55,17 @@ def main() -> None:
         ConfigParam("mode", str, "train", "Mode to run (train or test)", choices=["train", "test"]),
         ConfigParam("epochs", int, 500, "Number of training epochs"),
         ConfigParam(
-            "games_per_epoch",
+            "total_train_games",
             int,
-            100,
-            "Number of complete Yahtzee games per epoch",
-            display_name="Games per epoch",
+            260000,
+            "Total number of Yahtzee games to train on",
+            display_name="Total train games",
         ),
         ConfigParam(
             "games_per_batch",
             int,
-            4,
-            "Number of complete Yahtzee games per batch (must divide games_per_epoch evenly)",
+            52,
+            "Number of complete Yahtzee games per batch",
             display_name="Games per batch",
         ),
         ConfigParam("learning_rate", float, 0.00075, "Learning rate", display_name="Learning rate"),
@@ -125,7 +142,7 @@ def main() -> None:
     # Extract config values for easy access
     mode = config["mode"]
     epochs = config["epochs"]
-    games_per_epoch = config["games_per_epoch"]
+    total_train_games = config["total_train_games"]
     games_per_batch = config["games_per_batch"]
     learning_rate = config["learning_rate"]
     hidden_size = config["hidden_size"]
@@ -137,21 +154,43 @@ def main() -> None:
     gamma_max = config["gamma_max"]
     dropout_rate = config["dropout_rate"]
 
-    # Calculate dataset_size and batch_size from games parameters
+    # Calculate games_per_epoch from total_train_games and epochs
+    games_per_epoch = total_train_games // epochs
 
-    # Validate that games_per_batch divides games_per_epoch evenly
+    # Validate that games_per_epoch divides evenly by games_per_batch
     if games_per_epoch % games_per_batch != 0:
-        raise InvalidBatchConfigurationError(games_per_batch, games_per_epoch)
+        raise GamesPerEpochNotDivisibleError(
+            total_train_games, epochs, games_per_epoch, games_per_batch
+        )
 
-    dataset_size = games_per_epoch * TURNS_PER_GAME
+    # Validate we have at least one batch per epoch
+    if games_per_epoch < games_per_batch:
+        raise BatchSizeTooLargeError(games_per_batch, games_per_epoch)
+
+    # Calculate derived training metrics
     batch_size = games_per_batch * TURNS_PER_GAME
-    batches_per_epoch = games_per_epoch // games_per_batch
+    updates_per_epoch = games_per_epoch // games_per_batch
+    total_updates = updates_per_epoch * epochs
+    games_per_update = games_per_batch
+    games_per_epoch_actual = games_per_epoch  # Since we validate exact division
+    total_games_actual = games_per_epoch * epochs
 
-    log.info(f"Configuration: {games_per_epoch} games/epoch, {games_per_batch} games/batch")
-    log.info(f"Calculated: dataset_size={dataset_size} turns, batch_size={batch_size} turns")
-    log.info(
-        f"Training: {batches_per_epoch} batches/epoch, {batches_per_epoch * epochs} total updates"
-    )
+    # Log training configuration table
+    config_table = [
+        "=" * 50,
+        "TRAINING INFORMATION",
+        f"Total Games:       {total_games_actual:,}",
+        f"Total Epochs:      {epochs:,}",
+        f"Total Updates:     {total_updates:,}",
+        f"Updates / Epoch:   {updates_per_epoch:,}",
+        f"Games / Update:    {games_per_update:,}",
+        f"Games / Epoch:     {games_per_epoch_actual:,}",
+        "=" * 50,
+    ]
+
+    for line in config_table:
+        print(line)
+        log.info(line)
 
     if mode == "test":
         # Test mode
@@ -166,10 +205,32 @@ def main() -> None:
             num_hidden=num_hidden,
             dropout_rate=dropout_rate,
             activation_function=activation_function,
-            max_epochs=epochs,
+            epochs=epochs,
             min_lr_ratio=min_lr_ratio,
             gamma_min=gamma_min,
             gamma_max=gamma_max,
+        )
+
+        # Save hyperparameters explicitly
+        model.save_hyperparameters(
+            {
+                "hidden_size": hidden_size,
+                "learning_rate": learning_rate,
+                "num_hidden": num_hidden,
+                "dropout_rate": dropout_rate,
+                "activation_function": activation_function,
+                "epochs": epochs,
+                "min_lr_ratio": min_lr_ratio,
+                "gamma_max": gamma_max,
+                "gamma_min": gamma_min,
+                "total_train_games": total_train_games,
+                "games_per_batch": games_per_batch,
+                "total_games_actual": total_games_actual,
+                "total_updates": total_updates,
+                "updates_per_epoch": updates_per_epoch,
+                "games_per_update": games_per_update,
+                "games_per_epoch": games_per_epoch_actual,
+            }
         )
 
         run_scope = os.getenv("WANDB_RUN_ID") or "local-run"
@@ -199,24 +260,21 @@ def main() -> None:
         )
 
         # Create self-play dataset that collects episodes using the policy
+        # Dataset now handles batching internally with parallel environments
         train_dataset = SelfPlayDataset(
             policy_net=model.policy_net,
             return_calculator=return_calculator,
-            size=dataset_size,
+            size=updates_per_epoch,  # Number of batches per epoch
+            batch_size=batch_size,  # Number of parallel episodes per batch
         )
+        # DataLoader batch_size=1 with passthrough collate since dataset already returns full batches
         train_dataloader = torch.utils.data.DataLoader(
-            train_dataset, batch_size=batch_size, num_workers=0
+            train_dataset, batch_size=1, num_workers=0, collate_fn=lambda x: x[0]
         )
 
-        # Create validation dataset (just one batch)
-        val_dataset = SelfPlayDataset(
-            policy_net=model.policy_net,
-            return_calculator=return_calculator,
-            size=batch_size,
-        )
-        val_dataloader = torch.utils.data.DataLoader(
-            val_dataset, batch_size=batch_size, num_workers=0
-        )
+        # Create validation dataset (dummy since validation_step does its own game simulations)
+        val_dataset = DummyDataset(size=1)
+        val_dataloader = torch.utils.data.DataLoader(val_dataset, batch_size=1, num_workers=0)
 
         # Train with validation
         trainer.fit(

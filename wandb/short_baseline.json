@@ -3,15 +3,15 @@
     "entry_point": [],
     "run_config": {
         "epochs": 500,
-        "games_per_epoch": 100,
-        "games_per_batch": 4,
+        "total_train_games": 260000,
+        "games_per_batch": 52,
         "learning_rate": 0.00075,
         "hidden_size": 384,
         "num_hidden": 3,
         "activation_function": "Swish",
-        "min_lr_ratio": 0.001,
-        "gamma_min": 0.95,
+        "min_lr_ratio": 0.0001,
+        "gamma_min": 0.9,
         "gamma_max": 1.0,
-        "dropout_rate": 0.125
+        "dropout_rate": 0.1
     }
 }
