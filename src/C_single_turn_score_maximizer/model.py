@@ -73,7 +73,9 @@ MAX_UPPER_SCORE = 5 * (1 + 2 + 3 + 4 + 5 + 6)  # 5 dice, each can contribute 1-6
 GOLF_TARGET = (np.arange(6) + 1) * 3  # Target score for golf scoring per category
 
 
-def observation_to_tensor(observation: Observation, bonus_flags: set[BonusFlags]) -> torch.Tensor:
+def phi(
+    observation: Observation, bonus_flags: set[BonusFlags], device: torch.device
+) -> torch.Tensor:
     """Convert observation dictionary to input tensor for the model."""
     dice = observation["dice"]  # numpy array showing the actual dice, e.g. [1, 3, 5, 6, 2]
     dice_counts = np.bincount(dice, minlength=7)[1:]  # counts of dice faces from 1 to 6
@@ -141,7 +143,24 @@ def observation_to_tensor(observation: Observation, bonus_flags: set[BonusFlags]
             available_categories,
         ]
     )
-    return torch.FloatTensor(input_vector)
+    return torch.FloatTensor(input_vector).to(device)
+
+
+def sample_action(
+    rolling_probs: torch.Tensor,
+    scoring_probs: torch.Tensor,
+    value_est: torch.Tensor,
+) -> tuple[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
+    """Sample an action given logits (rolling probs, scoring probs, and value estimate)."""
+    rolling_dist = torch.distributions.Bernoulli(rolling_probs)
+    rolling_tensor = rolling_dist.sample()
+    rolling_log_prob = rolling_dist.log_prob(rolling_tensor).sum()
+
+    scoring_dist = torch.distributions.Categorical(scoring_probs)
+    scoring_tensor = scoring_dist.sample()
+    scoring_log_prob = scoring_dist.log_prob(scoring_tensor).sum()
+
+    return (rolling_tensor, scoring_tensor), (rolling_log_prob, scoring_log_prob), value_est
 
 
 class Block(nn.Module):
@@ -267,9 +286,7 @@ class TurnScoreMaximizer(nn.Module):
         self, observation: Observation
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Forward pass through the model given an observation dictionary."""
-        return self.forward(
-            observation_to_tensor(observation, self.bonus_flags).unsqueeze(0).to(self.device)
-        )
+        return self.forward(phi(observation, self.bonus_flags, self.device).unsqueeze(0))
 
     def __call__(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Call method to enable direct calls to the model."""
@@ -289,28 +306,3 @@ class TurnScoreMaximizer(nn.Module):
         scoring_output = self.masked_softmax(scoring_output, x[:, -13:])
 
         return rolling_output.squeeze(0), scoring_output.squeeze(0), value_output.squeeze(0)
-
-    def sample_observation(
-        self, observation: Observation
-    ) -> tuple[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
-        """Sample an action given an observation dictionary."""
-        return self.sample(
-            observation_to_tensor(observation, self.bonus_flags).unsqueeze(0).to(self.device)
-        )
-
-    def sample(
-        self, x: torch.Tensor
-    ) -> tuple[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
-        """Sample an action given an input tensor."""
-        rolling_probs, scoring_probs, value_est = self.forward(x)
-        # print(rolling_probs)
-        # print(scoring_probs)
-        rolling_dist = torch.distributions.Bernoulli(rolling_probs)
-        rolling_tensor = rolling_dist.sample()
-        rolling_log_prob = rolling_dist.log_prob(rolling_tensor).sum()
-
-        scoring_dist = torch.distributions.Categorical(scoring_probs)
-        scoring_tensor = scoring_dist.sample()
-        scoring_log_prob = scoring_dist.log_prob(scoring_tensor).sum()
-
-        return (rolling_tensor, scoring_tensor), (rolling_log_prob, scoring_log_prob), value_est

@@ -6,6 +6,8 @@ import torch
 from environments.full_yahtzee_env import Action, Observation, YahtzeeEnv
 from utilities.return_calculators import ReturnCalculator
 
+from .model import phi, sample_action
+
 if TYPE_CHECKING:
     from .model import TurnScoreMaximizer
 
@@ -74,7 +76,9 @@ class SelfPlayDataset(torch.utils.data.Dataset[torch.Tensor]):
         rewards = torch.zeros(num_steps, dtype=torch.float32, device=device)
 
         for step_idx in range(num_steps):  # roll, roll, score
-            actions, log_probs, v_est = self.policy_net.sample_observation(observation)
+            input_tensor = phi(observation, self.policy_net.bonus_flags, device).unsqueeze(0)
+            rolling_probs, scoring_probs, v_est = self.policy_net.forward(input_tensor)
+            actions, log_probs, v_est = sample_action(rolling_probs, scoring_probs, v_est)
             rolling_action_tensor, scoring_action_tensor = actions
             rolling_log_prob, scoring_log_prob = log_probs
 

@@ -4,7 +4,7 @@ import gymnasium as gym
 import numpy as np
 import torch
 
-from C_single_turn_score_maximizer.model import TurnScoreMaximizer
+from C_single_turn_score_maximizer.model import TurnScoreMaximizer, phi, sample_action
 from C_single_turn_score_maximizer.trainer import SingleTurnScoreMaximizerREINFORCETrainer
 from environments.full_yahtzee_env import Action, Observation
 from utilities.scoring_helper import (
@@ -64,7 +64,9 @@ def run_episode(
 
     with torch.no_grad():
         while True:
-            actions, _, v_est = model.sample_observation(obs)
+            input_tensor = phi(obs, model.bonus_flags, model.device).unsqueeze(0)
+            rolling_probs, scoring_probs, v_est = model.forward(input_tensor)
+            actions, _, v_est = sample_action(rolling_probs, scoring_probs, v_est)
             hold_action_tensor, scoring_action_tensor = actions
 
             action = {

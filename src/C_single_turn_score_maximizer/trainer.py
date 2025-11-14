@@ -6,7 +6,7 @@ import torch
 from environments.full_yahtzee_env import Action, Observation
 from utilities.return_calculators import MonteCarloReturnCalculator, ReturnCalculator
 
-from .model import ActivationFunctionName, TurnScoreMaximizer
+from .model import ActivationFunctionName, TurnScoreMaximizer, phi, sample_action
 
 
 class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
@@ -55,7 +55,11 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         while True:
             with torch.no_grad():
                 # Use the trained policy to select actions
-                actions, _, _ = self.policy_net.sample_observation(observation)
+                input_tensor = phi(
+                    observation, self.policy_net.bonus_flags, self.policy_net.device
+                ).unsqueeze(0)
+                rolling_probs, scoring_probs, v_est = self.policy_net.forward(input_tensor)
+                actions, _, _ = sample_action(rolling_probs, scoring_probs, v_est)
                 rolling_action_tensor, scoring_action_tensor = actions
 
                 action: Action
