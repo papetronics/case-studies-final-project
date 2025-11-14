@@ -6,7 +6,7 @@ import numpy as np
 from numpy.typing import NDArray
 from tqdm import tqdm
 
-from .scoring_helper import get_all_scores
+from .scoring_helper import get_all_scores_with_target
 
 DiceType = tuple[int, int, int, int, int]
 ActionType = tuple[int, int, int, int, int]
@@ -105,7 +105,7 @@ def build_r2_cache(
         if dice not in r2_cache:
             dice_array = np.array(dice, dtype=np.int_)
 
-            scores, _, _ = get_all_scores(
+            scores, _, _ = get_all_scores_with_target(
                 dice_array, open_scores=open_scores
             )  # todo implement yahtzee check
 
