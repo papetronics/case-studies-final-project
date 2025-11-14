@@ -1,12 +1,17 @@
 #!/usr/bin/env python
+import os
+
 import pytorch_lightning as lightning
 import torch
+from pytorch_lightning.callbacks import ModelCheckpoint
 
 from C_single_turn_score_maximizer import test_episode
 from C_single_turn_score_maximizer.trainer import SingleTurnScoreMaximizerREINFORCETrainer
 from utilities.dummy_dataset import DummyDataset
 from utilities.initialize import ConfigParam, finish, initialize
 from utilities.return_calculators import MonteCarloReturnCalculator
+
+CKPT_DIR: str = "/opt/ml/checkpoints"  # SageMaker restores this from S3 on restart
 
 
 def main() -> None:
@@ -77,6 +82,13 @@ def main() -> None:
             "Discount factor for reward calculation (min, start)",
             display_name="Discount factor",
         ),
+        ConfigParam(
+            "dropout_rate",
+            float,
+            0.1,
+            "Dropout rate for the model",
+            display_name="Dropout rate",
+        ),
     ]
 
     # Initialize project with configuration
@@ -100,6 +112,7 @@ def main() -> None:
     min_lr_ratio = config["min_lr_ratio"]
     gamma_min = config["gamma_min"]
     gamma_max = config["gamma_max"]
+    dropout_rate = config["dropout_rate"]
 
     if mode == "test":
         # Test mode
@@ -113,12 +126,26 @@ def main() -> None:
             episodes_per_batch=episodes_per_batch,
             return_calculator=return_calculator,
             num_hidden=num_hidden,
-            dropout_rate=0.1,
+            dropout_rate=dropout_rate,
             activation_function=activation_function,
             max_epochs=epochs,
             min_lr_ratio=min_lr_ratio,
             gamma_min=gamma_min,
             gamma_max=gamma_max,
+        )
+
+        run_scope = os.getenv("WANDB_RUN_ID") or "local-run"
+
+        checkpoint_dir = os.path.join(CKPT_DIR, run_scope)
+        last = os.path.join(checkpoint_dir, "last.ckpt")
+        os.makedirs(checkpoint_dir, exist_ok=True)
+
+        ckpt_cb = ModelCheckpoint(
+            dirpath=checkpoint_dir,
+            save_last=True,  # keep only last.ckpt (rolling)
+            save_top_k=0,  # do NOT keep k-best; disables metric-based saves
+            every_n_epochs=1,  # save at end of every training epoch
+            save_on_train_epoch_end=True,
         )
 
         # Create trainer
@@ -130,6 +157,7 @@ def main() -> None:
             accelerator="auto",  # Will use GPU if available
             devices="auto",
             check_val_every_n_epoch=1,  # Run validation every epoch
+            callbacks=[ckpt_cb],
         )
 
         # Create dummy dataloader (required by Lightning but not used)
@@ -143,7 +171,12 @@ def main() -> None:
         )
 
         # Train with validation
-        trainer.fit(model, train_dataloader, val_dataloader)
+        trainer.fit(
+            model,
+            train_dataloader,
+            val_dataloader,
+            ckpt_path=last if os.path.exists(last) else None,
+        )
 
         # Run a test episode after training
         test_episode.main(model=model.policy_net, interactive=False)

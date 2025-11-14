@@ -64,13 +64,15 @@ def run_episode(
 
     with torch.no_grad():
         while True:
-            actions, _ = model.sample_observation(obs)
+            actions, _, v_est = model.sample_observation(obs)
             hold_action_tensor, scoring_action_tensor = actions
 
             action = {
                 "hold_mask": hold_action_tensor.cpu().numpy().astype(bool),
                 "score_category": scoring_action_tensor.cpu().item(),
             }
+
+            print(f"\nValue Estimate of Current State: {v_est.item():.2f}")
 
             # Track dice state for display
             if obs["phase"] == 0:
@@ -183,7 +185,7 @@ def print_dice_state(
 def print_available_scores(observation: Observation) -> None:
     """Print available scoring categories with potential scores."""
     if observation["phase"] == 1:  # Only show in scoring phase
-        possible_scores, _ = get_all_scores(
+        possible_scores, _, _ = get_all_scores(
             observation["dice"], observation["score_sheet_available_mask"]
         )
 
@@ -237,7 +239,7 @@ def print_action_description(
         # Scoring action
         category = scoring_action_tensor.cpu().item()
         category_name = ScoreCategory.LABELS[int(category)]
-        possible_scores, _ = get_all_scores(
+        possible_scores, _, _ = get_all_scores(
             observation["dice"], observation["score_sheet_available_mask"]
         )
         score = possible_scores[int(category)]
