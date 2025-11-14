@@ -85,8 +85,23 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
             num_scores_filled = 13 - int(obs["score_sheet_available_mask"].sum())
 
             while num_scores_filled < target_turn:
-                # Use gym's action_space.sample() for random actions
-                action = env.action_space.sample()
+                obs = unwrapped.observe()
+                # Sample action based on current phase
+                if obs["phase"] == 0:  # Rolling phase
+                    sampled = env.action_space.sample()
+                    action: Action = {"hold_mask": sampled["hold_mask"].astype(bool)}
+                else:  # Scoring phase
+                    # Sample from available categories
+                    available_categories = [
+                        i for i in range(13) if obs["score_sheet_available_mask"][i] == 1
+                    ]
+                    sampled = env.action_space.sample()
+                    score_category = int(sampled["score_category"])
+                    # Ensure we pick a valid category
+                    if score_category not in available_categories:
+                        score_category = available_categories[0] if available_categories else 0
+                    action = {"score_category": score_category}
+
                 _, _, terminated, truncated, _ = env.step(action)
                 if terminated or truncated:
                     env.reset()
