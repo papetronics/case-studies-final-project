@@ -64,7 +64,7 @@ def main() -> None:
         ConfigParam(
             "games_per_batch",
             int,
-            52,
+            4,
             "Number of complete Yahtzee games per batch",
             display_name="Games per batch",
         ),
