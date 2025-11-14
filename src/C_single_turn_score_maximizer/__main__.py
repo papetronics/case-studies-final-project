@@ -64,11 +64,11 @@ def main() -> None:
         ConfigParam(
             "games_per_batch",
             int,
-            4,
+            52,
             "Number of complete Yahtzee games per batch",
             display_name="Games per batch",
         ),
-        ConfigParam("learning_rate", float, 0.00075, "Learning rate", display_name="Learning rate"),
+        ConfigParam("learning_rate", float, 0.001, "Learning rate", display_name="Learning rate"),
         ConfigParam("hidden_size", int, 384, "Hidden layer size", display_name="Hidden size"),
         ConfigParam(
             "num_hidden", int, 3, "Number of hidden layers", display_name="Num hidden layers"
@@ -104,7 +104,7 @@ def main() -> None:
         ConfigParam(
             "min_lr_ratio",
             float,
-            0.0001,
+            0.01,
             "Ratio of minimum learning rate to initial learning rate (for cosine annealing)",
             display_name="Min LR ratio",
         ),
