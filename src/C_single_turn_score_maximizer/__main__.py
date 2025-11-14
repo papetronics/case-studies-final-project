@@ -89,6 +89,13 @@ def main() -> None:
             "Dropout rate for the model",
             display_name="Dropout rate",
         ),
+        ConfigParam(
+            "gradient_clip_val",
+            float,
+            0.5,
+            "Gradient clipping value",
+            display_name="Gradient clip value",
+        ),
     ]
 
     # Initialize project with configuration
@@ -113,6 +120,7 @@ def main() -> None:
     gamma_min = config["gamma_min"]
     gamma_max = config["gamma_max"]
     dropout_rate = config["dropout_rate"]
+    gradient_clip_val = config["gradient_clip_val"]
 
     if mode == "test":
         # Test mode
@@ -158,6 +166,8 @@ def main() -> None:
             devices="auto",
             check_val_every_n_epoch=1,  # Run validation every epoch
             callbacks=[ckpt_cb],
+            gradient_clip_val=gradient_clip_val,
+            gradient_clip_algorithm="norm",
         )
 
         # Create dummy dataloader (required by Lightning but not used)
