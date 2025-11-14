@@ -3,7 +3,7 @@
     "entry_point": [],
     "run_config": {
         "epochs": 500,
-        "games_per_epoch": 520,
+        "total_train_games": 260000,
         "games_per_batch": 52,
         "learning_rate": 0.00075,
         "hidden_size": 384,

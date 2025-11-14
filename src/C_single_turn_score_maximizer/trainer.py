@@ -21,15 +21,13 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         num_hidden: int,
         dropout_rate: float,
         activation_function: ActivationFunctionName,
-        max_epochs: int,
+        epochs: int,
         min_lr_ratio: float,
         gamma_max: float,
         gamma_min: float,
         return_calculator: ReturnCalculator | None = None,
     ):
         super().__init__()
-
-        self.save_hyperparameters(ignore=["return_calculator"])
 
         self.policy_net: YahtzeeAgent = YahtzeeAgent(
             hidden_size=hidden_size,
@@ -39,7 +37,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         )
 
         self.learning_rate: float = learning_rate
-        self.max_epochs: int = max_epochs
+        self.max_epochs: int = epochs
         self.min_lr_ratio: float = min_lr_ratio
         self.gamma_max: float = gamma_max
         self.gamma_min: float = gamma_min
