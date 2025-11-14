@@ -125,7 +125,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
 
     def validation_step(self, batch: torch.Tensor, batch_idx: int) -> dict[str, float]:  # noqa: ARG002
         """Run validation using the full Yahtzee environment."""
-        num_validation_games = 50
+        num_validation_games = 250
         total_scores = []
 
         for _ in range(num_validation_games):
@@ -189,14 +189,12 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
 
         # Calculate value loss (batched)
 
-        ## TODO: try huber loss torch.nn.functional.smooth_l1_loss
-        ## TODO: try centering:
-        # G = torch.tensor(returns_list, device=self.device, dtype=v_ests_list[0].dtype)
-        # Gc = G - G.mean()
-        # value_loss = torch.nn.functional.smooth_l1_loss(torch.stack(v_ests_list).squeeze(), Gc)
-        v_loss = torch.nn.functional.mse_loss(
-            torch.stack(v_ests_list).squeeze(), torch.tensor(returns_list, device=self.device)
-        )
+        G = torch.tensor(returns_list, device=self.device, dtype=v_ests_list[0].dtype)  # noqa: N806
+        Gc = G - G.mean()  # noqa: N806
+        v_loss = torch.nn.functional.smooth_l1_loss(torch.stack(v_ests_list).squeeze(), Gc)
+        # v_loss = torch.nn.functional.mse_loss(
+        #    torch.stack(v_ests_list).squeeze(), torch.tensor(returns_list, device=self.device)
+        # )
         self.baseline = (1 - self.baseline_alpha) * self.baseline + self.baseline_alpha * avg_reward
 
         self.log("train/policy_loss", policy_loss, prog_bar=True)
