@@ -52,6 +52,15 @@ def initialize(  # noqa: C901, PLR0912, PLR0915
     if is_launch:
         print("✅ Detected W&B launch agent context.")
         wandb_run = wandb.init()
+
+        # Make W&B step follow Lightning's global_step
+        if hasattr(wandb_run, "define_metric"):
+            wandb_run.define_metric("trainer/global_step")
+            wandb_run.define_metric(
+                "*",
+                step_metric="trainer/global_step",
+                step_sync=True,
+            )
     else:
         print("⚡ No W&B job context — skipping wandb.init() to avoid polluting real runs.")
         wandb_run = None
