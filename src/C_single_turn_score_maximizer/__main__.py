@@ -87,7 +87,7 @@ def main() -> None:
         ConfigParam(
             "min_lr_ratio",
             float,
-            0.001,
+            0.0001,
             "Ratio of minimum learning rate to initial learning rate (for cosine annealing)",
             display_name="Min LR ratio",
         ),
@@ -101,14 +101,14 @@ def main() -> None:
         ConfigParam(
             "gamma_min",
             float,
-            0.95,
+            0.9,
             "Discount factor for reward calculation (min, start)",
             display_name="Discount factor",
         ),
         ConfigParam(
             "dropout_rate",
             float,
-            0.125,
+            0.1,
             "Dropout rate for the model",
             display_name="Dropout rate",
         ),
