@@ -108,7 +108,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         v_ests = batch_flat[:, 2]  # (BATCH_SIZE * 3,)
 
         # Calculate advantages (vectorized)
-        advantages = returns - v_ests  # (BATCH_SIZE * 3,)
+        advantages = returns - v_ests.detach()  # (BATCH_SIZE * 3,)
 
         # Normalize advantages
         normalized_advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
