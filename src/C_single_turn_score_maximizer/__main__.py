@@ -48,7 +48,7 @@ def main() -> None:
         ConfigParam(
             "games_per_batch",
             int,
-            4,
+            52,
             "Number of complete Yahtzee games per batch (must divide games_per_epoch evenly)",
             display_name="Games per batch",
         ),
