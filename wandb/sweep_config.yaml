@@ -6,7 +6,7 @@ metric:
 parameters:
   epochs:
      values: [50]
-  episodes_per_batch:
+  batch_size:
      values: [13, 26, 39, 52]
   learning_rate:
      values: [0.01, 0.0075, 0.005, 0.0025, 0.001, 0.00075, 0.0005, 0.00025, 0.0001]
