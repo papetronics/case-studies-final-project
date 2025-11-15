@@ -48,7 +48,7 @@ class BatchSizeTooLargeError(InvalidTrainingConfigurationError):
         )
 
 
-def main() -> None:
+def main() -> None:  # noqa: PLR0915
     """Run training or testing for single-turn Yahtzee score maximization."""
     # Define configuration schema
     config_params = [
@@ -129,6 +129,13 @@ def main() -> None:
             "Dropout rate for the model",
             display_name="Dropout rate",
         ),
+        ConfigParam(
+            "gradient_clip_val",
+            float,
+            0.5,
+            "Maximum gradient norm for gradient clipping",
+            display_name="Gradient clip value",
+        ),
     ]
 
     # Initialize project with configuration
@@ -153,6 +160,7 @@ def main() -> None:
     gamma_min = config["gamma_min"]
     gamma_max = config["gamma_max"]
     dropout_rate = config["dropout_rate"]
+    gradient_clip_val = config["gradient_clip_val"]
 
     # Calculate games_per_epoch from total_train_games and epochs
     games_per_epoch = total_train_games // epochs
@@ -230,6 +238,7 @@ def main() -> None:
                 "updates_per_epoch": updates_per_epoch,
                 "games_per_update": games_per_update,
                 "games_per_epoch": games_per_epoch_actual,
+                "gradient_clip_val": gradient_clip_val,
             }
         )
 
@@ -257,6 +266,8 @@ def main() -> None:
             devices="auto",
             check_val_every_n_epoch=5,  # Run validation every 5 epochs
             callbacks=[ckpt_cb],
+            gradient_clip_val=gradient_clip_val,  # or 1.0, etc.
+            gradient_clip_algorithm="norm",  # L2 norm clipping
         )
 
         # Create self-play dataset that collects episodes using the policy
