@@ -28,6 +28,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         entropy_coef_start: float,
         entropy_coef_end: float,
         entropy_anneal_epochs: int,
+        critic_coeff: float,
         return_calculator: ReturnCalculator | None = None,
     ):
         super().__init__()
@@ -47,6 +48,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         self.entropy_coef_start: float = entropy_coef_start
         self.entropy_coef_end: float = entropy_coef_end
         self.entropy_anneal_epochs: int = entropy_anneal_epochs
+        self.critic_coeff: float = critic_coeff
 
         self.return_calculator: ReturnCalculator = return_calculator or MonteCarloReturnCalculator()
         self.return_calculator.gamma = self.gamma_min
@@ -245,7 +247,11 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         ent_coef = self.get_entropy_coef()
         entropy_bonus = ent_coef * entropy_mean
 
-        loss = policy_loss + 0.01 * v_loss - entropy_bonus
+        loss = policy_loss + self.critic_coeff * v_loss - entropy_bonus
+
+        diff = returns - v_ests.squeeze()
+        ev = 1 - diff.var() / (returns.var() + 1e-8)
+        self.log("train/value_explained_var", ev, prog_bar=False)
 
         self.log("train/entropy", entropy_mean, prog_bar=False)
         self.log("train/entropy_bonus", entropy_bonus, prog_bar=False)

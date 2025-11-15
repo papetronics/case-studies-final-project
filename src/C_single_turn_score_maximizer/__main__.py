@@ -150,6 +150,13 @@ def main() -> None:  # noqa: PLR0915
             "Percentage of training epochs over which to anneal entropy coefficient",
             display_name="Entropy anneal percentage",
         ),
+        ConfigParam(
+            "critic_coeff",
+            float,
+            0.1,
+            "Coefficient for the critic loss term",
+            display_name="Critic coefficient",
+        ),
     ]
 
     # Initialize project with configuration
@@ -177,6 +184,7 @@ def main() -> None:  # noqa: PLR0915
     entropy_coef_start = config["entropy_coeff_start"]
     entropy_coef_end = config["entropy_coeff_end"]
     entropy_anneal_percentage = config["entropy_anneal_percentage"]
+    critic_coeff = config["critic_coeff"]
 
     # Calculate games_per_epoch from total_train_games and epochs
     games_per_epoch = total_train_games // epochs
@@ -236,6 +244,7 @@ def main() -> None:  # noqa: PLR0915
             entropy_coef_start=entropy_coef_start,
             entropy_coef_end=entropy_coef_end,
             entropy_anneal_epochs=int(entropy_anneal_percentage * epochs),
+            critic_coeff=critic_coeff,
         )
 
         # Save hyperparameters explicitly
@@ -261,6 +270,7 @@ def main() -> None:  # noqa: PLR0915
                 "entropy_coef_end": entropy_coef_end,
                 "entropy_anneal_percentage": entropy_anneal_percentage,
                 "entropy_anneal_epochs": int(entropy_anneal_percentage * epochs),
+                "critic_coeff": critic_coeff,
             }
         )
 
