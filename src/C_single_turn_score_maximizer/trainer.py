@@ -356,14 +356,31 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         return loss
 
     def configure_optimizers(self):  # noqa: ANN201
-        """Configure optimizers and learning rate schedulers."""
+        """Configure optimizers and learning rate schedulers.
+
+        Schedule: 5% warmup from min_lr_ratio to 1.0, 70% flat, 25% decay to min_lr_ratio.
+        """
         optimizer = torch.optim.Adam(self.policy_net.parameters(), lr=self.learning_rate)
-        scheduler = torch.optim.lr_scheduler.LinearLR(
-            optimizer,
-            start_factor=1.0,  # Start at full learning rate
-            end_factor=self.min_lr_ratio,  # End at min_lr_ratio of initial LR
-            total_iters=self.max_epochs,  # Linear decay over training epochs
-        )
+
+        warmup_epochs = int(0.05 * self.max_epochs)
+        decay_start_epoch = int(0.75 * self.max_epochs)
+
+        def lr_lambda(epoch: int) -> float:
+            """Return LR multiplier for custom schedule with warmup, flat, and decay phases."""
+            if epoch < warmup_epochs:
+                # Warmup: linear from min_lr_ratio to 1.0
+                progress = epoch / warmup_epochs
+                return self.min_lr_ratio + (1.0 - self.min_lr_ratio) * progress
+            elif epoch < decay_start_epoch:
+                # Flat: hold at 1.0
+                return 1.0
+            else:
+                # Decay: linear from 1.0 to min_lr_ratio
+                decay_epochs = self.max_epochs - decay_start_epoch
+                progress = (epoch - decay_start_epoch) / decay_epochs
+                return 1.0 - (1.0 - self.min_lr_ratio) * progress
+
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
         return {
             "optimizer": optimizer,
