@@ -230,8 +230,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         avg_reward = episode_returns.mean()
 
         # Calculate Huber loss
-        Gc = returns - returns.mean()  # noqa: N806
-        v_loss = torch.nn.functional.smooth_l1_loss(v_ests.squeeze(), Gc)
+        v_loss = torch.nn.functional.smooth_l1_loss(v_ests.squeeze(), returns)
         # v_loss = torch.nn.functional.mse_loss(
         #    torch.stack(v_ests_list).squeeze(), torch.tensor(returns_list, device=self.device)
         # )
