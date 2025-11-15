@@ -68,7 +68,7 @@ def main() -> None:  # noqa: PLR0915
             "Number of complete Yahtzee games per batch",
             display_name="Games per batch",
         ),
-        ConfigParam("learning_rate", float, 0.00075, "Learning rate", display_name="Learning rate"),
+        ConfigParam("learning_rate", float, 0.001, "Learning rate", display_name="Learning rate"),
         ConfigParam("hidden_size", int, 384, "Hidden layer size", display_name="Hidden size"),
         ConfigParam(
             "num_hidden", int, 3, "Number of hidden layers", display_name="Num hidden layers"
@@ -132,28 +132,28 @@ def main() -> None:  # noqa: PLR0915
         ConfigParam(
             "entropy_coeff_start",
             float,
-            0.03,
+            0.05,
             "Starting coefficient for entropy regularization",
             display_name="Entropy coeff start",
         ),
         ConfigParam(
             "entropy_coeff_end",
             float,
-            0.005,
+            0.0,
             "Ending coefficient for entropy regularization",
             display_name="Entropy coeff end",
         ),
         ConfigParam(
             "entropy_anneal_percentage",
             float,
-            0.7,
+            0.4,
             "Percentage of training epochs over which to anneal entropy coefficient",
             display_name="Entropy anneal percentage",
         ),
         ConfigParam(
             "critic_coeff",
             float,
-            0.02,
+            0.05,
             "Coefficient for the critic loss term",
             display_name="Critic coefficient",
         ),
