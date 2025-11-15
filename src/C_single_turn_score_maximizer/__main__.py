@@ -48,7 +48,7 @@ class BatchSizeTooLargeError(InvalidTrainingConfigurationError):
         )
 
 
-def main() -> None:
+def main() -> None:  # noqa: PLR0915
     """Run training or testing for single-turn Yahtzee score maximization."""
     # Define configuration schema
     config_params = [
@@ -129,6 +129,27 @@ def main() -> None:
             "Dropout rate for the model",
             display_name="Dropout rate",
         ),
+        ConfigParam(
+            "entropy_coeff_start",
+            float,
+            0.02,
+            "Starting coefficient for entropy regularization",
+            display_name="Entropy coeff start",
+        ),
+        ConfigParam(
+            "entropy_coeff_end",
+            float,
+            0.001,
+            "Ending coefficient for entropy regularization",
+            display_name="Entropy coeff end",
+        ),
+        ConfigParam(
+            "entropy_anneal_percentage",
+            float,
+            0.4,
+            "Percentage of training epochs over which to anneal entropy coefficient",
+            display_name="Entropy anneal percentage",
+        ),
     ]
 
     # Initialize project with configuration
@@ -153,6 +174,9 @@ def main() -> None:
     gamma_min = config["gamma_min"]
     gamma_max = config["gamma_max"]
     dropout_rate = config["dropout_rate"]
+    entropy_coef_start = config["entropy_coeff_start"]
+    entropy_coef_end = config["entropy_coeff_end"]
+    entropy_anneal_percentage = config["entropy_anneal_percentage"]
 
     # Calculate games_per_epoch from total_train_games and epochs
     games_per_epoch = total_train_games // epochs
@@ -209,6 +233,9 @@ def main() -> None:
             min_lr_ratio=min_lr_ratio,
             gamma_min=gamma_min,
             gamma_max=gamma_max,
+            entropy_coef_start=entropy_coef_start,
+            entropy_coef_end=entropy_coef_end,
+            entropy_anneal_epochs=int(entropy_anneal_percentage * epochs),
         )
 
         # Save hyperparameters explicitly
