@@ -227,8 +227,12 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         episode_returns = returns.view(batch_size, num_steps)[:, -1]  # (BATCH_SIZE,)
         avg_reward = episode_returns.mean()
 
-        # Calculate value loss
-        v_loss = torch.nn.functional.mse_loss(v_ests.squeeze(), returns)
+        # Calculate Huber loss
+        Gc = returns - returns.mean()  # noqa: N806
+        v_loss = torch.nn.functional.smooth_l1_loss(v_ests.squeeze(), Gc)
+        # v_loss = torch.nn.functional.mse_loss(
+        #    torch.stack(v_ests_list).squeeze(), torch.tensor(returns_list, device=self.device)
+        # )
 
         ## Entropy
         rolling_entropy = rolling_dist.entropy().sum(dim=1)  # (BATCH_SIZE*3,)
