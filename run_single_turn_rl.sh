@@ -5,7 +5,7 @@ set -e
 ./build_image.sh C_single_turn_score_maximizer \
   --epochs 500 \
   --total-train-games 260000 \
-  --games-per-batch 52 \
+  --games-per-batch 4 \
   --log-dir /workspace/logs \
   --hidden-size 384 \
   --num-hidden 3 \
