@@ -241,7 +241,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         ent_coef = self.get_entropy_coef()
         entropy_bonus = ent_coef * entropy_mean
 
-        loss = policy_loss + 0.05 * v_loss - entropy_bonus
+        loss = policy_loss + 0.01 * v_loss - entropy_bonus
 
         self.log("train/entropy", entropy_mean, prog_bar=False)
         self.log("train/entropy_bonus", entropy_bonus, prog_bar=False)

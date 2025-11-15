@@ -132,21 +132,21 @@ def main() -> None:  # noqa: PLR0915
         ConfigParam(
             "entropy_coeff_start",
             float,
-            0.02,
+            0.03,
             "Starting coefficient for entropy regularization",
             display_name="Entropy coeff start",
         ),
         ConfigParam(
             "entropy_coeff_end",
             float,
-            0.001,
+            0.003,
             "Ending coefficient for entropy regularization",
             display_name="Entropy coeff end",
         ),
         ConfigParam(
             "entropy_anneal_percentage",
             float,
-            0.4,
+            0.6,
             "Percentage of training epochs over which to anneal entropy coefficient",
             display_name="Entropy anneal percentage",
         ),
@@ -257,6 +257,10 @@ def main() -> None:  # noqa: PLR0915
                 "updates_per_epoch": updates_per_epoch,
                 "games_per_update": games_per_update,
                 "games_per_epoch": games_per_epoch_actual,
+                "entropy_coef_start": entropy_coef_start,
+                "entropy_coef_end": entropy_coef_end,
+                "entropy_anneal_percentage": entropy_anneal_percentage,
+                "entropy_anneal_epochs": int(entropy_anneal_percentage * epochs),
             }
         )
 
