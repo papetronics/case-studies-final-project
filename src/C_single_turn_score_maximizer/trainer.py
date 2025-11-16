@@ -184,6 +184,23 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         # Return a dict for PyTorch Lightning compatibility
         return {"val_loss": -mean_total_score}  # Negative because higher scores are better
 
+    def run_sweep_test_evaluation(self) -> None:
+        """Run comprehensive test evaluation for hyperparameter sweeps.
+
+        Runs 10000 games and logs test/mean_total_score and test/std_total_score.
+        This is called at epochs 99, 199, 299, 399, 499, etc. (every 100 epochs).
+        """
+        num_test_games = 10000
+
+        # Run all games in parallel with batched forward passes
+        total_scores = self.run_batched_validation_games(num_test_games)
+
+        mean_total_score = float(np.mean(total_scores))
+        std_total_score = float(np.std(total_scores))
+
+        self.log("test/mean_total_score", mean_total_score, prog_bar=True)
+        self.log("test/std_total_score", std_total_score, prog_bar=False)
+
     def get_entropy_coef(self) -> float:
         """Get current entropy coefficient with linear annealing."""
         start = self.entropy_coef_start
@@ -455,6 +472,11 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
                 # Policy movement: Good = 0.002-0.02; below 0.001 = frozen
                 policy_movement = (kl_roll_mean + kl_score_mean) / 2.0
                 self.log("diagnostics/policy_movement", policy_movement, prog_bar=False)
+
+        # Run sweep test evaluation at epochs 99, 199, 299, 399, 499, etc.
+        # (every 100 epochs, not counting epoch 0)
+        if (self.current_epoch + 1) % 100 == 0:
+            self.run_sweep_test_evaluation()
 
     def on_train_start(self) -> None:
         """Initialize environments and configure metric visualizations."""
