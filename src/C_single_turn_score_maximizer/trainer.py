@@ -19,7 +19,7 @@ from utilities.diagnostics import (
 )
 from utilities.return_calculators import MonteCarloReturnCalculator, ReturnCalculator
 
-from .model import YahtzeeAgent, phi, sample_action
+from .model import YahtzeeAgent, phi, select_action
 from .self_play_dataset import EpisodeBatch
 
 
@@ -128,10 +128,10 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
                 )  # (num_active, state_size)
 
                 # Single batched forward pass
-                rolling_probs, scoring_probs, v_ests = self.policy_net.forward(state_tensors)
+                rolling_probs, scoring_probs, _ = self.policy_net.forward(state_tensors)
 
-                # Sample actions for all active games
-                actions_list, _, _ = sample_action(rolling_probs, scoring_probs, v_ests)
+                # Select deterministic actions for validation (argmax/threshold)
+                actions_list = select_action(rolling_probs, scoring_probs)
                 rolling_action_tensors, scoring_action_tensors = actions_list
 
                 # Step each active environment
