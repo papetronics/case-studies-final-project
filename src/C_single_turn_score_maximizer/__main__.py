@@ -64,14 +64,14 @@ def main() -> None:  # noqa: PLR0915
         ConfigParam(
             "games_per_batch",
             int,
-            52,
+            26,
             "Number of complete Yahtzee games per batch",
             display_name="Games per batch",
         ),
-        ConfigParam("learning_rate", float, 0.001, "Learning rate", display_name="Learning rate"),
+        ConfigParam("learning_rate", float, 0.0005, "Learning rate", display_name="Learning rate"),
         ConfigParam("hidden_size", int, 384, "Hidden layer size", display_name="Hidden size"),
         ConfigParam(
-            "num_hidden", int, 3, "Number of hidden layers", display_name="Num hidden layers"
+            "num_hidden", int, 4, "Number of hidden layers", display_name="Num hidden layers"
         ),
         ConfigParam(
             "checkpoint_path",
@@ -130,11 +130,32 @@ def main() -> None:  # noqa: PLR0915
             display_name="Dropout rate",
         ),
         ConfigParam(
-            "gradient_clip_val",
+            "entropy_coeff_start",
             float,
-            0.5,
-            "Gradient clipping value",
-            display_name="Gradient clip value",
+            0.05,
+            "Starting coefficient for entropy regularization",
+            display_name="Entropy coeff start",
+        ),
+        ConfigParam(
+            "entropy_coeff_end",
+            float,
+            0.0,
+            "Ending coefficient for entropy regularization",
+            display_name="Entropy coeff end",
+        ),
+        ConfigParam(
+            "entropy_anneal_percentage",
+            float,
+            0.4,
+            "Percentage of training epochs over which to anneal entropy coefficient",
+            display_name="Entropy anneal percentage",
+        ),
+        ConfigParam(
+            "critic_coeff",
+            float,
+            0.05,
+            "Coefficient for the critic loss term",
+            display_name="Critic coefficient",
         ),
     ]
 
@@ -160,7 +181,10 @@ def main() -> None:  # noqa: PLR0915
     gamma_min = config["gamma_min"]
     gamma_max = config["gamma_max"]
     dropout_rate = config["dropout_rate"]
-    gradient_clip_val = config["gradient_clip_val"]
+    entropy_coef_start = config["entropy_coeff_start"]
+    entropy_coef_end = config["entropy_coeff_end"]
+    entropy_anneal_percentage = config["entropy_anneal_percentage"]
+    critic_coeff = config["critic_coeff"]
 
     # Calculate games_per_epoch from total_train_games and epochs
     games_per_epoch = total_train_games // epochs
@@ -217,6 +241,10 @@ def main() -> None:  # noqa: PLR0915
             min_lr_ratio=min_lr_ratio,
             gamma_min=gamma_min,
             gamma_max=gamma_max,
+            entropy_coef_start=entropy_coef_start,
+            entropy_coef_end=entropy_coef_end,
+            entropy_anneal_epochs=int(entropy_anneal_percentage * epochs),
+            critic_coeff=critic_coeff,
         )
 
         # Save hyperparameters explicitly
@@ -238,6 +266,11 @@ def main() -> None:  # noqa: PLR0915
                 "updates_per_epoch": updates_per_epoch,
                 "games_per_update": games_per_update,
                 "games_per_epoch": games_per_epoch_actual,
+                "entropy_coef_start": entropy_coef_start,
+                "entropy_coef_end": entropy_coef_end,
+                "entropy_anneal_percentage": entropy_anneal_percentage,
+                "entropy_anneal_epochs": int(entropy_anneal_percentage * epochs),
+                "critic_coeff": critic_coeff,
             }
         )
 
@@ -265,8 +298,6 @@ def main() -> None:  # noqa: PLR0915
             devices="auto",
             check_val_every_n_epoch=5,  # Run validation every 5 epochs
             callbacks=[ckpt_cb],
-            gradient_clip_val=gradient_clip_val,
-            gradient_clip_algorithm="norm",
         )
 
         # Create self-play dataset that collects episodes using the policy

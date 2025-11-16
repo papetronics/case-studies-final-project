@@ -1,3 +1,5 @@
+from typing import Any, cast
+
 import gymnasium as gym
 import numpy as np
 import pytorch_lightning as lightning
@@ -5,6 +7,16 @@ import torch
 
 from environments.full_yahtzee_env import Action, Observation
 from utilities.activation_functions import ActivationFunctionName
+from utilities.diagnostics import (
+    compute_action_concentration,
+    compute_advantage_stats,
+    compute_critic_explained_variance,
+    compute_entropy_stats,
+    compute_kl_divergence,
+    compute_phase_balance,
+    compute_return_stats,
+    compute_rolling_mask_diversity,
+)
 from utilities.return_calculators import MonteCarloReturnCalculator, ReturnCalculator
 
 from .model import YahtzeeAgent, phi, sample_action
@@ -12,7 +24,25 @@ from .self_play_dataset import EpisodeBatch
 
 
 class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
-    """PyTorch Lightning trainer for single-turn Yahtzee score maximization using REINFORCE."""
+    """PyTorch Lightning trainer for single-turn Yahtzee score maximization using REINFORCE.
+
+    DIAGNOSTIC QUICK REFERENCE:
+    ✅ Healthy training:
+       - train/avg_reward: steadily rising
+       - train/critic_ev: 0.3-0.7 and trending up
+       - train/entropy_roll: 1.0-2.4 (gradual decline from high)
+       - train/kl_roll, train/kl_score: 0.002-0.02 (nonzero movement)
+       - train/score_top1: <0.7 (not collapsed)
+       - diagnostics/training_health: >0.4
+
+    🚨 Red flags:
+       - Plateauing: avg_reward flat + KL ≈ 0 = policy frozen
+       - Collapse: entropy_roll <1.2 early OR score_top1 >0.7 = deterministic too soon
+       - Bad critic: critic_ev stuck at 0 or negative = not learning
+       - Phase imbalance: adv_roll_std ≪ adv_score_std (>10x diff) = one phase dwarfed
+
+    See DIAGNOSTICS.md for full details.
+    """
 
     def __init__(  # noqa: PLR0913
         self,
@@ -25,6 +55,10 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         min_lr_ratio: float,
         gamma_max: float,
         gamma_min: float,
+        entropy_coef_start: float,
+        entropy_coef_end: float,
+        entropy_anneal_epochs: int,
+        critic_coeff: float,
         return_calculator: ReturnCalculator | None = None,
     ):
         super().__init__()
@@ -41,6 +75,10 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         self.min_lr_ratio: float = min_lr_ratio
         self.gamma_max: float = gamma_max
         self.gamma_min: float = gamma_min
+        self.entropy_coef_start: float = entropy_coef_start
+        self.entropy_coef_end: float = entropy_coef_end
+        self.entropy_anneal_epochs: int = entropy_anneal_epochs
+        self.critic_coeff: float = critic_coeff
 
         self.return_calculator: ReturnCalculator = return_calculator or MonteCarloReturnCalculator()
         self.return_calculator.gamma = self.gamma_min
@@ -146,7 +184,17 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         # Return a dict for PyTorch Lightning compatibility
         return {"val_loss": -mean_total_score}  # Negative because higher scores are better
 
-    def training_step(self, batch: EpisodeBatch, batch_idx: int) -> torch.Tensor:  # noqa: ARG002
+    def get_entropy_coef(self) -> float:
+        """Get current entropy coefficient with linear annealing."""
+        start = self.entropy_coef_start
+        end = self.entropy_coef_end
+        entropy_t = max(1, self.entropy_anneal_epochs)
+
+        # clamp at 1.0 so we stop decaying after T epochs
+        progress = min(self.current_epoch / entropy_t, 1.0)
+        return start + (end - start) * progress
+
+    def training_step(self, batch: EpisodeBatch, batch_idx: int) -> torch.Tensor:  # noqa: ARG002, C901, PLR0915
         """Perform a training step using REINFORCE algorithm with vectorized operations."""
         # batch is an EpisodeBatch dict with pre-flattened tensors:
         # - "states": (BATCH_SIZE*3, state_size) float32
@@ -211,27 +259,128 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         episode_returns = returns.view(batch_size, num_steps)[:, -1]  # (BATCH_SIZE,)
         avg_reward = episode_returns.mean()
 
-        # Calculate value loss
+        # Calculate Huber loss
+        # v_loss = torch.nn.functional.smooth_l1_loss(v_ests.squeeze(), returns)
+
+        # Use MSE loss for critic
         v_loss = torch.nn.functional.mse_loss(v_ests.squeeze(), returns)
 
+        ## Entropy
+        rolling_entropy = rolling_dist.entropy().sum(dim=1)  # (BATCH_SIZE*3,)
+        scoring_entropy = scoring_dist.entropy()  # (BATCH_SIZE*3,)
+        # Match entropy to the active head at each step, same as log_probs
+        entropies = torch.where(
+            phases_flat == 0, rolling_entropy, scoring_entropy
+        )  # (BATCH_SIZE*3,)
+        entropy_mean = entropies.mean()
+        ent_coef = self.get_entropy_coef()
+        entropy_bonus = ent_coef * entropy_mean
+
+        loss = policy_loss + self.critic_coeff * v_loss - entropy_bonus
+
+        diff = returns - v_ests.squeeze()
+        ev = 1 - diff.var() / (returns.var() + 1e-8)
+        self.log("train/value_explained_var", ev, prog_bar=False)
+
+        self.log("train/entropy", entropy_mean, prog_bar=False)
+        self.log("train/entropy_bonus", entropy_bonus, prog_bar=False)
+        self.log("train/entropy_coef", ent_coef, prog_bar=False)
         self.log("train/policy_loss", policy_loss, prog_bar=True)
-        self.log("train/avg_reward", avg_reward, prog_bar=True)
         self.log("train/v_loss", v_loss, prog_bar=False)
-        # Log current learning rate
+
         current_lr = self.trainer.optimizers[0].param_groups[0]["lr"]
         self.log("lr", current_lr, prog_bar=False)
 
-        return policy_loss + 0.05 * v_loss
+        self.log("train/avg_reward", avg_reward, prog_bar=True)
+        self.log("train/total_loss", loss, prog_bar=True)
+
+        # ===== DIAGNOSTIC METRICS =====
+        # Advantage stats: adv_mean ~0 (by construction), adv_std nonzero (signal strength)
+        # Red flag: adv_std → 0 = tiny gradients; roll vs score std differs >10x = phase imbalance
+        adv_stats = compute_advantage_stats(advantages, phases_flat)
+        self.log_dict({f"train/{k}": v for k, v in adv_stats.items()}, prog_bar=False)
+
+        # Return std: high early (stochastic), stabilizes; collapsing to tiny values = degenerate policy
+        ret_stats = compute_return_stats(episode_returns)
+        self.log_dict({f"train/{k}": v for k, v in ret_stats.items()}, prog_bar=False)
+
+        # Critic EV: Good = 0.3-0.7, rising. Red flags: stuck at 0 (not learning), <0 (harmful), wild swings (unstable)
+        critic_ev = compute_critic_explained_variance(returns, v_ests)
+        self.log("train/critic_ev", critic_ev, prog_bar=False)
+        if hasattr(self, "_epoch_metrics"):
+            self._epoch_metrics["critic_ev"].append(float(critic_ev.item()))
+
+        # Entropy: roll ~2.0-2.4 early → ~1.0 later; score moderate, gradual decline
+        # Red flags: roll <1.2 early = premature collapse; score near-zero = deterministic too soon
+        entropy_stats = compute_entropy_stats(rolling_probs, scoring_probs, phases_flat)
+        self.log_dict({f"train/{k}": v for k, v in entropy_stats.items()}, prog_bar=False)
+        if hasattr(self, "_epoch_metrics"):
+            self._epoch_metrics["entropy_roll"].append(float(entropy_stats["entropy_roll"].item()))
+            self._epoch_metrics["entropy_score"].append(
+                float(entropy_stats["entropy_score"].item())
+            )
+
+        # Concentration: top1 starts ~0.2-0.4, climbs slowly; top3 >0.6 early
+        # Red flag: top1 >0.7 in first 10-20% of training = over-confident, collapsed
+        concentration_stats = compute_action_concentration(scoring_probs)
+        self.log_dict({f"train/{k}": v for k, v in concentration_stats.items()}, prog_bar=False)
+
+        # Mask diversity: high and steady; monotonic decline = converging to "always keep X" rut
+        mask_diversity = compute_rolling_mask_diversity(rolling_actions_flat, phases_flat)
+        if mask_diversity is not None:
+            self.log("train/roll_mask_diversity", mask_diversity, prog_bar=False)
+
+        # KL divergence: Good = 0.002-0.02 (policy moving). Red flags: ≈0 = frozen; sudden spikes = too hot
+        # Initialize caches if needed
+        with torch.no_grad():
+            if not hasattr(self, "_prev_roll_p"):
+                self._prev_roll_p = rolling_probs.detach()
+                self._prev_score_p = scoring_probs.detach()
+
+        kl_stats, self._prev_roll_p, self._prev_score_p = compute_kl_divergence(
+            rolling_probs, scoring_probs, phases_flat, self._prev_roll_p, self._prev_score_p
+        )
+        if kl_stats["kl_roll"] is not None:
+            self.log("train/kl_roll", kl_stats["kl_roll"], prog_bar=False)
+            if hasattr(self, "_epoch_metrics"):
+                self._epoch_metrics["kl_roll"].append(float(kl_stats["kl_roll"].item()))
+        if kl_stats["kl_score"] is not None:
+            self.log("train/kl_score", kl_stats["kl_score"], prog_bar=False)
+            if hasattr(self, "_epoch_metrics"):
+                self._epoch_metrics["kl_score"].append(float(kl_stats["kl_score"].item()))
+
+        # Phase balance: should be ~0.67 (2 rolls + 1 score per turn); extreme drift = bad logic
+        phase_balance = compute_phase_balance(phases_flat)
+        self.log("train/frac_roll_steps", phase_balance, prog_bar=False)
+
+        return loss
 
     def configure_optimizers(self):  # noqa: ANN201
-        """Configure optimizers and learning rate schedulers."""
+        """Configure optimizers and learning rate schedulers.
+
+        Schedule: 5% warmup from min_lr_ratio to 1.0, 70% flat, 25% decay to min_lr_ratio.
+        """
         optimizer = torch.optim.Adam(self.policy_net.parameters(), lr=self.learning_rate)
-        scheduler = torch.optim.lr_scheduler.LinearLR(
-            optimizer,
-            start_factor=1.0,  # Start at full learning rate
-            end_factor=self.min_lr_ratio,  # End at min_lr_ratio of initial LR
-            total_iters=self.max_epochs,  # Linear decay over training epochs
-        )
+
+        warmup_epochs = int(0.05 * self.max_epochs)
+        decay_start_epoch = int(0.75 * self.max_epochs)
+
+        def lr_lambda(epoch: int) -> float:
+            """Return LR multiplier for custom schedule with warmup, flat, and decay phases."""
+            if epoch < warmup_epochs:
+                # Warmup: linear from min_lr_ratio to 1.0
+                progress = epoch / warmup_epochs
+                return self.min_lr_ratio + (1.0 - self.min_lr_ratio) * progress
+            elif epoch < decay_start_epoch:
+                # Flat: hold at 1.0
+                return 1.0
+            else:
+                # Decay: linear from 1.0 to min_lr_ratio
+                decay_epochs = self.max_epochs - decay_start_epoch
+                progress = (epoch - decay_start_epoch) / decay_epochs
+                return 1.0 - (1.0 - self.min_lr_ratio) * progress
+
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
         return {
             "optimizer": optimizer,
@@ -253,9 +402,99 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         self.return_calculator.gamma = current_gamma
         self.log("train/gamma", current_gamma, prog_bar=False)
 
+        # Reset epoch-level trackers for custom visualizations
+        if not hasattr(self, "_epoch_metrics"):
+            self._epoch_metrics: dict[str, list[float]] = {
+                "critic_ev": [],
+                "entropy_roll": [],
+                "entropy_score": [],
+                "kl_roll": [],
+                "kl_score": [],
+            }
+        else:
+            for key in self._epoch_metrics:
+                self._epoch_metrics[key].clear()
+
+    def on_train_epoch_end(self) -> None:
+        """Log epoch-level summary statistics and custom visualizations."""
+        # Create custom metrics for health monitoring
+        if hasattr(self, "_epoch_metrics") and len(self._epoch_metrics.get("critic_ev", [])) > 0:
+            # Compute epoch averages
+            critic_ev_mean = float(np.mean(self._epoch_metrics["critic_ev"]))
+            entropy_roll_mean = float(np.mean(self._epoch_metrics["entropy_roll"]))
+            entropy_score_mean = float(np.mean(self._epoch_metrics["entropy_score"]))
+
+            # Health score: combination of critic quality and entropy
+            # Healthy: critic_ev 0.3-0.7, entropy_roll ~1.0-2.4, entropy_score moderate
+            # Score ranges 0-1; good training should be >0.4
+            critic_component = (
+                max(0, min(critic_ev_mean / 0.7, 1.0)) * 0.5
+            )  # Cap at 0.7, scale to 0-0.5
+            roll_ent_component = (
+                max(0, min(entropy_roll_mean / 2.4, 1.0)) * 0.25
+            )  # Cap at 2.4, scale to 0-0.25
+            score_ent_component = (
+                max(0, min(entropy_score_mean / 1.5, 1.0)) * 0.25
+            )  # Cap at 1.5, scale to 0-0.25
+            health_score = critic_component + roll_ent_component + score_ent_component
+
+            self.log("diagnostics/training_health", health_score, prog_bar=False)
+            self.log("diagnostics/critic_ev_epoch", critic_ev_mean, prog_bar=False)
+            self.log("diagnostics/entropy_roll_epoch", entropy_roll_mean, prog_bar=False)
+            self.log("diagnostics/entropy_score_epoch", entropy_score_mean, prog_bar=False)
+
+            # Compute KL statistics if available
+            if self._epoch_metrics.get("kl_roll") and self._epoch_metrics.get("kl_score"):
+                kl_roll_mean = float(
+                    np.mean([k for k in self._epoch_metrics["kl_roll"] if k is not None])
+                )
+                kl_score_mean = float(
+                    np.mean([k for k in self._epoch_metrics["kl_score"] if k is not None])
+                )
+
+                # Policy movement: Good = 0.002-0.02; below 0.001 = frozen
+                policy_movement = (kl_roll_mean + kl_score_mean) / 2.0
+                self.log("diagnostics/policy_movement", policy_movement, prog_bar=False)
+
     def on_train_start(self) -> None:
-        """Initialize environments at the start of training."""
-        pass
+        """Initialize environments and configure metric visualizations."""
+        # Configure WandB-specific visualizations if using WandB
+        if (
+            self.logger is not None
+            and hasattr(self.logger, "experiment")
+            and hasattr(cast("Any", self.logger).experiment, "define_metric")
+        ):
+            logger = cast("Any", self.logger).experiment
+
+            # Set step metric for all training metrics
+            logger.define_metric("train/*", step_metric="trainer/global_step")
+
+            # Group related metrics for better dashboard organization
+            # Advantage metrics
+            logger.define_metric("train/adv_mean", summary="last")
+            logger.define_metric("train/adv_std", summary="mean")
+
+            # Phase-specific advantages (useful to spot if one phase dominates)
+            logger.define_metric("train/adv_roll_mean", summary="last")
+            logger.define_metric("train/adv_score_mean", summary="last")
+
+            # Critic quality (should trend toward 1.0)
+            logger.define_metric("train/critic_ev", summary="max,mean")
+
+            # Entropy (should stay high; low = collapse)
+            logger.define_metric("train/entropy_roll", summary="min,mean")
+            logger.define_metric("train/entropy_score", summary="min,mean")
+
+            # Concentration (high top1/top3 = policy collapse)
+            logger.define_metric("train/score_top1", summary="mean,max")
+            logger.define_metric("train/score_top3", summary="mean,max")
+
+            # Diversity (should stay high)
+            logger.define_metric("train/roll_mask_diversity", summary="min,mean")
+
+            # KL divergence (how much policy is changing)
+            logger.define_metric("train/kl_roll", summary="mean")
+            logger.define_metric("train/kl_score", summary="mean")
 
     def on_train_end(self) -> None:
         """Close validation environments at the end of training."""
