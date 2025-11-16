@@ -407,6 +407,65 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
 
         return loss
 
+    def configure_gradient_clipping(
+        self,
+        optimizer: torch.optim.Optimizer,
+        gradient_clip_val: int | float | None = None,
+        gradient_clip_algorithm: str | None = None,
+    ) -> None:
+        """Add custom gradient clipping that logs pre-clipping gradient norms."""
+        # global grad norm before clipping
+        parameters = [p for p in self.parameters() if p.grad is not None]
+        if len(parameters) == 0:
+            return
+
+        # L2 norm of all grads
+        # (detach so we don't mess with autograd graph)
+        grads = [cast("torch.Tensor", p.grad).detach().flatten() for p in parameters]
+        flat = torch.cat(grads)
+        total_norm = flat.norm(2)
+
+        # log grad norm
+        self.log(
+            "train/grad_norm",
+            total_norm,
+            on_step=True,
+            on_epoch=False,
+            prog_bar=False,
+            logger=True,
+        )
+
+        # Check if clipping is disabled (None or 0.0)
+        if gradient_clip_val is None or gradient_clip_val == 0.0:
+            # No clipping - log that clipping is disabled
+            self.log(
+                "train/grad_clipped",
+                0.0,
+                on_step=True,
+                on_epoch=False,
+                prog_bar=False,
+                logger=True,
+            )
+            return
+
+        # Clipping is enabled
+        clipped_flag = float(total_norm > gradient_clip_val)
+        self.log(
+            "train/grad_clipped",
+            clipped_flag,
+            on_step=True,
+            on_epoch=False,
+            prog_bar=False,
+            logger=True,
+        )
+
+        # let Lightning actually do the clipping
+        self.clip_gradients(
+            optimizer,
+            gradient_clip_val=gradient_clip_val,
+            gradient_clip_algorithm=gradient_clip_algorithm,
+        )
+
     def configure_optimizers(self):  # noqa: ANN201
         """Configure optimizers and learning rate schedulers.
 

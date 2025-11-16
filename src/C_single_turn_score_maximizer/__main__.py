@@ -130,6 +130,13 @@ def main() -> None:  # noqa: PLR0915
             display_name="Dropout rate",
         ),
         ConfigParam(
+            "gradient_clip_val",
+            float,
+            0.0,
+            "Maximum gradient norm for gradient clipping",
+            display_name="Gradient clip value",
+        ),
+        ConfigParam(
             "entropy_coeff_start",
             float,
             0.05,
@@ -181,6 +188,7 @@ def main() -> None:  # noqa: PLR0915
     gamma_min = config["gamma_min"]
     gamma_max = config["gamma_max"]
     dropout_rate = config["dropout_rate"]
+    gradient_clip_val = config["gradient_clip_val"]
     entropy_coef_start = config["entropy_coeff_start"]
     entropy_coef_end = config["entropy_coeff_end"]
     entropy_anneal_percentage = config["entropy_anneal_percentage"]
@@ -266,6 +274,7 @@ def main() -> None:  # noqa: PLR0915
                 "updates_per_epoch": updates_per_epoch,
                 "games_per_update": games_per_update,
                 "games_per_epoch": games_per_epoch_actual,
+                "gradient_clip_val": gradient_clip_val,
                 "entropy_coef_start": entropy_coef_start,
                 "entropy_coef_end": entropy_coef_end,
                 "entropy_anneal_percentage": entropy_anneal_percentage,
@@ -298,6 +307,8 @@ def main() -> None:  # noqa: PLR0915
             devices="auto",
             check_val_every_n_epoch=5,  # Run validation every 5 epochs
             callbacks=[ckpt_cb],
+            gradient_clip_val=gradient_clip_val,  # or 1.0, etc.
+            gradient_clip_algorithm="norm",  # L2 norm clipping
         )
 
         # Create self-play dataset that collects episodes using the policy
