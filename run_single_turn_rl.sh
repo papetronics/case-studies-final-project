@@ -5,13 +5,17 @@ set -e
 ./build_image.sh C_single_turn_score_maximizer \
   --epochs 500 \
   --total-train-games 260000 \
-  --games-per-batch 4 \
+  --games-per-batch 26 \
   --log-dir /workspace/logs \
   --hidden-size 384 \
-  --num-hidden 3 \
+  --num-hidden 4 \
   --activation-function Swish \
-  --learning-rate 0.001 \
+  --learning-rate 0.0005 \
   --min-lr-ratio 0.01 \
   --gamma-min 0.9 \
   --gamma-max 1.0 \
-  --dropout-rate 0.1
+  --dropout-rate 0.1 \
+  --entropy-coeff-start 0.05 \
+  --entropy-coeff-end 0.0 \
+  --entropy-anneal-percentage 0.4 \
+  --critic-coeff 0.05

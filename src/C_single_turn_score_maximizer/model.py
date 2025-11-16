@@ -161,6 +161,22 @@ def sample_action(
     return (rolling_tensor, scoring_tensor), (rolling_log_prob, scoring_log_prob), value_est
 
 
+def select_action(
+    rolling_probs: torch.Tensor, scoring_probs: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Select deterministic action using argmax/threshold (for validation/testing).
+
+    Uses >0.5 threshold for rolling decisions and argmax for scoring decisions.
+    """
+    # Rolling: threshold at 0.5 (keep dice with prob > 0.5)
+    rolling_tensor = (rolling_probs > 0.5).float()  # noqa: PLR2004
+
+    # Scoring: argmax to select highest probability category
+    scoring_tensor = scoring_probs.argmax(dim=-1)
+
+    return (rolling_tensor, scoring_tensor)
+
+
 class YahtzeeAgent(nn.Module):
     """Neural network model for maximizing score in a single turn of Yahtzee."""
 
