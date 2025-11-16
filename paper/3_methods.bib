@@ -1,0 +1,151 @@
+% ============================================================================
+% 3. METHODS
+% ============================================================================
+% This is where you get to be citation-dense without bloating the prose.
+
+% ----------------------------------------------------------------------------
+% 3.1 Environment / Game Definition
+% ----------------------------------------------------------------------------
+
+% NOTE: The following are already defined in 1_introduction.bib:
+% hasbro-2022-yahtzee-rules
+% glenn-2006-optimal-yahtzee
+% pawlewicz-2011-multiplayer-yahtzee
+
+% ----------------------------------------------------------------------------
+% 3.2 Architecture (state representation, activations, init, attention)
+% ----------------------------------------------------------------------------
+
+% Capacity / width choices (already defined in 1_introduction.bib):
+% horne-1994-bounds-rnn-fsm
+% hanin-2017-bounded-width-relu
+
+% Layer Normalization
+@article{ba-2016-layernorm,
+  author  = {Jimmy Lei Ba and Jamie Ryan Kiros and Geoffrey E. Hinton},
+  title   = {Layer Normalization},
+  journal = {arXiv preprint arXiv:1607.06450},
+  year    = {2016}
+}
+
+% Kaiming/He initialization for ReLU networks
+@inproceedings{he-2015-delving-rectifiers,
+  author    = {Kaiming He and Xiangyu Zhang and Shaoqing Ren and Jian Sun},
+  title     = {Delving Deep into Rectifiers: Surpassing Human-Level Performance on ImageNet Classification},
+  booktitle = {Proceedings of the IEEE International Conference on Computer Vision (ICCV)},
+  year      = {2015},
+  pages     = {1026--1034},
+  doi       = {10.1109/ICCV.2015.123}
+}
+
+% Swish activation function
+@article{ramachandran-2017-swish,
+  author  = {Prajit Ramachandran and Barret Zoph and Quoc V. Le},
+  title   = {Searching for Activation Functions},
+  journal = {arXiv preprint arXiv:1710.05941},
+  year    = {2017}
+}
+
+% SiLU (Sigmoid-Weighted Linear Units) activation for RL
+@article{elfwing-2018-silu-rl,
+  author  = {Stefan Elfwing and Eiji Uchibe and Kenji Doya},
+  title   = {Sigmoid-Weighted Linear Units for Neural Network Function Approximation in Reinforcement Learning},
+  journal = {Neural Networks},
+  year    = {2018},
+  volume  = {107},
+  pages   = {3--11},
+  doi     = {10.1016/j.neunet.2017.12.012}
+}
+
+% GELU activation
+@article{hendrycks-2016-gelu,
+  author  = {Hendrycks, Dan and Gimpel, Kevin},
+  title   = {Gaussian Error Linear Units (GELUs)},
+  journal = {arXiv preprint arXiv:1606.08415},
+  year    = {2016},
+  url     = {https://arxiv.org/abs/1606.08415}
+}
+
+% RAdam optimizer (variance of adaptive learning rate)
+@article{liu-2019-radam,
+  title         = {On the Variance of the Adaptive Learning Rate and Beyond},
+  author        = {Liu, Liyuan and Jiang, Haoming and He, Pengcheng and Chen, Weizhu and Liu, Xiaodong and Gao, Jianfeng and Han, Jiawei},
+  journal       = {arXiv preprint arXiv:1908.03265},
+  year          = {2019},
+  eprint        = {1908.03265},
+  archiveprefix = {arXiv},
+  primaryclass  = {cs.LG},
+  url           = {https://arxiv.org/abs/1908.03265}
+}
+
+% Attention mechanism
+@inproceedings{vaswani-2017-attention,
+  title     = {Attention {I}s {A}ll {Y}ou {N}eed},
+  author    = {Vaswani, Ashish and Shazeer, Noam and Parmar, Niki and Uszkoreit, Jakob
+               and Jones, Llion and Gomez, Aidan N. and Kaiser, {\L}ukasz and Polosukhin, Illia},
+  booktitle = {Advances in Neural Information Processing Systems},
+  editor    = {Guyon, I. and Luxburg, U. V. and Bengio, S. and Wallach, H. and Fergus, R.
+               and Vishwanathan, S. and Garnett, R.},
+  volume    = {30},
+  year      = {2017}
+}
+
+% ----------------------------------------------------------------------------
+% 3.3 RL Algorithms & Optimization (REINFORCE / A2C / PPO / tricks)
+% ----------------------------------------------------------------------------
+
+% Core algorithm references (already defined in 2_related_work.bib):
+% sutton-2018-reinforcement-book
+% williams-1992-reinforce
+% sutton-1988-temporal-differences
+% sutton-2000-policy-gradient
+% mnih-2016-a3c
+% schulman-2016-gae
+% schulman-2017-ppo
+% greensmith-2004-variance-reduction
+
+% Gradient clipping for RNN stability
+@article{pascanu-2013-rnn-clipping,
+  author  = {Razvan Pascanu and Tomas Mikolov and Yoshua Bengio},
+  title   = {On the Difficulty of Training Recurrent Neural Networks},
+  journal = {arXiv preprint arXiv:1211.5063},
+  year    = {2013}
+}
+
+% bjorck-2022-high-variance - already defined in 2_related_work.bib
+
+% Normalization and effective learning rates in RL
+@article{lyle-2024-normalization-rl,
+  title         = {Normalization and effective learning rates in reinforcement learning},
+  author        = {Lyle, Clare and Zheng, Zeyu and Khetarpal, Khimya and Martens, James and van Hasselt, Hado and Pascanu, Razvan and Dabney, Will},
+  journal       = {arXiv preprint arXiv:2407.01800},
+  year          = {2024},
+  eprint        = {2407.01800},
+  archiveprefix = {arXiv},
+  primaryclass  = {cs.LG},
+  url           = {https://arxiv.org/abs/2407.01800}
+}
+
+% Learning rate warmup mechanisms
+@article{kalra-2024-warmup,
+  title         = {Why Warmup the Learning Rate? Underlying Mechanisms and Improvements},
+  author        = {Kalra, Dayal Singh and Barkeshli, Maissam},
+  journal       = {arXiv preprint arXiv:2406.09405},
+  year          = {2024},
+  eprint        = {2406.09405},
+  archiveprefix = {arXiv},
+  primaryclass  = {cs.LG},
+  url           = {https://arxiv.org/abs/2406.09405}
+}
+
+% Theoretical analysis of learning rate warmup
+@article{liu-2025-warmup-theory,
+  title         = {Theoretical Analysis on how Learning Rate Warmup Accelerates Convergence},
+  author        = {Liu, Yuxing and Ge, Yuze and Pan, Rui and Kang, An and Zhang, Tong},
+  journal       = {arXiv preprint arXiv:2509.07972},
+  year          = {2025},
+  eprint        = {2509.07972},
+  archiveprefix = {arXiv},
+  primaryclass  = {cs.LG},
+  url           = {https://arxiv.org/abs/2509.07972}
+}

@@ -37,6 +37,86 @@
   Keep it to about 150-250 words.
 \end{abstract}
 
+\section{Introduction}
+% 600-900 words
+While on the surface \textit{Yahtzee} appears to be a trivial dice game, it actually presents large stochastic optimization problem
+with combinatorial complexity. In this paper, we explore the application of various reinforcement learning techniques 
+to optimize gameplay in \textit{Yahtzee}.
+\subsection{Research Questions}
+\subsection{Contributions}
+
+\section{Related Work}
+% 600-800 words
+\subsection{Yahtzee and Combinatorial Game Reinforcement Learning}
+\citet{verhoeff-1999-solitaire-yahtzee} showed that \textit{Yahtzee} can be analytically solved using dynamic programming techniques and provides baseline metrics from optimal play.
+\citet{glenn-2007-solitaire-yahtzee} optimized the DP approach by taking advantage of symmetries and only considering reachable states. \citet{pawlewicz-2011-multiplayer-yahtzee}
+extended the DP approach to 2-player \textit{Yahtzee}, however, the approach does not scale to more players due to the exponential growth of the state space.
+
+Games with similar combinatorial complexity, such as \textit{Backgammon} \cite{tesauro-1995-td-gammon} and \textit{Poker} \cite{brown-2018-superhuman-poker},
+
+\textit{Yahtzee} is also 
+
+\subsection{Long-Horizon Policy Gradient Methods}
+\subsection{Architecture and Optimization Components}
+
+\section{Problem Formulation}
+% 400-600 words
+\subsection{Game Description}
+\subsection{Single-Turn Optimization Task}
+\subsection{Full-Game Reinforcement Learning Task}
+
+\section{Methodology}
+% 1400-1700 words
+\subsection{State Representation \& Input Features}
+\subsubsection{Dice Representation}
+\subsubsection{Scorecard Representation}
+\subsubsection{Computed Features}
+\subsection{Neural Network Architecture}
+\subsubsection{Trunk}
+\subsubsection{Policy and Value Heads}
+\subsubsection{Weight Initialization}
+\subsubsection{Optimization \& Schedules}
+\subsection{Reinforcement Learning Algorithms}
+\subsubsection{REINFORCE for Single-Turn Optimization}
+\subsubsection{PPO for Full-Game Reinforcement Learning}
+\subsection{Training Regimes}
+\subsubsection{Single-Turn Training}
+\subsubsection{Transfer Learning Setup}
+\subsubsection{Evaluation Protocol}
+
+
+\section{Single-Turn Results \& Ablations}
+% 700-900 words
+\subsection{Baseline Model Performance}
+\subsection{Representational Ablations}
+\subsection{Architectural Ablations}
+\subsection{Failure Mode Analysis}
+\subsection{Summary}
+
+\section{Full-Game Results}
+% 700-900 words
+\subsection{From-Scratch Training}
+\subsection{REINFORCE}
+\subsection{PPO}
+\subsection{Transfer Learning}
+\subsection{REINFORCE}
+\subsection{PPO}
+\subsection{Summary}
+
+\section{Policy Analysis}
+% 300-500 words
+\subsection{Category Usage Distribution}
+\subsection{Score Breakdown}
+\subsection{Strategy Comparison}
+
+\section{Discussion}
+% 400-600 words
+
+\section{Conclusion and Future Work}
+% 200-300 words
+
+
+
 \section{Introduction and Research Background}
 
 At first glance, \textit{Yahtzee} appears to be a simple dice game. Simply roll some dice, choose which to keep,
@@ -143,7 +223,7 @@ $$S(\mathbf{c}) = B(\mathbf{c}) + \big\langle \mathbf{u}(\mathbf{c}), \mathbf{c}
 
 \subsubsection{State Space Analysis}
 
-The state space for a solitaire game of Yahtzee can be described by the tuple of the current dice configuration,
+The unfiltered state space for a solitaire game of Yahtzee can be described by the tuple of the current dice configuration,
 the scorecard status, and the roll count within the turn:
 
 $$\mathbf{S} = (\mathbf{d}, \mathbf{c}, r)$$
@@ -157,18 +237,20 @@ $$|\mathcal{D}| = 6^5 = 7776$$
 And the roll count contributes a factor of 3:
 $$|r \in \{ 0, 1, 2 \}| = 3$$
 
-Thus the state space has a cardinality of:
+Thus the unfiltered state space has a cardinality of:
 \begin{align*}
 |\mathbf{S}| &= |\mathcal{D}| \cdot |\mathcal{C}| \cdot |r| \\
 &= 6^5 \cdot 7^6 \cdot 32^3 \cdot 3^4 \cdot 3 \\
 &\approx 7.28 \times 10^{15}
 \end{align*}
 
+However, 
+
 \subsubsection{Infeasibility of Tabular Methods}
 
 If this space were to be solved with tabular dynamic programming techniques using 16-bit half-precision floats, it would require nearly 1.5 petabytes of memory to store. 
 While there have been prior attempts to use tabular methods for Yahtzee, these required significant optimizations and clustered computing resources to
-solve directly \cite{yahtzee-tabular-approach}.
+solve directly \cite{}.
 
 For a local-play setting, this makes traditional tabular methods infeasible for Yahtzee, necessitating the use of function approximation methods such as deep neural networks.
 
@@ -184,12 +266,12 @@ and a score mask $\mathbf{u}(\mathbf{c})$. This gives input dimensionality of $3
 $2^{52} \approx 4.5 \times 10^{15}$.
 
 
-For a discrete control problem with a finite state size of $|\mathbf{S}|$, there are classical results \cite{horne-hush-1993-bounds-rnn-fsm} 
+For a discrete control problem with a finite state size of $|\mathbf{S}|$, there are classical results \cite{horne-1994-bounds-rnn-fsm} 
 showing that a recurrent neural network can represent any $|\mathbf{S}|$-state finite state machine with a number of neurons that 
 grows only logarithmically with $|\mathbf{S}|$. This gives us an upper bound of $O(\sqrt{|\mathbf{S}|}) \approx 8.4 \times 10^{7}$ neurons.
 However, this is a prohibitively large number of neurons for practical training and inference. 
 
-For a lower bound, \citet{hanin-2017-universal-approx-bounded-width-relu} shows any continuous, convex function 
+For a lower bound, \citet{hanin-2017-bounded-width-relu} shows any continuous, convex function 
 can in principle be approximated by a network whose hidden layer width has a lower bound of $\Omega(d+1)$, and a non-convex function
 can be approximated by a network with a hidden layer width of at least $\Omega(d+3)$, where $d$ is the input dimension.
 For a example, assume Yahtzee is non-convex, and we represent the dice state $\mathbf{d}$ and $r$ as one-hot encodings and utilize
