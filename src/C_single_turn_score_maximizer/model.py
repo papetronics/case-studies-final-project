@@ -179,14 +179,8 @@ def sample_action(
 def select_action(
     rolling_probs: torch.Tensor, scoring_probs: torch.Tensor
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Select deterministic action using argmax/threshold (for validation/testing).
-
-    Uses >0.5 threshold for rolling decisions and argmax for scoring decisions.
-    """
-    # Rolling: threshold at 0.5 (keep dice with prob > 0.5)
-    rolling_tensor = (rolling_probs > 0.5).float()  # noqa: PLR2004
-
-    # Scoring: argmax to select highest probability category
+    """Select deterministic action using argmax/threshold (for validation/testing)."""
+    rolling_tensor = rolling_probs.argmax(dim=-1)
     scoring_tensor = scoring_probs.argmax(dim=-1)
 
     return (rolling_tensor, scoring_tensor)
