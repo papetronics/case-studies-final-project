@@ -12,6 +12,7 @@ from utilities.scoring_helper import (
     NUMBER_OF_DICE_SIDES,
     YAHTZEE_SCORE,
     ScoreCategory,
+    get_all_scores,
 )
 from utilities.sequential_block import SequentialBlock
 
@@ -59,6 +60,8 @@ def get_input_dimensions(bonus_flags: set[BonusFlags]) -> int:
       - Dice Counts [6]: Counts of each die face (1-6) = 6
       - Bonus Information [varies]: Various bonus-related inputs = len(bonus_flags)
       - Has Earned Yahtzee [1]: Whether the player has already scored a Yahtzee = 1
+      - Potential Scores [13]: Potential score in each category = 13
+      - Joker Indicator [1]: Whether joker rules are active = 1
     """
     return int(
         (NUMBER_OF_DICE * NUMBER_OF_DICE_SIDES)  # Dice one-hot
@@ -68,6 +71,8 @@ def get_input_dimensions(bonus_flags: set[BonusFlags]) -> int:
         + NUMBER_OF_DICE_SIDES  # Dice counts
         + len(bonus_flags)  # Bonus information
         + 1  # Has earned Yahtzee
+        + NUMBER_OF_CATEGORIES  # potential score in category
+        + 1  # joker indicator
     )
 
 
@@ -89,6 +94,12 @@ def phi(
 
     golf_score = np.sum(
         (observation["score_sheet"][:6] - GOLF_TARGET) * (1 - available_categories[:6])
+    )
+
+    score_values, joker = get_all_scores(
+        dice,
+        available_categories,
+        observation["score_sheet"][ScoreCategory.YAHTZEE] == YAHTZEE_SCORE,
     )
 
     normalized_golf_score = (
@@ -135,6 +146,8 @@ def phi(
             dice_onehot,
             dice_counts,
             rolls_onehot,
+            score_values,  # Use score values as available categories
+            [joker],
             np.array(bonus_information),
             [phase],
             [has_earned_yahtzee],
