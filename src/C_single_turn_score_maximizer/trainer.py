@@ -55,6 +55,10 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         min_lr_ratio: float,
         gamma_max: float,
         gamma_min: float,
+        entropy_coef_start: float,
+        entropy_coef_end: float,
+        entropy_anneal_epochs: int,
+        critic_coeff: float,
         return_calculator: ReturnCalculator | None = None,
     ):
         super().__init__()
@@ -71,6 +75,10 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         self.min_lr_ratio: float = min_lr_ratio
         self.gamma_max: float = gamma_max
         self.gamma_min: float = gamma_min
+        self.entropy_coef_start: float = entropy_coef_start
+        self.entropy_coef_end: float = entropy_coef_end
+        self.entropy_anneal_epochs: int = entropy_anneal_epochs
+        self.critic_coeff: float = critic_coeff
 
         self.return_calculator: ReturnCalculator = return_calculator or MonteCarloReturnCalculator()
         self.return_calculator.gamma = self.gamma_min
@@ -176,7 +184,17 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         # Return a dict for PyTorch Lightning compatibility
         return {"val_loss": -mean_total_score}  # Negative because higher scores are better
 
-    def training_step(self, batch: EpisodeBatch, batch_idx: int) -> torch.Tensor:  # noqa: ARG002, PLR0915, C901
+    def get_entropy_coef(self) -> float:
+        """Get current entropy coefficient with linear annealing."""
+        start = self.entropy_coef_start
+        end = self.entropy_coef_end
+        entropy_t = max(1, self.entropy_anneal_epochs)
+
+        # clamp at 1.0 so we stop decaying after T epochs
+        progress = min(self.current_epoch / entropy_t, 1.0)
+        return start + (end - start) * progress
+
+    def training_step(self, batch: EpisodeBatch, batch_idx: int) -> torch.Tensor:  # noqa: ARG002, C901, PLR0915
         """Perform a training step using REINFORCE algorithm with vectorized operations."""
         # batch is an EpisodeBatch dict with pre-flattened tensors:
         # - "states": (BATCH_SIZE*3, state_size) float32
@@ -241,14 +259,40 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         episode_returns = returns.view(batch_size, num_steps)[:, -1]  # (BATCH_SIZE,)
         avg_reward = episode_returns.mean()
 
-        # Calculate value loss
+        # Calculate Huber loss
+        # v_loss = torch.nn.functional.smooth_l1_loss(v_ests.squeeze(), returns)
+
+        # Use MSE loss for critic
         v_loss = torch.nn.functional.mse_loss(v_ests.squeeze(), returns)
 
+        ## Entropy
+        rolling_entropy = rolling_dist.entropy().sum(dim=1)  # (BATCH_SIZE*3,)
+        scoring_entropy = scoring_dist.entropy()  # (BATCH_SIZE*3,)
+        # Match entropy to the active head at each step, same as log_probs
+        entropies = torch.where(
+            phases_flat == 0, rolling_entropy, scoring_entropy
+        )  # (BATCH_SIZE*3,)
+        entropy_mean = entropies.mean()
+        ent_coef = self.get_entropy_coef()
+        entropy_bonus = ent_coef * entropy_mean
+
+        loss = policy_loss + self.critic_coeff * v_loss - entropy_bonus
+
+        diff = returns - v_ests.squeeze()
+        ev = 1 - diff.var() / (returns.var() + 1e-8)
+        self.log("train/value_explained_var", ev, prog_bar=False)
+
+        self.log("train/entropy", entropy_mean, prog_bar=False)
+        self.log("train/entropy_bonus", entropy_bonus, prog_bar=False)
+        self.log("train/entropy_coef", ent_coef, prog_bar=False)
         self.log("train/policy_loss", policy_loss, prog_bar=True)
-        self.log("train/avg_reward", avg_reward, prog_bar=True)
         self.log("train/v_loss", v_loss, prog_bar=False)
+
         current_lr = self.trainer.optimizers[0].param_groups[0]["lr"]
         self.log("lr", current_lr, prog_bar=False)
+
+        self.log("train/avg_reward", avg_reward, prog_bar=True)
+        self.log("train/total_loss", loss, prog_bar=True)
 
         # ===== DIAGNOSTIC METRICS =====
         # Advantage stats: adv_mean ~0 (by construction), adv_std nonzero (signal strength)
@@ -309,17 +353,34 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         phase_balance = compute_phase_balance(phases_flat)
         self.log("train/frac_roll_steps", phase_balance, prog_bar=False)
 
-        return policy_loss + 0.05 * v_loss
+        return loss
 
     def configure_optimizers(self):  # noqa: ANN201
-        """Configure optimizers and learning rate schedulers."""
+        """Configure optimizers and learning rate schedulers.
+
+        Schedule: 5% warmup from min_lr_ratio to 1.0, 70% flat, 25% decay to min_lr_ratio.
+        """
         optimizer = torch.optim.Adam(self.policy_net.parameters(), lr=self.learning_rate)
-        scheduler = torch.optim.lr_scheduler.LinearLR(
-            optimizer,
-            start_factor=1.0,  # Start at full learning rate
-            end_factor=self.min_lr_ratio,  # End at min_lr_ratio of initial LR
-            total_iters=self.max_epochs,  # Linear decay over training epochs
-        )
+
+        warmup_epochs = int(0.05 * self.max_epochs)
+        decay_start_epoch = int(0.75 * self.max_epochs)
+
+        def lr_lambda(epoch: int) -> float:
+            """Return LR multiplier for custom schedule with warmup, flat, and decay phases."""
+            if epoch < warmup_epochs:
+                # Warmup: linear from min_lr_ratio to 1.0
+                progress = epoch / warmup_epochs
+                return self.min_lr_ratio + (1.0 - self.min_lr_ratio) * progress
+            elif epoch < decay_start_epoch:
+                # Flat: hold at 1.0
+                return 1.0
+            else:
+                # Decay: linear from 1.0 to min_lr_ratio
+                decay_epochs = self.max_epochs - decay_start_epoch
+                progress = (epoch - decay_start_epoch) / decay_epochs
+                return 1.0 - (1.0 - self.min_lr_ratio) * progress
+
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
         return {
             "optimizer": optimizer,
