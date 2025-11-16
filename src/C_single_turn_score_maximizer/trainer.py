@@ -414,8 +414,6 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         gradient_clip_algorithm: str | None = None,
     ) -> None:
         """Add custom gradient clipping that logs pre-clipping gradient norms."""
-        cv: int | float = gradient_clip_val if gradient_clip_val is not None else 0.5
-
         # global grad norm before clipping
         parameters = [p for p in self.parameters() if p.grad is not None]
         if len(parameters) == 0:
@@ -437,7 +435,21 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
             logger=True,
         )
 
-        clipped_flag = float(total_norm > cv)
+        # Check if clipping is disabled (None or 0.0)
+        if gradient_clip_val is None or gradient_clip_val == 0.0:
+            # No clipping - log that clipping is disabled
+            self.log(
+                "train/grad_clipped",
+                0.0,
+                on_step=True,
+                on_epoch=False,
+                prog_bar=False,
+                logger=True,
+            )
+            return
+
+        # Clipping is enabled
+        clipped_flag = float(total_norm > gradient_clip_val)
         self.log(
             "train/grad_clipped",
             clipped_flag,
@@ -450,7 +462,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         # let Lightning actually do the clipping
         self.clip_gradients(
             optimizer,
-            gradient_clip_val=cv,
+            gradient_clip_val=gradient_clip_val,
             gradient_clip_algorithm=gradient_clip_algorithm,
         )
 
