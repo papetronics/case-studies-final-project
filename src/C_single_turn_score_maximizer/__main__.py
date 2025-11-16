@@ -64,14 +64,14 @@ def main() -> None:  # noqa: PLR0915
         ConfigParam(
             "games_per_batch",
             int,
-            4,
+            26,
             "Number of complete Yahtzee games per batch",
             display_name="Games per batch",
         ),
-        ConfigParam("learning_rate", float, 0.001, "Learning rate", display_name="Learning rate"),
+        ConfigParam("learning_rate", float, 0.0005, "Learning rate", display_name="Learning rate"),
         ConfigParam("hidden_size", int, 384, "Hidden layer size", display_name="Hidden size"),
         ConfigParam(
-            "num_hidden", int, 3, "Number of hidden layers", display_name="Num hidden layers"
+            "num_hidden", int, 4, "Number of hidden layers", display_name="Num hidden layers"
         ),
         ConfigParam(
             "checkpoint_path",
