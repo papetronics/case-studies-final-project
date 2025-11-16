@@ -147,9 +147,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
                 stoch_actions, _, _ = sample_action(rolling_probs, scoring_probs, v_ests)
 
                 # Select appropriate actions based on game index
-                rolling_action_tensors = torch.where(
-                    det_mask.unsqueeze(1), det_actions[0], stoch_actions[0]
-                )
+                rolling_action_tensors = torch.where(det_mask, det_actions[0], stoch_actions[0])
                 scoring_action_tensors = torch.where(det_mask, det_actions[1], stoch_actions[1])
 
                 # Step each active environment
@@ -314,7 +312,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         v_loss = torch.nn.functional.mse_loss(v_ests.squeeze(), returns)
 
         ## Entropy
-        rolling_entropy = rolling_dist.entropy().sum(dim=1)  # (BATCH_SIZE*3,)
+        rolling_entropy = rolling_dist.entropy()  # (BATCH_SIZE*3,)
         scoring_entropy = scoring_dist.entropy()  # (BATCH_SIZE*3,)
         # Match entropy to the active head at each step, same as log_probs
         entropies = torch.where(
