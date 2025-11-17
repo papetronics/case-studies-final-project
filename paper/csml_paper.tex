@@ -21,7 +21,7 @@
 
 \newcommand\BibTeX{B\textsc{ib}\TeX}
 
-\title{Learning Yahtzee Using Deep Reinforcement Learning}
+\title{Yahtzee: Reinforcement Learning Techniques for Stochastic Combinatorial Games}
 
 \author{Nick Pape \\
   nap626 \\
@@ -39,7 +39,7 @@
 
 \section{Introduction}
 % 600-900 words
-% 306 words so far
+% 297 words so far
 \subsection{Yahtzee}
 While on the surface \textit{Yahtzee} appears to be a trivial dice game \cite{hasbro-2022-yahtzee-rules}, it is actually a complex stochastic optimization problem with combinatorial complexity.
 By it's nature, it is heavily driven by random chance due to dice rolls, but strategic decision-making is required to maximize expected score over the course of a game.
@@ -63,6 +63,7 @@ The main contributions of this paper are:
 
 \section{Related Work}
 % 600-800 words
+% 742 words so far
 \subsection{Complex Games}
 Typical board and dice games have extreme state complexity or stochasticity; reinforcement learning methods are a natural fit for these problems.
 In a classic example, \citet{tesauro1995tdgammon} utilized temporal difference learning to achieve superhuman performance in \textit{Backgammon}, another game with a large state space and stochastic elements.
@@ -70,99 +71,41 @@ Tetris has also been studied extensively; \citet{bertsekas1996tetris} utilized a
 Stochastic combinatorial games like Tetris can be effectively tackled using reinforcement learning methods \cite{gabillon2013tetris}.
 Adversarial games with extremely large state spaces, such as Go were solved using Monte-Carlo Tree Search combined with deep value networks \cite{silver2016alphago}, and later work showed Go could be learned purely through self-play \cite{silver2017alphagozero}.
 \citet{moravcik2017deepstack} demonstrated that \textit{Texas Hold'em}, a game with hidden information and stochasticity, could be also effectively learned.
-Highly stochastic games can be learned as well, utilizing methods to ensure better exploration \cite{osband2016bootstrappeddqn}. 
+It has been shown that highly stochastic games can be learned reliably, as long as methods to ensure better exploration are used \cite{osband2016bootstrappeddqn}. 
 
-\subsection{Yahtzee}
-Solitaire \textit{Yahtzee} is a complex game with over $7 \times 10^{15}$ possible states in its state space manifold, and has a high degree of stoachasticity due to dice rolls being the primary driver of state transitions.
+\subsection{DP Methods for Yahtzee}
+Solitaire \textit{Yahtzee} is a complex game with an upper bound of $~7 \times 10^{15}$ possible states in its state space manifold, and has a high degree of stoachasticity due to dice rolls being the primary driver of state transitions.
 Despite this, it has been analytically solved using dynamic programming techniques \cite{verhoeff-1999-solitaire-yahtzee} and baseline metrics for optimal play are available, which calculates an ideal play score of $254.59$ points.
-Later work by \citet{glenn-2007-solitaire-yahtzee} improved upon this by optimizing the DP approach, utilizing symmetries and limiting analysis only to reachable states, allowing the problem to be solved on limited hardware, as well as describing several benchmark heuristics. \citet{glenn-2006-optimal-yahtzee}
+Later work by \citet{glenn-2006-optimal-yahtzee} optimizing the DP approach via symmetries to propose an efficient algorithm.
+\citet{glenn-2007-solitaire-yahtzee} calculated the reachable state space to be $~5.3 \times 10^8$, and subsequently implemented this efficint algorithm, which and compared favorably to several benchmark heuristics.
+
 However, adversarial Yahtzee remains an open problem.
 While \citet{pawlewicz-2011-multiplayer-yahtzee} showed that DP techniques can be expanded to 2-player adversarial \textit{Yahtzee}, they do not scale to more players due to the exponential growth of the state space. Approximation methods must be utilized for larger player counts.
 
+\subsection{Reinforcement Learning for Yahtzee}
 Some prior attempts have been made to apply reinforcement learning to \textit{Yahtzee}.
 YAMS attemped by Q-learning and SARSA, but was not able to surpass $~120$ points median \cite{belaich-2024-yams}.
 For example, \citet{kang-2018-yahtzee-rl} applied heirarchical MAX-Q, achieving an average score of $129.58$ and a 67\% win-rate over a 1-turn expectimax agent baseline.
 \citet{vasseur-2019-strategy-ladders} explored strategy ladders for multiplayer Yahtzee, to understand how sensitive Deep-Q networks were to the upper-bonus threshold.
-Later, \cite{yuan-2023-two-player-yahtzee} used Deep-Q networks and policy ladders to quantify the model's preference for prioritizing the upper-section bonus.
+Later, \cite{yuan-2023-two-player-yahtzee} applied Deep-Q networks to the adversarial setting.
 Yahtzotron used heavy supervised pretraining and A2C to achieve an average of $~236$ points \cite{Haefner2021Yahtzotron}.
 Although not formally written, \citet{DutschkeYahtzee} reports a deep-Q agent achieving a score of $241.6 \pm 40.7$ after just 8,000 games.
 
-\subsection{Long-Horizon Policy Gradient Methods}
+\subsection{Policy Gradient Methods and Variance Reduction}
+Temporal Difference (TD) \cite{sutton-1988-temporal-differences} and REINFORCE \cite{williams-1992-reinforce} methods have long been used to assign credit and calculate training signals in long-horizon tasks.
+These have spawned an entire heirarchy of policy gradient methods, including asynchronous advantage actor-critic (A3C) \cite{mnih-2016-a3c}, proximal policy optimization (PPO) \cite{schulman-2017-ppo}, and others \cite{sutton-2000-policy-gradient}. 
 
+Unfortunately, all reinforcement learning methods struggle with long-horizon credit assignment due to the compounding variance of returns and sparse rewards, leading to high variance updates and unstable training \cite{bjorck-2022-high-variance}. There are numerous architectural and optimization tricks which can be employed to mitigate these issues.
+For example, during training, the Adam optimizer \cite{kingma-2014-adam} is widely used due to its adaptive momentum term, which helps to stabilize high variance updates.
+Performing "warmups" of the learning rate improves RL performance by deprioritizing policy updates during the poorly-performing early training regime \cite{kalra-2024-warmup} \cite{liu-2025-warmup-theory}.   
+At initialization, Kaiming/He weight initialization \cite{he-2015-delving-rectifiers} has been shown to reduce variance in deep networks by normalizing activation variances across layers.
+The SiLU and Swish activation functions \cite{ramachandran-2017-swish} are improvements of GELU \cite{hendrycks-2016-gelu} that have been shown to be highly effective in RL tasks; their smooth and fully differentiable curves improve gradient flow \cite{elfwing-2018-silu-rl}.
 
-\subsection{Architecture and Optimization Components}
+Another common problem with policy gradient methods is policy collapse due to premature convergence to suboptimal policies. <ENTROPY> <TEMPERATURE> <CLIPPING> <MONITORING ENTROPY>
 
 \section{Problem Formulation}
 % 400-600 words
-\subsection{Game Description}
-\subsection{Single-Turn Optimization Task}
-\subsection{Full-Game Reinforcement Learning Task}
-
-\section{Methodology}
-% 1400-1700 words
-\subsection{State Representation \& Input Features}
-\subsubsection{Dice Representation}
-\subsubsection{Scorecard Representation}
-\subsubsection{Computed Features}
-\subsection{Neural Network Architecture}
-\subsubsection{Trunk}
-\subsubsection{Policy and Value Heads}
-\subsubsection{Weight Initialization}
-\subsubsection{Optimization \& Schedules}
-\subsection{Reinforcement Learning Algorithms}
-\subsubsection{REINFORCE for Single-Turn Optimization}
-\subsubsection{PPO for Full-Game Reinforcement Learning}
-\subsection{Training Regimes}
-\subsubsection{Single-Turn Training}
-\subsubsection{Transfer Learning Setup}
-\subsubsection{Evaluation Protocol}
-
-
-\section{Single-Turn Results \& Ablations}
-% 700-900 words
-\subsection{Baseline Model Performance}
-\subsection{Representational Ablations}
-\subsection{Architectural Ablations}
-\subsection{Failure Mode Analysis}
-\subsection{Summary}
-
-\section{Full-Game Results}
-% 700-900 words
-\subsection{From-Scratch Training}
-\subsection{REINFORCE}
-\subsection{PPO}
-\subsection{Transfer Learning}
-\subsection{REINFORCE}
-\subsection{PPO}
-\subsection{Summary}
-
-\section{Policy Analysis}
-% 300-500 words
-\subsection{Category Usage Distribution}
-\subsection{Score Breakdown}
-\subsection{Strategy Comparison}
-
-\section{Discussion}
-% 400-600 words
-
-\section{Conclusion and Future Work}
-% 200-300 words
-
-
-
-\section{Introduction and Research Background}
-
-At first glance, \textit{Yahtzee} appears to be a simple dice game. Simply roll some dice, choose which to keep,
-and score points based on the resulting combinations. While arithmetic may be the minimum skill required to play,
-playing the game well requires strategic decision-making, probabilistic reasoning, and risk management.
-
-In this paper, we explore the application of various reinforcement learning techniques to optimize gameplay in Yahtzee.
-We investigate how different reinforcement learning algorithms, model architectures, state and action representations,
-and reward structures impact the performance of agents in this complex environment.
-
-\subsection{Background}
-
-\subsubsection{Rules of Yahtzee}
+\subsection{Game Description}\subsubsection{Rules of Yahtzee}
 Yahtzee is played with five standard six-sided dice and a shared scorecard containing 13 categories.
 Turns are rotated among players. A turn starts with a player rolling all five dice. They may then choose to keep
 some dice, and re-roll the remaining ones. This process can be repeated up to two more times, for a total of three rolls.
@@ -252,40 +195,97 @@ $$
 The player's score can thus be calculated as:
 $$S(\mathbf{c}) = B(\mathbf{c}) + \big\langle \mathbf{u}(\mathbf{c}), \mathbf{c} \big\rangle$$
 
-\subsection{Complexity Analysis}
+\subsection{MDP Formulation}
+We can formulate Yahtzee as a Markov Decision Process (MDP) defined by the 4-tuple $(\mathcal{S}, \mathcal{A}, P, R, \gamma)$.
 
-\subsubsection{State Space Analysis}
+\subsection{Single-Turn Optimization Task}
+\subsection{Full-Game Reinforcement Learning Task}
 
-The unfiltered state space for a solitaire game of Yahtzee can be described by the tuple of the current dice configuration,
-the scorecard status, and the roll count within the turn:
+\section{Methodology}
+1400-1700 words
+\subsection{State Representation \& Input Features}
+The design of $\mathbf{\phi}(\mathbf{s}) \rightarrow \mathbf{x}$ is one of the most critical components to the performance of a model \shortcite{sutton-2018-reinforcement-book}.
 
-$$\mathbf{S} = (\mathbf{d}, \mathbf{c}, r)$$
+As such, several different representations were tested to evaluate their impact on learning efficiency and final performance.
 
-The cardinality of the state space is primarily driven by the score card, $\mathcal{C}$:
-$$|\mathcal{C}| = 7^6 \cdot 32^3 \cdot 3^4 \approx 3.12 \times 10^{11}$$
+\subsubsection{Dice Representation}
+The dice representation can be encoded in several ways, depending on if we want to preserve permutation invariance or not.
+Preserving ordering information (and implicitly, ranking) gives the model the benefit of being able to directly output actions corresponding to dice indices,
+however, it comes at the cost of implicitly biasing the model to specific dice orderings; in other words, biasing towards a local optima of always keeping the highest ranking dice.
+However, eliminating ordering information requires the model to either waste capacity learning permutation invariance or be architecturally supportive of it (e.g. with self-attention).
+It also requires a different action representation, since actions can no longer correspond to specific dice indices. We attempted 5 different dice representations:
+\begin{itemize}
+  \item \textbf{One-hot encoding of ordered dice:} Each die is represented as a one-hot vector of length 6, and the 5 dice are concatenated in order.
+  \item \textbf{Bin representation:} Here we pass through the dice face count vector $\mathbf{n}(\mathbf{d})$.
+  \item \textbf{Combined representation:} Both ordered one-hot and bin representations are concatenated.
+  \item \textbf{Learnable encoding of dice:} Each die is represented as a learnable embedding vector of length $d$, and self-attention is applied.
+  \item \textbf{Learnable encoding of dice with positional encodings:} Similar to above, but with sinusoidal positional encodings added to each die embedding.
+\end{itemize}    
 
-However the dice configuration space is also significant:
-$$|\mathcal{D}| = 6^5 = 7776$$
+\subsubsection{Scorecard Representation}
+There are two important pieces of information $\mathbf{\phi}$ must encode about the scorecard: whether a category is open or closed,
+and some form of progress towards the upper bonus. For the category availaboility, we simply pass through $\mathbf{c}$. Here, several different representations were tested:
+\begin{itemize}
+  \item \textbf{Raw upper score:} $\sum_{i \in \mathbf{c}} c_{i}$
+  \item \textbf{Distance to bonus:} $63 - \sum_{i \in \mathbf{c}} c_{i}$
+  \item \textbf{Norm. upper score:} $\min(\frac{1}{63} \sum_{i \in \mathbf{c}} c_{i}, 1)$
+  \item \textbf{Distance to bonus:} $\mathbb{I}(\sum_{i \in \mathbf{c}} c_{i} \geq 63)$
+  \item \textbf{"Golf" score:} 
+\end{itemize}
 
-And the roll count contributes a factor of 3:
-$$|r \in \{ 0, 1, 2 \}| = 3$$
 
-Thus the unfiltered state space has a cardinality of:
-\begin{align*}
-|\mathbf{S}| &= |\mathcal{D}| \cdot |\mathcal{C}| \cdot |r| \\
-&= 6^5 \cdot 7^6 \cdot 32^3 \cdot 3^4 \cdot 3 \\
-&\approx 7.28 \times 10^{15}
-\end{align*}
+\subsubsection{Computed Features}
+\subsection{Neural Network Architecture}
+\subsubsection{Trunk}
+\subsubsection{Policy and Value Heads}
+\subsubsection{Weight Initialization}
+\subsubsection{Optimization \& Schedules}
+\subsubsection{Training Metrics}
+\subsection{Reinforcement Learning Algorithms}
+\subsubsection{REINFORCE for Single-Turn Optimization}
+\subsubsection{PPO for Full-Game Reinforcement Learning}
+\subsection{Training Regimes}
+\subsubsection{Single-Turn Training}
+\subsubsection{Transfer Learning Setup}
+\subsubsection{Evaluation Protocol}
 
-However, 
+\section{Results}
 
-\subsubsection{Infeasibility of Tabular Methods}
+\subsection{Generalization of Single-Turn Agent to Full Game}
+200-400 words
 
-If this space were to be solved with tabular dynamic programming techniques using 16-bit half-precision floats, it would require nearly 1.5 petabytes of memory to store. 
-While there have been prior attempts to use tabular methods for Yahtzee, these required significant optimizations and clustered computing resources to
-solve directly \cite{}.
+\subsection{Single-Turn Results \& Ablations}
+600-700 words
+\subsubsection{Baseline Model Performance}
+\subsubsection{Representational Ablations}
+\subsubsection{Architectural Ablations}
+\subsubsection{Failure Mode Analysis}
+\subsubsection{Summary}
 
-For a local-play setting, this makes traditional tabular methods infeasible for Yahtzee, necessitating the use of function approximation methods such as deep neural networks.
+\subsection{Full-Game Results}
+600-700 words
+\subsubsection{From-Scratch Training}
+\subsubsection{REINFORCE}
+\subsubsection{PPO}
+\subsubsection{Transfer Learning}
+\subsubsection{REINFORCE}
+\subsubsection{PPO}
+\subsubsection{Summary}
+
+\subsection{Policy Analysis}
+300-500 words
+\subsubsection{Category Usage Distribution}
+\subsubsection{Score Breakdown}
+\subsubsection{Strategy Comparison}
+
+\section{Discussion}
+400-600 words
+
+\section{Conclusion and Future Work}
+200-300 words
+
+
+
 
 \subsubsection{Neural Network Size Bounds}
 One challenge in applying neural networks to approximate the value or policy function for Yahtzee is in 
@@ -312,72 +312,6 @@ the score mask $\mathbf{u}(\mathbf{c})$, then $x = 6 \cdot 5 + 3 + 13 = 46$ mean
 
 In practice, the ideal network size is not driven by the cardinality of the state space, but rather by the 
 
-\subsection{Intra-turn Decision Complexity}
-Test.
-
-\subsection{Problem Statement}
-Clearly state the problem you are addressing.
-
-\subsection{Research Objectives}
-Outline your research objectives and what you aim to achieve.
-
-\section{Research and Methods}
-
-Describe your approach and methods here.
-
-\subsection{Methodology Overview}
-Provide an overview of your research methodology and approach.
-
-\subsection{Model Architecture}
-Describe your model or approach in detail.
-
-\subsection{Experimental Design}
-Describe your experimental design and evaluation metrics.
-
-\section{Materials and Data Sources}
-
-Describe the dataset and materials you are using.
-
-\subsection{Dataset Description}
-Provide detailed information about your dataset, including size, characteristics, and source.
-
-\subsection{Data Collection and Preprocessing}
-Explain how data was collected and any preprocessing steps performed.
-
-\subsection{Tools and Technologies}
-List the tools, frameworks, and technologies used in your research.
-
-\section{Results}
-
-Present your experimental results here.
-
-\begin{table}[H]
-\begin{center}
-\begin{tabular}{|l|c|c|}
-\hline \textbf{Method} & \textbf{Metric 1} & \textbf{Metric 2} \\ \hline
-Baseline & XX.XX & XX.XX \\
-Your Method & XX.XX & XX.XX \\
-\hline
-\end{tabular}
-\end{center}
-\caption{\label{results-table} Results comparison}
-\end{table}
-
-
-\section{Discussion and Conclusion}
-
-\subsection{Discussion of Results}
-Discuss your findings, their implications, and how they relate to existing literature.
-
-\subsection{Limitations}
-Acknowledge the limitations of your study and approach.
-
-\subsection{Future Work}
-Discuss potential directions for future research.
-
-\subsection{Conclusion}
-Summarize your work and its contributions to the field.
-
 \section{AI Usage Disclosure}
 
 This paper utilized artificial intelligence tools in the following ways:
@@ -390,10 +324,6 @@ This paper utilized artificial intelligence tools in the following ways:
 All other content, including research methodology, analysis, results interpretation, and conclusions, represents original work by the author. The AI tools were used only for initial ideation and technical formatting support, not for generating substantive content or analysis.
 
 GitHub Copilot was also used to write this section.
-
-\section{Acknowledgments}
-
-Acknowledge any help or resources you used.
 
 \bibliography{1_introduction,2_related_work,3_methods,4_single_turn_results,5_full_game_experiments,6_discussion,7_appendix}
 \bibliographystyle{acl_natbib}

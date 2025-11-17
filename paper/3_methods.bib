@@ -149,3 +149,180 @@
   primaryclass  = {cs.LG},
   url           = {https://arxiv.org/abs/2509.07972}
 }
+
+% 
+@article{mazyavkina2021rl_co_survey,
+  title   = {Reinforcement Learning for Combinatorial Optimization: A Survey},
+  author  = {Mazyavkina, Nina and Sviridov, Sergey and Ivanov, Sergei and Burnaev, Evgeny},
+  journal = {Computers \& Operations Research},
+  volume  = {134},
+  pages   = {105400},
+  year    = {2021},
+  doi     = {10.1016/j.cor.2021.105400}
+}
+
+% KL-aware Policy Optimization Baselines (IMPALA, TRPO)
+@article{espeholt2018impala,
+  title   = {{IMPALA}: Scalable Distributed Deep-{RL} with Importance Weighted Actor-Learner Architectures},
+  author  = {Espeholt, Lasse and Soyer, Hubert and Munos, R{\'e}mi and Simonyan, Karen
+             and Mnih, Volodymyr and Ward, Tom and Doron, Yotam and Firoiu, Vlad
+             and Harley, Tim and Dunning, Matthew and others},
+  journal = {arXiv preprint arXiv:1802.01561},
+  year    = {2018}
+}
+
+@inproceedings{schulman2015trpo,
+  title     = {Trust Region Policy Optimization},
+  author    = {Schulman, John and Levine, Sergey and Abbeel, Pieter and Jordan, Michael and Moritz, Philipp},
+  booktitle = {Proceedings of the 32nd International Conference on Machine Learning},
+  pages     = {1889--1897},
+  year      = {2015}
+}
+
+% =========================================================
+% Regularization: Dropout, ELU, Warmup (Goyal)
+% =========================================================
+
+@article{srivastava2014dropout,
+  title   = {Dropout: A Simple Way to Prevent Neural Networks from Overfitting},
+  author  = {Srivastava, Nitish and Hinton, Geoffrey E. and Krizhevsky, Alex
+             and Sutskever, Ilya and Salakhutdinov, Ruslan},
+  journal = {Journal of Machine Learning Research},
+  volume  = {15},
+  number  = {56},
+  pages   = {1929--1958},
+  year    = {2014}
+}
+
+@inproceedings{clevert2016elu,
+  title     = {Fast and Accurate Deep Network Learning by Exponential Linear Units ({ELUs})},
+  author    = {Clevert, Djork-Arn{\'e} and Unterthiner, Thomas and Hochreiter, Sepp},
+  booktitle = {Proceedings of the International Conference on Learning Representations},
+  year      = {2016},
+  note      = {arXiv:1511.07289}
+}
+
+@article{goyal2017imagenet1hour,
+  title   = {Accurate, Large Minibatch {SGD}: Training {ImageNet} in 1 Hour},
+  author  = {Goyal, Priya and Doll{\'a}r, Piotr and Girshick, Ross and Noordhuis, Pieter
+             and Wesolowski, Lukasz and Kyrola, Aleksi and Tulloch, Andrew
+             and Jia, Yangqing and He, Kaiming},
+  journal = {arXiv preprint arXiv:1706.02677},
+  year    = {2017}
+}
+
+% =========================================================
+% Factored / Branching Action Spaces, Multi-Head Policies
+% (Tavakoli action branching + Stone parameterized actions)
+% =========================================================
+
+@inproceedings{tavakoli2018actionbranching,
+  title     = {Action Branching Architectures for Deep Reinforcement Learning},
+  author    = {Tavakoli, Arash and Pardo, Fabio and Kormushev, Petar},
+  booktitle = {Proceedings of the AAAI Conference on Artificial Intelligence},
+  volume    = {32},
+  number    = {1},
+  year      = {2018}
+}
+
+@inproceedings{hausknecht2016parameterized,
+  title     = {Deep Reinforcement Learning in Parameterized Action Space},
+  author    = {Hausknecht, Matthew and Stone, Peter},
+  booktitle = {Proceedings of the International Conference on Learning Representations (Workshop Track)},
+  year      = {2016},
+  note      = {arXiv:1511.04143}
+}
+
+
+% =========================================================
+% Entropy Bonus / Penalty in RL
+% (policy entropy as regularizer, max-ent RL)
+% =========================================================
+
+@inproceedings{ahmed2019entropy,
+  title     = {Understanding the Impact of Entropy on Policy Optimization},
+  author    = {Ahmed, Zafarali and Le Roux, Nicolas and Norouzi, Mohammad and Schuurmans, Dale},
+  booktitle = {Proceedings of the 36th International Conference on Machine Learning},
+  series    = {Proceedings of Machine Learning Research},
+  volume    = {97},
+  pages     = {151--160},
+  publisher = {PMLR},
+  year      = {2019}
+}
+
+@inproceedings{haarnoja2018sac,
+  title     = {Soft Actor-Critic: Off-Policy Maximum Entropy Deep Reinforcement Learning with a Stochastic Actor},
+  author    = {Haarnoja, Tuomas and Zhou, Aurick and Abbeel, Pieter and Levine, Sergey},
+  booktitle = {Proceedings of the 35th International Conference on Machine Learning},
+  series    = {Proceedings of Machine Learning Research},
+  volume    = {80},
+  pages     = {1861--1870},
+  publisher = {PMLR},
+  year      = {2018}
+}
+
+
+
+% =========================================================
+% Temperature / Softmax Sampling in RL / Bandits
+% =========================================================
+
+@inproceedings{tijsma2016comparing_exploration,
+  title     = {Comparing Exploration Strategies for {Q}-Learning in Random Stochastic Mazes},
+  author    = {Tijsma, Arryon and Drugan, Madalina M. and Wiering, Marco A.},
+  booktitle = {2016 IEEE Symposium Series on Computational Intelligence (SSCI)},
+  pages     = {1--8},
+  year      = {2016},
+  publisher = {IEEE}
+}
+
+@inproceedings{cesa-bianchi2017boltzmann,
+  title     = {Boltzmann Exploration Done Right},
+  author    = {Cesa-Bianchi, Nicol{\`o} and Gentile, Claudio and Lugosi, G{\'a}bor and Neu, Gergely},
+  booktitle = {Advances in Neural Information Processing Systems},
+  volume    = {30},
+  year      = {2017}
+}
+
+
+% =========================================================
+% Frameworks / Tooling: Gym, PyTorch, Lightning, W&B
+% =========================================================
+
+@article{brockman2016openai,
+  title   = {OpenAI Gym},
+  author  = {Brockman, Greg and Cheung, Vicki and Pettersson, Ludwig
+             and Schneider, Jonas and Schulman, John and Tang, Jie
+             and Zaremba, Wojciech},
+  journal = {arXiv preprint arXiv:1606.01540},
+  year    = {2016}
+}
+
+@inproceedings{paszke2019pytorch,
+  title     = {PyTorch: An Imperative Style, High-Performance Deep Learning Library},
+  author    = {Paszke, Adam and Gross, Sam and Massa, Francisco and Lerer, Adam
+               and Bradbury, James and Chanan, Gregory and Killeen, Trevor
+               and Lin, Zeming and Gimelshein, Natalia and Antiga, Luca
+               and Desmaison, Alban and Kopf, Andreas and Yang, Edward
+               and DeVito, Zachary and Raison, Martin and Tejani, Alykhan
+               and Chilamkurthy, Sasank and Steiner, Benoit and Fang, Lu
+               and Bai, Junjie and Chintala, Soumith},
+  booktitle = {Advances in Neural Information Processing Systems 32},
+  year      = {2019}
+}
+
+@article{falcon2019pytorchlightning,
+  title        = {{PyTorch Lightning}},
+  author       = {Falcon, William A.},
+  journal      = {GitHub repository},
+  year         = {2019},
+  howpublished = {\url{https://github.com/Lightning-AI/lightning}}
+}
+
+@misc{biewald2020wandb,
+  author       = {Biewald, Lukas},
+  title        = {Experiment Tracking with Weights and Biases},
+  year         = {2020},
+  howpublished = {\url{https://www.wandb.com/}},
+  note         = {Software available from wandb.com}
+}
