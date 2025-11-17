@@ -74,7 +74,7 @@ Adversarial games with extremely large state spaces, such as Go were solved usin
 It has been shown that highly stochastic games can be learned reliably, as long as methods to ensure better exploration are used \cite{osband2016bootstrappeddqn}. 
 
 \subsection{DP Methods for Yahtzee}
-Solitaire \textit{Yahtzee} is a complex game with an upper bound of $~7 \times 10^{15}$ possible states in its state space manifold, and has a high degree of stoachasticity due to dice rolls being the primary driver of state transitions.
+Solitaire \textit{Yahtzee} is a complex game with an upper bound of $~7 \times 10^{15}$ possible states in its state space manifold, and has a high degree of stochasticity due to dice rolls being the primary driver of state transitions.
 Despite this, it has been analytically solved using dynamic programming techniques \cite{verhoeff-1999-solitaire-yahtzee} and baseline metrics for optimal play are available, which calculates an ideal play score of $254.59$ points.
 Later work by \citet{glenn-2006-optimal-yahtzee} optimizing the DP approach via symmetries to propose an efficient algorithm.
 \citet{glenn-2007-solitaire-yahtzee} calculated the reachable state space to be $~5.3 \times 10^8$, and subsequently implemented this efficint algorithm, which and compared favorably to several benchmark heuristics.
