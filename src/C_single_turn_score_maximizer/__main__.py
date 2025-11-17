@@ -189,8 +189,8 @@ def main() -> None:  # noqa: PLR0915
     gamma_max = config["gamma_max"]
     dropout_rate = config["dropout_rate"]
     gradient_clip_val = config["gradient_clip_val"]
-    entropy_coef_start = config["entropy_coeff_start"]
-    entropy_coef_end = config["entropy_coeff_end"]
+    entropy_coeff_start = config["entropy_coeff_start"]
+    entropy_coeff_end = config["entropy_coeff_end"]
     entropy_anneal_percentage = config["entropy_anneal_percentage"]
     critic_coeff = config["critic_coeff"]
 
@@ -249,8 +249,8 @@ def main() -> None:  # noqa: PLR0915
             min_lr_ratio=min_lr_ratio,
             gamma_min=gamma_min,
             gamma_max=gamma_max,
-            entropy_coef_start=entropy_coef_start,
-            entropy_coef_end=entropy_coef_end,
+            entropy_coeff_start=entropy_coeff_start,
+            entropy_coeff_end=entropy_coeff_end,
             entropy_anneal_epochs=int(entropy_anneal_percentage * epochs),
             critic_coeff=critic_coeff,
         )
@@ -275,8 +275,8 @@ def main() -> None:  # noqa: PLR0915
                 "games_per_update": games_per_update,
                 "games_per_epoch": games_per_epoch_actual,
                 "gradient_clip_val": gradient_clip_val,
-                "entropy_coef_start": entropy_coef_start,
-                "entropy_coef_end": entropy_coef_end,
+                "entropy_coeff_start": entropy_coeff_start,
+                "entropy_coeff_end": entropy_coeff_end,
                 "entropy_anneal_percentage": entropy_anneal_percentage,
                 "entropy_anneal_epochs": int(entropy_anneal_percentage * epochs),
                 "critic_coeff": critic_coeff,
