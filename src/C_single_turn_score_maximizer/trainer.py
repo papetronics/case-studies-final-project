@@ -308,7 +308,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         policy_loss = -(log_probs * normalized_advantages).mean()
 
         # Calculate average reward per episode (last step contains full return)
-        episode_returns = returns.view(batch_size, num_steps)[:, -1]  # (BATCH_SIZE,)
+        episode_returns = returns.view(batch_size, num_steps)[:, 0]  # (BATCH_SIZE,)
         avg_reward = episode_returns.mean()
 
         # Calculate Huber loss

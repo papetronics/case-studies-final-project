@@ -68,6 +68,7 @@ def get_input_dimensions(bonus_flags: set[BonusFlags]) -> int:
         + NUMBER_OF_DICE_SIDES  # Dice counts
         + len(bonus_flags)  # Bonus information
         + 1  # Has earned Yahtzee
+        + 1  # Percent of game remaining
     )
 
 
@@ -130,12 +131,15 @@ def phi(
 
     # print(available_categories)
 
+    percent_of_game_remaining = 1.0 - (np.sum(available_categories) / NUMBER_OF_CATEGORIES)
+
     input_vector = np.concatenate(
         [
             dice_onehot,
             dice_counts,
             rolls_onehot,
             np.array(bonus_information),
+            [percent_of_game_remaining],
             [phase],
             [has_earned_yahtzee],
             available_categories,
