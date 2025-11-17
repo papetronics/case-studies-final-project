@@ -55,8 +55,8 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         min_lr_ratio: float,
         gamma_max: float,
         gamma_min: float,
-        entropy_coef_start: float,
-        entropy_coef_end: float,
+        entropy_coeff_start: float,
+        entropy_coeff_end: float,
         entropy_anneal_epochs: int,
         critic_coeff: float,
         return_calculator: ReturnCalculator | None = None,
@@ -75,8 +75,8 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         self.min_lr_ratio: float = min_lr_ratio
         self.gamma_max: float = gamma_max
         self.gamma_min: float = gamma_min
-        self.entropy_coef_start: float = entropy_coef_start
-        self.entropy_coef_end: float = entropy_coef_end
+        self.entropy_coeff_start: float = entropy_coeff_start
+        self.entropy_coeff_end: float = entropy_coeff_end
         self.entropy_anneal_epochs: int = entropy_anneal_epochs
         self.critic_coeff: float = critic_coeff
 
@@ -234,8 +234,8 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
 
     def get_entropy_coef(self) -> float:
         """Get current entropy coefficient with linear annealing."""
-        start = self.entropy_coef_start
-        end = self.entropy_coef_end
+        start = self.entropy_coeff_start
+        end = self.entropy_coeff_end
         entropy_t = max(1, self.entropy_anneal_epochs)
 
         # clamp at 1.0 so we stop decaying after T epochs
