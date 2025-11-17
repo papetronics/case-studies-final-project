@@ -93,7 +93,7 @@ Although not formally written, \citet{DutschkeYahtzee} reports a deep-Q agent ac
 
 \subsection{Policy Gradient Methods and Variance Reduction}
 Temporal Difference (TD) \cite{sutton-1988-temporal-differences} and REINFORCE \cite{williams-1992-reinforce} methods have long been used to assign credit and calculate training signals in long-horizon tasks.
-These have spawned an entire heirarchy of policy gradient methods, including asynchronous advantage actor-critic (A3C) \cite{mnih-2016-a3c}, proximal policy optimization (PPO) \cite{schulman-2017-ppo}, and others \cite{sutton-2000-policy-gradient}. 
+These have spawned an entire hierarchy of policy gradient methods, including asynchronous advantage actor-critic (A3C) \cite{mnih-2016-a3c}, proximal policy optimization (PPO) \cite{schulman-2017-ppo}, and others \cite{sutton-2000-policy-gradient}. 
 
 Unfortunately, all reinforcement learning methods struggle with long-horizon credit assignment due to the compounding variance of returns and sparse rewards, leading to high variance updates and unstable training \cite{bjorck-2022-high-variance}. There are numerous architectural and optimization tricks which can be employed to mitigate these issues.
 For example, during training, the Adam optimizer \cite{kingma-2014-adam} is widely used due to its adaptive momentum term, which helps to stabilize high variance updates.
