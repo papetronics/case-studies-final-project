@@ -118,7 +118,7 @@ def main() -> None:  # noqa: PLR0915
         ConfigParam(
             "gamma_min",
             float,
-            0.9,
+            1.0,
             "Discount factor for reward calculation (min, start)",
             display_name="Discount factor",
         ),
