@@ -249,12 +249,12 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
     def training_step(self, batch: EpisodeBatch, batch_idx: int) -> torch.Tensor:  # noqa: ARG002, C901, PLR0915
         """Perform a training step using REINFORCE algorithm with vectorized operations."""
         # batch is an EpisodeBatch dict with pre-flattened tensors:
-        # - "states": (BATCH_SIZE*3, state_size) float32
-        # - "rolling_actions": (BATCH_SIZE*3, 5) int
-        # - "scoring_actions": (BATCH_SIZE*3,) int
-        # - "rewards": (BATCH_SIZE*3,) float32
-        # - "next_states": (BATCH_SIZE*3, state_size) float32
-        # - "phases": (BATCH_SIZE*3,) int
+        # - "states": (BATCH_SIZE*39, state_size) float32
+        # - "rolling_actions": (BATCH_SIZE*39, 5) int
+        # - "scoring_actions": (BATCH_SIZE*39,) int
+        # - "rewards": (BATCH_SIZE*39,) float32
+        # - "next_states": (BATCH_SIZE*39, state_size) float32
+        # - "phases": (BATCH_SIZE*39,) int
 
         # Dataset pre-flattens, so we just extract directly
         states_flat = batch["states"]
@@ -266,7 +266,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
 
         # Calculate batch_size and num_steps from flattened shape
         total_steps = states_flat.shape[0]
-        num_steps = 3
+        num_steps = 39  # Full game: 13 turns * 3 steps per turn
         batch_size = total_steps // num_steps
 
         # Forward pass through current policy to get probabilities and value estimates
@@ -277,19 +277,19 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         rolling_dist = torch.distributions.Bernoulli(rolling_probs)
         rolling_log_probs = rolling_dist.log_prob(rolling_actions_flat.float()).sum(
             dim=1
-        )  # (BATCH_SIZE * 3,)
+        )  # (BATCH_SIZE * 39,)
 
         scoring_dist = torch.distributions.Categorical(scoring_probs)
-        scoring_log_probs = scoring_dist.log_prob(scoring_actions_flat)  # (BATCH_SIZE * 3,)
+        scoring_log_probs = scoring_dist.log_prob(scoring_actions_flat)  # (BATCH_SIZE * 39,)
 
         # Select the appropriate log prob based on phase
         log_probs = torch.where(
             phases_flat == 0, rolling_log_probs, scoring_log_probs
-        )  # (BATCH_SIZE * 3,)
+        )  # (BATCH_SIZE * 39,)
 
         # Calculate returns using Monte Carlo (backward pass through episodes)
         gamma = self.return_calculator.gamma
-        returns = torch.zeros_like(rewards_flat)  # (BATCH_SIZE * 3,)
+        returns = torch.zeros_like(rewards_flat)  # (BATCH_SIZE * 39,)
 
         for batch_idx_inner in range(batch_size):
             g = 0.0
@@ -318,12 +318,12 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         v_loss = torch.nn.functional.mse_loss(v_ests.squeeze(), returns)
 
         ## Entropy
-        rolling_entropy = rolling_dist.entropy().sum(dim=1)  # (BATCH_SIZE*3,)
-        scoring_entropy = scoring_dist.entropy()  # (BATCH_SIZE*3,)
+        rolling_entropy = rolling_dist.entropy().sum(dim=1)  # (BATCH_SIZE*39,)
+        scoring_entropy = scoring_dist.entropy()  # (BATCH_SIZE*39,)
         # Match entropy to the active head at each step, same as log_probs
         entropies = torch.where(
             phases_flat == 0, rolling_entropy, scoring_entropy
-        )  # (BATCH_SIZE*3,)
+        )  # (BATCH_SIZE*39,)
         entropy_mean = entropies.mean()
         ent_coef = self.get_entropy_coef()
         entropy_bonus = ent_coef * entropy_mean

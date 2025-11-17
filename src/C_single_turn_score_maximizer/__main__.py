@@ -208,7 +208,8 @@ def main() -> None:  # noqa: PLR0915
         raise BatchSizeTooLargeError(games_per_batch, games_per_epoch)
 
     # Calculate derived training metrics
-    batch_size = games_per_batch * TURNS_PER_GAME
+    # Since we now run full games (not single turns), batch_size is just games_per_batch
+    batch_size = games_per_batch
     updates_per_epoch = games_per_epoch // games_per_batch
     total_updates = updates_per_epoch * epochs
     games_per_update = games_per_batch
