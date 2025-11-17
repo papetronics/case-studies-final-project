@@ -39,24 +39,57 @@
 
 \section{Introduction}
 % 600-900 words
-While on the surface \textit{Yahtzee} appears to be a trivial dice game, it actually presents large stochastic optimization problem
-with combinatorial complexity. In this paper, we explore the application of various reinforcement learning techniques 
-to optimize gameplay in \textit{Yahtzee}.
+% 306 words so far
+\subsection{Yahtzee}
+While on the surface \textit{Yahtzee} appears to be a trivial dice game \cite{hasbro-2022-yahtzee-rules}, it is actually a complex stochastic optimization problem with combinatorial complexity.
+By it's nature, it is heavily driven by random chance due to dice rolls, but strategic decision-making is required to maximize expected score over the course of a game.
+While the state complexity in solitaire play is large \cite{verhoeff-1999-solitaire-yahtzee} but manageable using dynamic programming techniques \cite{glenn-2007-solitaire-yahtzee}, adversarial multiplayer \textit{Yahtzee} remains an open problem due to the exponential growth of the state space with additional players \citet{pawlewicz-2011-multiplayer-yahtzee}. Even though Yahtzee has been a classic testbed for search and DP, it has been less explored as a deep reinforcement learning benchmark. Its varying, but well-defined,  problem settings make it a good candidate to serve as a "bridge" between smaller benchmarks like \textit{Lunar Lander} and large-scale games like \textit{Go} or \textit{Poker}. 
+
 \subsection{Research Questions}
+The primary research questions this paper aims to address are:
+\begin{itemize}
+    \item Can the tradeoff between maximizing the single-turn expected score and long-term game performance be quantified?
+    \item Can a deep Reinforcement Learning agent trained only from self-play reach near-DP-optimal performance in full-game solitaire Yahtzee?
+    \item Which design choices (state encoding, $\gamma$ schedule, entropy regularization, baselines, batch size, etc) most affect sample efficiency and final performance?
+\end{itemize}
+
 \subsection{Contributions}
+The main contributions of this paper are:
+\begin{itemize}
+    \item A deep RL agent that achieves <X> average score, within <delta> points of an exact DP baseline under a strict budget of 1 million training games.
+    \item An ablation study of key architectural and training choices and their impact on performance in Yahtzee.
+    \item A failure mode analysis identifying issues in learned policies and their resolution through architectural or training modifications.
+\end{itemize}
 
 \section{Related Work}
 % 600-800 words
-\subsection{Yahtzee and Combinatorial Game Reinforcement Learning}
-\citet{verhoeff-1999-solitaire-yahtzee} showed that \textit{Yahtzee} can be analytically solved using dynamic programming techniques and provides baseline metrics from optimal play.
-\citet{glenn-2007-solitaire-yahtzee} optimized the DP approach by taking advantage of symmetries and only considering reachable states. \citet{pawlewicz-2011-multiplayer-yahtzee}
-extended the DP approach to 2-player \textit{Yahtzee}, however, the approach does not scale to more players due to the exponential growth of the state space.
+\subsection{Complex Games}
+Typical board and dice games have extreme state complexity or stochasticity; reinforcement learning methods are a natural fit for these problems.
+In a classic example, \citet{tesauro1995tdgammon} utilized temporal difference learning to achieve superhuman performance in \textit{Backgammon}, another game with a large state space and stochastic elements.
+Tetris has also been studied extensively; \citet{bertsekas1996tetris} utilized approximate dynamic programming methods to learn effective policies for the game.
+Stochastic combinatorial games like Tetris can be effectively tackled using reinforcement learning methods \cite{gabillon2013tetris}.
+Adversarial games with extremely large state spaces, such as Go were solved using Monte-Carlo Tree Search combined with deep value networks \cite{silver2016alphago}, and later work showed Go could be learned purely through self-play \cite{silver2017alphagozero}.
+\citet{moravcik2017deepstack} demonstrated that \textit{Texas Hold'em}, a game with hidden information and stochasticity, could be also effectively learned.
+Highly stochastic games can be learned as well, utilizing methods to ensure better exploration \cite{osband2016bootstrappeddqn}. 
 
-Games with similar combinatorial complexity, such as \textit{Backgammon} \cite{tesauro-1995-td-gammon} and \textit{Poker} \cite{brown-2018-superhuman-poker},
+\subsection{Yahtzee}
+Solitaire \textit{Yahtzee} is a complex game with over $7 \times 10^{15}$ possible states in its state space manifold, and has a high degree of stoachasticity due to dice rolls being the primary driver of state transitions.
+Despite this, it has been analytically solved using dynamic programming techniques \cite{verhoeff-1999-solitaire-yahtzee} and baseline metrics for optimal play are available, which calculates an ideal play score of $254.59$ points.
+Later work by \citet{glenn-2007-solitaire-yahtzee} improved upon this by optimizing the DP approach, utilizing symmetries and limiting analysis only to reachable states, allowing the problem to be solved on limited hardware, as well as describing several benchmark heuristics. \citet{glenn-2006-optimal-yahtzee}
+However, adversarial Yahtzee remains an open problem.
+While \citet{pawlewicz-2011-multiplayer-yahtzee} showed that DP techniques can be expanded to 2-player adversarial \textit{Yahtzee}, they do not scale to more players due to the exponential growth of the state space. Approximation methods must be utilized for larger player counts.
 
-\textit{Yahtzee} is also 
+Some prior attempts have been made to apply reinforcement learning to \textit{Yahtzee}.
+YAMS attemped by Q-learning and SARSA, but was not able to surpass $~120$ points median \cite{belaich-2024-yams}.
+For example, \citet{kang-2018-yahtzee-rl} applied heirarchical MAX-Q, achieving an average score of $129.58$ and a 67\% win-rate over a 1-turn expectimax agent baseline.
+\citet{vasseur-2019-strategy-ladders} explored strategy ladders for multiplayer Yahtzee, to understand how sensitive Deep-Q networks were to the upper-bonus threshold.
+Later, \cite{yuan-2023-two-player-yahtzee} used Deep-Q networks and policy ladders to quantify the model's preference for prioritizing the upper-section bonus.
+Yahtzotron used heavy supervised pretraining and A2C to achieve an average of $~236$ points \cite{Haefner2021Yahtzotron}.
+Although not formally written, \citet{DutschkeYahtzee} reports a deep-Q agent achieving a score of $241.6 \pm 40.7$ after just 8,000 games.
 
 \subsection{Long-Horizon Policy Gradient Methods}
+
+
 \subsection{Architecture and Optimization Components}
 
 \section{Problem Formulation}
@@ -362,7 +395,7 @@ GitHub Copilot was also used to write this section.
 
 Acknowledge any help or resources you used.
 
-\bibliography{references}
+\bibliography{1_introduction,2_related_work,3_methods,4_single_turn_results,5_full_game_experiments,6_discussion,7_appendix}
 \bibliographystyle{acl_natbib}
 
 \appendix
