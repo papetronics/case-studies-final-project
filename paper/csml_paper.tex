@@ -42,7 +42,7 @@
 % 297 words so far
 \subsection{Yahtzee}
 While on the surface \textit{Yahtzee} appears to be a trivial dice game \cite{hasbro-2022-yahtzee-rules}, it is actually a complex stochastic optimization problem with combinatorial complexity.
-By it's nature, it is heavily driven by random chance due to dice rolls, but strategic decision-making is required to maximize expected score over the course of a game.
+By its nature, it is heavily driven by random chance due to dice rolls, but strategic decision-making is required to maximize expected score over the course of a game.
 While the state complexity in solitaire play is large \cite{verhoeff-1999-solitaire-yahtzee} but manageable using dynamic programming techniques \cite{glenn-2007-solitaire-yahtzee}, adversarial multiplayer \textit{Yahtzee} remains an open problem due to the exponential growth of the state space with additional players \citet{pawlewicz-2011-multiplayer-yahtzee}. Even though Yahtzee has been a classic testbed for search and DP, it has been less explored as a deep reinforcement learning benchmark. Its varying, but well-defined,  problem settings make it a good candidate to serve as a "bridge" between smaller benchmarks like \textit{Lunar Lander} and large-scale games like \textit{Go} or \textit{Poker}. 
 
 \subsection{Research Questions}
@@ -84,8 +84,8 @@ While \citet{pawlewicz-2011-multiplayer-yahtzee} showed that DP techniques can b
 
 \subsection{Reinforcement Learning for Yahtzee}
 Some prior attempts have been made to apply reinforcement learning to \textit{Yahtzee}.
-YAMS attemped by Q-learning and SARSA, but was not able to surpass $~120$ points median \cite{belaich-2024-yams}.
-For example, \citet{kang-2018-yahtzee-rl} applied heirarchical MAX-Q, achieving an average score of $129.58$ and a 67\% win-rate over a 1-turn expectimax agent baseline.
+YAMS attempted by Q-learning and SARSA, but was not able to surpass $~120$ points median \cite{belaich-2024-yams}.
+For example, \citet{kang-2018-yahtzee-rl} applied hierarchical MAX-Q, achieving an average score of $129.58$ and a 67\% win-rate over a 1-turn expectimax agent baseline.
 \citet{vasseur-2019-strategy-ladders} explored strategy ladders for multiplayer Yahtzee, to understand how sensitive Deep-Q networks were to the upper-bonus threshold.
 Later, \cite{yuan-2023-two-player-yahtzee} applied Deep-Q networks to the adversarial setting.
 Yahtzotron used heavy supervised pretraining and A2C to achieve an average of $~236$ points \cite{Haefner2021Yahtzotron}.
