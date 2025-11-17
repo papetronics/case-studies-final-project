@@ -49,7 +49,7 @@ MAX_UPPER_SCORE = 5 * (1 + 2 + 3 + 4 + 5 + 6)  # 5 dice, each can contribute 1-6
 GOLF_TARGET = (np.arange(6) + 1) * 3  # Target score for golf scoring per category
 
 
-def get_input_dimensions(bonus_flags: set[BonusFlags]) -> int:
+def get_input_dimensions(bonus_flags: set[BonusFlags], use_score_values: bool = True) -> int:
     """Calculate the input dimension for the model based on bonus flags.
 
     Model inputs:
@@ -60,10 +60,10 @@ def get_input_dimensions(bonus_flags: set[BonusFlags]) -> int:
       - Dice Counts [6]: Counts of each die face (1-6) = 6
       - Bonus Information [varies]: Various bonus-related inputs = len(bonus_flags)
       - Has Earned Yahtzee [1]: Whether the player has already scored a Yahtzee = 1
-      - Potential Scores [13]: Potential score in each category = 13
-      - Joker Indicator [1]: Whether joker rules are active = 1
+      - Potential Scores [13]: Potential score in each category = 13 (if use_score_values is True)
+      - Joker Indicator [1]: Whether joker rules are active = 1 (if use_score_values is True)
     """
-    return int(
+    base_size = int(
         (NUMBER_OF_DICE * NUMBER_OF_DICE_SIDES)  # Dice one-hot
         + (FINAL_ROLL + 1)  # Rolls used one-hot
         + NUMBER_OF_CATEGORIES  # Available categories
@@ -71,13 +71,20 @@ def get_input_dimensions(bonus_flags: set[BonusFlags]) -> int:
         + NUMBER_OF_DICE_SIDES  # Dice counts
         + len(bonus_flags)  # Bonus information
         + 1  # Has earned Yahtzee
-        + NUMBER_OF_CATEGORIES  # potential score in category
-        + 1  # joker indicator
     )
+
+    if use_score_values:
+        base_size += NUMBER_OF_CATEGORIES  # potential score in category
+        base_size += 1  # joker indicator
+
+    return base_size
 
 
 def phi(
-    observation: Observation, bonus_flags: set[BonusFlags], device: torch.device
+    observation: Observation,
+    bonus_flags: set[BonusFlags],
+    device: torch.device,
+    use_score_values: bool = True,
 ) -> torch.Tensor:
     """Convert observation dictionary to input tensor for the model."""
     dice = observation["dice"]  # numpy array showing the actual dice, e.g. [1, 3, 5, 6, 2]
@@ -96,11 +103,15 @@ def phi(
         (observation["score_sheet"][:6] - GOLF_TARGET) * (1 - available_categories[:6])
     )
 
-    score_values, joker = get_all_scores(
-        dice,
-        available_categories,
-        observation["score_sheet"][ScoreCategory.YAHTZEE] == YAHTZEE_SCORE,
-    )
+    if use_score_values:
+        score_values, joker = get_all_scores(
+            dice,
+            available_categories,
+            observation["score_sheet"][ScoreCategory.YAHTZEE] == YAHTZEE_SCORE,
+        )
+    else:
+        score_values = None
+        joker = None
 
     normalized_golf_score = (
         golf_score / UPPER_SCORE_THRESHOLD
@@ -141,19 +152,31 @@ def phi(
 
     # print(available_categories)
 
-    input_vector = np.concatenate(
+    # Build input vector conditionally based on use_score_values
+    input_components = [
+        dice_onehot,
+        dice_counts,
+        rolls_onehot,
+    ]
+
+    if use_score_values:
+        input_components.extend(
+            [
+                score_values,  # Use score values
+                [joker],
+            ]
+        )
+
+    input_components.extend(
         [
-            dice_onehot,
-            dice_counts,
-            rolls_onehot,
-            score_values,  # Use score values as available categories
-            [joker],
             np.array(bonus_information),
             [phase],
             [has_earned_yahtzee],
             available_categories,
         ]
     )
+
+    input_vector = np.concatenate(input_components)
     return torch.FloatTensor(input_vector).to(device)
 
 
@@ -199,16 +222,18 @@ class YahtzeeAgent(nn.Module):
         num_hidden: int,
         dropout_rate: float,
         activation_function: ActivationFunctionName,
+        use_score_values: bool = True,
     ):
         super().__init__()
 
         activation = ActivationFunction[activation_function].value
 
         self.dropout_rate = dropout_rate
+        self.use_score_values = use_score_values
 
         self.bonus_flags: set[BonusFlags] = {BonusFlags.PERCENT_PROGRESS_TOWARDS_BONUS}
 
-        input_size = get_input_dimensions(self.bonus_flags)
+        input_size = get_input_dimensions(self.bonus_flags, use_score_values)
 
         ## Model outputs:
         #   - Action Probabilities [5]: Probability of re-rolling each of the 5 dice

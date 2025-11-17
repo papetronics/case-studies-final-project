@@ -59,6 +59,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         entropy_coeff_end: float,
         entropy_anneal_epochs: int,
         critic_coeff: float,
+        use_score_values: bool = True,
         return_calculator: ReturnCalculator | None = None,
     ):
         super().__init__()
@@ -68,6 +69,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
             num_hidden=num_hidden,
             dropout_rate=dropout_rate,
             activation_function=activation_function,
+            use_score_values=use_score_values,
         )
 
         self.learning_rate: float = learning_rate
@@ -128,7 +130,12 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
                 # Batch convert observations to state tensors
                 state_tensors = torch.stack(
                     [
-                        phi(obs, self.policy_net.bonus_flags, self.policy_net.device)
+                        phi(
+                            obs,
+                            self.policy_net.bonus_flags,
+                            self.policy_net.device,
+                            self.policy_net.use_score_values,
+                        )
                         for obs in active_observations
                     ]
                 )  # (num_active, state_size)

@@ -164,6 +164,13 @@ def main() -> None:  # noqa: PLR0915
             "Coefficient for the critic loss term",
             display_name="Critic coefficient",
         ),
+        ConfigParam(
+            "use_score_values",
+            bool,
+            True,
+            "Whether to include potential score values in the state representation",
+            display_name="Use score values",
+        ),
     ]
 
     # Initialize project with configuration
@@ -193,6 +200,7 @@ def main() -> None:  # noqa: PLR0915
     entropy_coeff_end = config["entropy_coeff_end"]
     entropy_anneal_percentage = config["entropy_anneal_percentage"]
     critic_coeff = config["critic_coeff"]
+    use_score_values = config["use_score_values"]
 
     # Calculate games_per_epoch from total_train_games and epochs
     games_per_epoch = total_train_games // epochs
@@ -253,6 +261,7 @@ def main() -> None:  # noqa: PLR0915
             entropy_coeff_end=entropy_coeff_end,
             entropy_anneal_epochs=int(entropy_anneal_percentage * epochs),
             critic_coeff=critic_coeff,
+            use_score_values=use_score_values,
         )
 
         # Save hyperparameters explicitly
@@ -280,6 +289,7 @@ def main() -> None:  # noqa: PLR0915
                 "entropy_anneal_percentage": entropy_anneal_percentage,
                 "entropy_anneal_epochs": int(entropy_anneal_percentage * epochs),
                 "critic_coeff": critic_coeff,
+                "use_score_values": use_score_values,
             }
         )
 
