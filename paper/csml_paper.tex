@@ -77,7 +77,7 @@ It has been shown that highly stochastic games can be learned reliably, as long 
 Solitaire \textit{Yahtzee} is a complex game with an upper bound of $~7 \times 10^{15}$ possible states in its state space manifold, and has a high degree of stochasticity due to dice rolls being the primary driver of state transitions.
 Despite this, it has been analytically solved using dynamic programming techniques \cite{verhoeff-1999-solitaire-yahtzee} and baseline metrics for optimal play are available, which calculates an ideal play score of $254.59$ points.
 Later work by \citet{glenn-2006-optimal-yahtzee} optimized the DP approach via symmetries to propose an efficient algorithm.
-\citet{glenn-2007-solitaire-yahtzee} calculated the reachable state space to be $~5.3 \times 10^8$, and subsequently implemented this efficint algorithm, which and compared favorably to several benchmark heuristics.
+\citet{glenn-2007-solitaire-yahtzee} calculated the reachable state space to be $~5.3 \times 10^8$, and subsequently implemented this efficint algorithm, which compared favorably to several benchmark heuristics.
 
 However, adversarial Yahtzee remains an open problem.
 While \citet{pawlewicz-2011-multiplayer-yahtzee} showed that DP techniques can be expanded to 2-player adversarial \textit{Yahtzee}, they do not scale to more players due to the exponential growth of the state space. Approximation methods must be utilized for larger player counts.
@@ -96,8 +96,7 @@ Temporal Difference (TD) \cite{sutton-1988-temporal-differences} and REINFORCE \
 These have spawned an entire hierarchy of policy gradient methods, including asynchronous advantage actor-critic (A3C) \cite{mnih-2016-a3c}, proximal policy optimization (PPO) \cite{schulman-2017-ppo}, and others \cite{sutton-2000-policy-gradient}. 
 
 Unfortunately, all reinforcement learning methods struggle with long-horizon credit assignment due to the compounding variance of returns and sparse rewards, leading to high variance updates and unstable training \cite{bjorck-2022-high-variance}. There are numerous architectural and optimization tricks which can be employed to mitigate these issues.
-For example, during training, the Adam optimizer \cite{kingma-2014-adam} is widely used due to its adaptive momentum term, which helps to stabilize high variance updates.
-Performing "warmups" of the learning rate improves RL performance by deprioritizing policy updates during the poorly-performing early training regime \cite{kalra-2024-warmup} \cite{liu-2025-warmup-theory}.   
+% TODO: Add the following BibTeX entry to your .bib file (e.g., 3_methods.bib) to resolve the missing citation error:
 At initialization, Kaiming/He weight initialization \cite{he-2015-delving-rectifiers} has been shown to reduce variance in deep networks by normalizing activation variances across layers.
 The SiLU and Swish activation functions \cite{ramachandran-2017-swish} are improvements of GELU \cite{hendrycks-2016-gelu} that have been shown to be highly effective in RL tasks; their smooth and fully differentiable curves improve gradient flow \cite{elfwing-2018-silu-rl}.
 
@@ -105,7 +104,8 @@ Another common problem with policy gradient methods is policy collapse due to pr
 
 \section{Problem Formulation}
 % 400-600 words
-\subsection{Game Description}\subsubsection{Rules of Yahtzee}
+\subsection{Game Description}
+\subsubsection{Rules of Yahtzee}
 Yahtzee is played with five standard six-sided dice and a shared scorecard containing 13 categories.
 Turns are rotated among players. A turn starts with a player rolling all five dice. They may then choose to keep
 some dice, and re-roll the remaining ones. This process can be repeated up to two more times, for a total of three rolls.
@@ -196,7 +196,7 @@ The player's score can thus be calculated as:
 $$S(\mathbf{c}) = B(\mathbf{c}) + \big\langle \mathbf{u}(\mathbf{c}), \mathbf{c} \big\rangle$$
 
 \subsection{MDP Formulation}
-We can formulate Yahtzee as a Markov Decision Process (MDP) defined by the 4-tuple $(\mathcal{S}, \mathcal{A}, P, R, \gamma)$.
+We can formulate Yahtzee as a Markov Decision Process (MDP) defined by the 5-tuple $(\mathcal{S}, \mathcal{A}, P, R, \gamma)$.
 
 \subsection{Single-Turn Optimization Task}
 \subsection{Full-Game Reinforcement Learning Task}
@@ -224,7 +224,7 @@ It also requires a different action representation, since actions can no longer 
 
 \subsubsection{Scorecard Representation}
 There are two important pieces of information $\mathbf{\phi}$ must encode about the scorecard: whether a category is open or closed,
-and some form of progress towards the upper bonus. For the category availaboility, we simply pass through $\mathbf{c}$. Here, several different representations were tested:
+and some form of progress towards the upper bonus. For the category availability, we simply pass through $\mathbf{c}$. Here, several different representations were tested:
 \begin{itemize}
   \item \textbf{Raw upper score:} $\sum_{i \in \mathbf{c}} c_{i}$
   \item \textbf{Distance to bonus:} $63 - \sum_{i \in \mathbf{c}} c_{i}$
@@ -310,7 +310,7 @@ can be approximated by a network with a hidden layer width of at least $\Omega(d
 For a example, assume Yahtzee is non-convex, and we represent the dice state $\mathbf{d}$ and $r$ as one-hot encodings and utilize
 the score mask $\mathbf{u}(\mathbf{c})$, then $x = 6 \cdot 5 + 3 + 13 = 46$ means our \textit{minimum} hidden layer width is 49 neurons. 
 
-In practice, the ideal network size is not driven by the cardinality of the state space, but rather by the 
+In practice, the ideal network size is not driven by the cardinality of the state space, but rather by the complexity of the function to be approximated, the richness of the data, and the specific requirements of the task at hand.
 
 \section{AI Usage Disclosure}
 
