@@ -230,7 +230,18 @@ and since we desire to maximize total score at the end of the game, we set $\gam
 
 
 \subsection{Single-Turn Optimization Task}
-\subsection{Full-Game Reinforcement Learning Task}
+In the single-turn optimization task, the agent is trained to maximize the expected score over a single turn.
+This task has 3 steps total; after being initialized with a random dice roll, the agent chooses which
+dice to keep and which to re-roll twice, and then selects a scoring category. A single reward is given at the end of the turn.
+
+This is a useful subproblem to study, as it isolates the decision-making process in a single turn,
+allowing us to analyze the network architecture and training regime in a low-variance setting.
+
+\subsection{Full-Game Optimization Task}
+In the full-game optimization task, 13-turn episodes are played to completion.
+The objective again is to maximize the total score at the end of the game.
+This task is more challenging due to the longer horizon, increased variance, and the requirement for
+the network to learn explicit long-term strategies, such as planning for the upper bonus.
 
 \section{Methodology}
 1400-1700 words
@@ -242,8 +253,8 @@ As such, several different representations were tested to evaluate their impact 
 \subsubsection{Dice Representation}
 The dice representation can be encoded in several ways, depending on if we want to preserve permutation invariance or not.
 Preserving ordering information (and implicitly, ranking) gives the model the benefit of being able to directly output actions corresponding to dice indices,
-however, it comes at the cost of implicitly biasing the model to specific dice orderings; in other words, biasing towards a local optima of always keeping the highest ranking dice.
-However, eliminating ordering information requires the model to either waste capacity learning permutation invariance or be architecturally supportive of it (e.g. with self-attention).
+however, it comes at the cost of implicitly biasing the model to specific dice orderings; in other words, towards a local optima of keeping the highest ranking dice.
+However, eliminating ordering information requires the model to either waste capacity learning permutation invariance or be inherently supportive of invariance (e.g. with self-attention).
 It also requires a different action representation, since actions can no longer correspond to specific dice indices. We attempted 5 different dice representations:
 \begin{itemize}
   \item \textbf{One-hot encoding of ordered dice:} Each die is represented as a one-hot vector of length 6, and the 5 dice are concatenated in order.
@@ -253,22 +264,63 @@ It also requires a different action representation, since actions can no longer 
   \item \textbf{Learnable encoding of dice with positional encodings:} Similar to above, but with sinusoidal positional encodings added to each die embedding.
 \end{itemize}
 
+$$\phi_{\mathrm{dice}}(\mathbf{d}) = \text{(varies by representation)}$$
+
 \subsubsection{Scorecard Representation}
 There are two important pieces of information $\mathbf{\phi}$ must encode about the scorecard: whether a category is open or closed,
-and some form of progress towards the upper bonus. For the category availability, we simply pass through $\mathbf{c}$. Here, several different representations were tested:
-\begin{itemize}
-  \item \textbf{Raw upper score:} $\sum_{i \in \mathbf{c}} c_{i}$
-  \item \textbf{Distance to bonus:} $63 - \sum_{i \in \mathbf{c}} c_{i}$
-  \item \textbf{Norm. upper score:} $\min(\frac{1}{63} \sum_{i \in \mathbf{c}} c_{i}, 1)$
-  \item \textbf{Distance to bonus:} $\mathbb{I}(\sum_{i \in \mathbf{c}} c_{i} \geq 63)$
-  \item \textbf{"Golf" score:}
-\end{itemize}
+and some form of progress towards the upper bonus.
+$$\phi_{\mathrm{cat}}(\mathbf{c}) = \mathbf{u}(\mathbf{c})$$
 
+We experimented with several ways of encoding the bonus progress, but settled on a simple normalized, clamped sum of the upper section scores:
+$$\phi_{\mathrm{bonus}}(\mathbf{c}) = \min\biggl(\frac{1}{63} \sum_{i=1}^{6} c_{i}, 1\biggr)$$
 
 \subsubsection{Computed Features}
+There are some key features that can be computed from the raw state, providing these can allow the model to focus on higher-level patterns.
+
+\begin{align*}
+  \phi_{\mathrm{progress}}(t)       & = \frac{t}{12}                                                                        \\[4pt]
+  \phi_{\mathrm{rolls}}(r)          & \in \{0,1\}^3, \quad \|\phi_{\mathrm{rolls}}(r)\|_1 = 1                               \\[4pt]
+  \phi_{\mathrm{joker}}(\mathbf{c}) & \in \{0,1\}, \quad \text{(Joker rule active)}                                         \\[4pt]
+  \phi_{\mathrm{potential}}(\mathbf{d}, \mathbf{c})
+                                    & = \bigl(\mathbf{u}(\mathbf{c}) \odot \mathbf{f}(\mathbf{d})\bigr) \oslash \mathbf{m},
+\end{align*}
+where $m_k = \max_{\mathbf{d}'} f_k(\mathbf{d}')$ is the maximum possible score for category $k$.
+
+
+\subsection{Action Representation}
+\subsubsection{Rolling Action}
+We experiment with two different rolling action representations.
+The first is a Bernoulli representation, where each die has an individual binary decision to be re-rolled or held.
+The second is a categorical representation, where each of the 32 possible combination of dice to keep is represented as a unique action.
+
+\[
+  a \sim
+  \begin{cases}
+    \mathrm{Bernoulli}\!\left(\sigma\!\left(f_\theta(\phi(x))\right)\right) \\
+    \mathrm{Categorical}\!\left(\mathrm{softmax}\!\left(f_\theta(\phi(x))\right)\right)
+  \end{cases}
+\]
+
+\subsubsection{Scoring Action}
+The scoring action is always a categorical distribution over the 13 scoring categories.
+\[
+  a \sim \mathrm{Categorical}\!\left(\mathrm{softmax}\!\left(f_\theta(\phi(x))\right)\right)
+\]
+
 \subsection{Neural Network Architecture}
+The neural network uses a unique architecture designed to handle the specific challenges of \textit{Yahtzee}.
+The architecture consists of a trunk, followed by heads for the policy and value functions.
+
 \subsubsection{Trunk}
+The trunk of the network is a standard feedforward architecture with
+2-3 fully connected hidden layers, each with 386-512 neurons.
+We utilize layer normalization for improved training stability \cite{ba-2016-layernorm}
+and Swish activations \cite{ramachandran-2017-swish} to introduce stable non-linearities.
+
 \subsubsection{Policy and Value Heads}
+We utilize two distinct heads for the rolling and scoring actions, allowing the model to specialize in
+each task \cite{tavakoli2018actionbranching, hausknecht2016parameterized}.
+
 \subsubsection{Weight Initialization}
 \subsubsection{Optimization \& Schedules}
 \subsubsection{Training Metrics}
