@@ -339,47 +339,95 @@ To ensure advantages are well-conditioned, we track advantage mean and standard 
 We also monitor standard training metrics such as average reward and loss values.
 
 \subsection{Reinforcement Learning Algorithms}
-\subsubsection{REINFORCE for Single-Turn Optimization}
-\subsubsection{PPO for Full-Game Reinforcement Learning}
+\subsubsection{REINFORCE}
+<Talk about REINFORCE loss function, how it is used with baseline, single vs full game, etc.>
+\subsubsection{TD}
+<Talk about TD(n) and TD(lambda), how they are used with actor-critic, application to full game, etc.>
+\subsubsection{PPO}
+<Talk about PPO loss function, clipping, KL control, application to full game, etc.>
+
 \subsection{Training Regimes}
-\subsubsection{Single-Turn Training}
-\subsubsection{Transfer Learning Setup}
+<Talk about single-turn vs full-game training, transfer learning, etc.>
 \subsubsection{Evaluation Protocol}
+<Talk about how many eval games, deterministic vs stochastic eval, etc.>
 
 \section{Results}
 
 \subsection{Generalization of Single-Turn Agent to Full Game}
-200-400 words
+<200-400 words>
+<Talk about the single-turn agent's performance when directly applied to full-game Yahtzee without further training.>
+<Tradeoff with full-game performance, etc.>
 
-\subsection{Single-Turn Results \& Ablations}
-600-700 words
+\subsection{Single-Turn Results}
+<600-700 words>
 \subsubsection{Baseline Model Performance}
+<Score graph>
+
+<train value loss graph>
+
+<train entropy graph>
+
+<train top k freq graph>
+
+<train policy KL graph>
+
+<table of per category scores and stddev>
+
 \subsubsection{Representational Ablations}
+<Show how adding some representations pushes performance up or down.>
+<Graph average score vs representation choice>
+
 \subsubsection{Architectural Ablations}
-\subsubsection{Failure Mode Analysis}
+<Show how changing architecture (layer norm, activation fn, width, depth) affects performance.>
+<Graph average score vs architecture choice>
+
 \subsubsection{Summary}
+<Talk about the biggest levers>
 
 \subsection{Full-Game Results}
-600-700 words
-\subsubsection{From-Scratch Training}
+<600-700 words>
 \subsubsection{REINFORCE}
+<Talk about reusing the single-turn config and how it doesn't perform well>
+<Talk about tuning it for full-game and how that helps>
+<Graph showing single turn vs full game REINFORCE performance>
+
+\subsubsection{TD($\lambda$)}
+<Talk about how it performs better than REINFORCE>
+
 \subsubsection{PPO}
+<Talk about how it performs best>
+
 \subsubsection{Transfer Learning}
-\subsubsection{REINFORCE}
-\subsubsection{PPO}
+<Show results for transfer learning directly>
+<Show results for transfer learning with LoRA>
+
 \subsubsection{Summary}
+<Summarize full-game results and key findings>
 
 \subsection{Policy Analysis}
-300-500 words
+<300-500 words>
 \subsubsection{Category Usage Distribution}
+<Bar chart showing average score per category for different agents>
+
+<table comparison against DP optimal solutions>
+
 \subsubsection{Score Breakdown}
+<Notes on how different agents achieve their scores differently>
+
 \subsubsection{Strategy Comparison}
+<Compare strategies learned by different agents>
+
+\subsubsection{Failure Modes}
+<Analyze common failure modes observed in learned policies>
+<Analyze failures during training such as policy collapse>
 
 \section{Discussion}
-400-600 words
+<400-600 words>
+<Discuss implications of results, limitations, and potential improvements.>
 
 \section{Conclusion and Future Work}
-200-300 words
+<200-300 words>
+<Summarize key findings and suggest directions for future research.>
 
 \bibliography{1_introduction,2_related_work,3_methods,4_single_turn_results,5_full_game_experiments,6_discussion,7_appendix}
 \bibliographystyle{acl_natbib}
