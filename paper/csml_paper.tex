@@ -294,7 +294,7 @@ The first is a Bernoulli representation, where each die has an individual binary
 The second is a categorical representation, where each of the 32 possible combination of dice to keep is represented as a unique action.
 
 \[
-  a \sim
+  a_{\mathrm{roll}} \sim
   \begin{cases}
     \mathrm{Bernoulli}\!\left(\sigma\!\left(f_\theta(\phi(x))\right)\right) \\
     \mathrm{Categorical}\!\left(\mathrm{softmax}\!\left(f_\theta(\phi(x))\right)\right)
@@ -304,7 +304,7 @@ The second is a categorical representation, where each of the 32 possible combin
 \subsubsection{Scoring Action}
 The scoring action is always a categorical distribution over the 13 scoring categories.
 \[
-  a \sim \mathrm{Categorical}\!\left(\mathrm{softmax}\!\left(f_\theta(\phi(x))\right)\right)
+  a_{\mathrm{score}} \sim \mathrm{Categorical}\!\left(\mathrm{softmax}\!\left(f_\theta(\phi(x))\right)\right)
 \]
 
 \subsection{Neural Network Architecture}
@@ -312,9 +312,10 @@ The neural network uses a unique architecture designed to handle the specific ch
 The architecture consists of a trunk, followed by heads for the policy and value functions.
 
 \subsubsection{Trunk}
-The trunk of the network is a standard feedforward architecture with
-2-3 fully connected hidden layers, each with 386-512 neurons.
-We utilize layer normalization for improved training stability \cite{ba-2016-layernorm}
+The trunk of the network is a standard feedforward architecture with 2-3 fully connected hidden layers.
+The width of each layer is 386-512 neurons, found through empirical hyperparameter tuning,
+but aligning our model capacity with theoretical maximums \cite{horne-1994-bounds-rnn-fsm} and minimums \cite{hanin-2017-bounded-width-relu}.
+We utilize layer normalization for improved training stability \cite{ba-2016-layernorm, bjorck-2022-high-variance}
 and Swish activations \cite{ramachandran-2017-swish} to introduce stable non-linearities.
 
 \subsubsection{Policy and Value Heads}
@@ -322,8 +323,21 @@ We utilize two distinct heads for the rolling and scoring actions, allowing the 
 each task \cite{tavakoli2018actionbranching, hausknecht2016parameterized}.
 
 \subsubsection{Weight Initialization}
+<KAIMING OR XAVIER?>
+
 \subsubsection{Optimization \& Schedules}
+We utilize the Adam optimizer \cite{kingma2014adam} with maximum learning rate between $1\times 10^{-4}$ and $5\times 10^{-4}$.
+To improve training stability, we utilize a warmup schedule over the first 5\% of training \cite{kalra-2024-warmup},
+plateau for 70\% of training, and then linearly decay over the final 25\% of training steps \cite{defazio2023optimal, lyle2024normalization}.
+
 \subsubsection{Training Metrics}
+To better understand training dynamics, we log several metrics during training.
+To monitor the quality of the value network, we monitor explained variance \cite{}.
+To monitor for policy collapse, we track the policy entropy \cite{}, mask diversity \cite{}, the KL divergence between policy updates \cite{}, and the top-k action frequency \cite{}.
+To monitor for learning stability, we track gradient norms and clip rate \cite{}.
+To ensure advantages are well-conditioned, we track advantage mean and standard deviation \cite{}.
+We also monitor standard training metrics such as average reward and loss values.
+
 \subsection{Reinforcement Learning Algorithms}
 \subsubsection{REINFORCE for Single-Turn Optimization}
 \subsubsection{PPO for Full-Game Reinforcement Learning}
@@ -366,34 +380,6 @@ each task \cite{tavakoli2018actionbranching, hausknecht2016parameterized}.
 
 \section{Conclusion and Future Work}
 200-300 words
-
-
-
-
-\subsubsection{Neural Network Size Bounds}
-One challenge in applying neural networks to approximate the value or policy function for Yahtzee is in
-determining an appropriate network size. We will quickly consider theoretical upper and lower bounds for the number of neurons required using
-both the full state space and a reduced representation.
-
-Assume for simplicity our reduced representation consists of the dice state $\mathbf{d}$ encoded one-hot,
-the roll count $r$ encoded one-hot,
-the bin count vector $\mathbf{n}(\mathbf{d})$ encoded one-hot,
-and a score mask $\mathbf{u}(\mathbf{c})$. This gives input dimensionality of $30 + 3 + 30 + 13 = 52$ and cardinality of
-$2^{52} \approx 4.5 \times 10^{15}$.
-
-
-For a discrete control problem with a finite state size of $|\mathbf{S}|$, there are classical results \cite{horne-1994-bounds-rnn-fsm}
-showing that a recurrent neural network can represent any $|\mathbf{S}|$-state finite state machine with a number of neurons that
-grows only logarithmically with $|\mathbf{S}|$. This gives us an upper bound of $O(\sqrt{|\mathbf{S}|}) \approx 8.4 \times 10^{7}$ neurons.
-However, this is a prohibitively large number of neurons for practical training and inference.
-
-For a lower bound, \citet{hanin-2017-bounded-width-relu} shows any continuous, convex function
-can in principle be approximated by a network whose hidden layer width has a lower bound of $\Omega(d+1)$, and a non-convex function
-can be approximated by a network with a hidden layer width of at least $\Omega(d+3)$, where $d$ is the input dimension.
-For a example, assume Yahtzee is non-convex, and we represent the dice state $\mathbf{d}$ and $r$ as one-hot encodings and utilize
-the score mask $\mathbf{u}(\mathbf{c})$, then $x = 6 \cdot 5 + 3 + 13 = 46$ means our \textit{minimum} hidden layer width is 49 neurons.
-
-In practice, the ideal network size is not driven by the cardinality of the state space, but rather by the complexity of the function to be approximated, the richness of the data, and the specific requirements of the task at hand.
 
 \bibliography{1_introduction,2_related_work,3_methods,4_single_turn_results,5_full_game_experiments,6_discussion,7_appendix}
 \bibliographystyle{acl_natbib}
