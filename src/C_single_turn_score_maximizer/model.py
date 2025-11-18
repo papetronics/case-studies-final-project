@@ -12,6 +12,7 @@ from utilities.scoring_helper import (
     NUMBER_OF_DICE_SIDES,
     YAHTZEE_SCORE,
     ScoreCategory,
+    get_all_scores,
 )
 from utilities.sequential_block import SequentialBlock
 
@@ -59,6 +60,8 @@ def get_input_dimensions(bonus_flags: set[BonusFlags]) -> int:
       - Dice Counts [6]: Counts of each die face (1-6) = 6
       - Bonus Information [varies]: Various bonus-related inputs = len(bonus_flags)
       - Has Earned Yahtzee [1]: Whether the player has already scored a Yahtzee = 1
+      - Potential Scores [13]: Potential score in each category = 13
+      - Joker Indicator [1]: Whether joker rules are active = 1
     """
     return int(
         (NUMBER_OF_DICE * NUMBER_OF_DICE_SIDES)  # Dice one-hot
@@ -69,7 +72,28 @@ def get_input_dimensions(bonus_flags: set[BonusFlags]) -> int:
         + len(bonus_flags)  # Bonus information
         + 1  # Has earned Yahtzee
         + 1  # Percent of game remaining
+        + NUMBER_OF_CATEGORIES  # potential score in category
+        + 1  # joker indicator
     )
+
+
+NORMAL_SCORE_MAX = np.array(
+    [
+        5,  # Ones
+        10,  # Twos
+        15,  # Threes
+        20,  # Fours
+        25,  # Fives
+        30,  # Sixes
+        30,  # Three of a Kind
+        30,  # Four of a Kind
+        25,  # Full House
+        30,  # Small Straight
+        40,  # Large Straight
+        50,  # Yahtzee
+        30,  # Chance
+    ]
+)
 
 
 def phi(
@@ -91,6 +115,15 @@ def phi(
     golf_score = np.sum(
         (observation["score_sheet"][:6] - GOLF_TARGET) * (1 - available_categories[:6])
     )
+
+    score_values, joker = get_all_scores(
+        dice,
+        available_categories,
+        observation["score_sheet"][ScoreCategory.YAHTZEE] == YAHTZEE_SCORE,
+    )
+
+    # Normalize score values to [0, 1], capped at 1
+    normalized_score_values = np.minimum(score_values / NORMAL_SCORE_MAX, 1.0)
 
     normalized_golf_score = (
         golf_score / UPPER_SCORE_THRESHOLD
@@ -138,6 +171,8 @@ def phi(
             dice_onehot,
             dice_counts,
             rolls_onehot,
+            normalized_score_values,  # Normalized score values in [0,1]
+            [joker],
             np.array(bonus_information),
             [percent_of_game_remaining],
             [phase],
