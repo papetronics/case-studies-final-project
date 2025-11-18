@@ -14,6 +14,7 @@
 \usepackage{graphicx}
 \usepackage{caption}
 \usepackage{pgfplots}
+\usepackage[inline]{enumitem} % note the [inline]
 \pgfplotsset{compat=newest}
 \usepackage{url}
 
@@ -32,87 +33,116 @@
 \begin{document}
 \maketitle
 \begin{abstract}
-  Write your abstract here. This should be a concise summary of your work, 
+  Write your abstract here. This should be a concise summary of your work,
   including the problem you're addressing, your approach, and key results.
   Keep it to about 150-250 words.
 \end{abstract}
 
 \section{Introduction}
 % 600-900 words
-% 297 words so far
-\subsection{Yahtzee}
+% 513 words so far
+\subsection{Yahtzee as a Reinforcement Learning Benchmark}
 While on the surface \textit{Yahtzee} appears to be a trivial dice game \cite{hasbro-2022-yahtzee-rules}, it is actually a complex stochastic optimization problem with combinatorial complexity.
-By its nature, it is heavily driven by random chance due to dice rolls, but strategic decision-making is required to maximize expected score over the course of a game.
-While the state complexity in solitaire play is large \cite{verhoeff-1999-solitaire-yahtzee} but manageable using dynamic programming techniques \cite{glenn-2007-solitaire-yahtzee}, adversarial multiplayer \textit{Yahtzee} remains an open problem due to the exponential growth of the state space with additional players \citet{pawlewicz-2011-multiplayer-yahtzee}. Even though Yahtzee has been a classic testbed for search and DP, it has been less explored as a deep reinforcement learning benchmark. Its varying, but well-defined,  problem settings make it a good candidate to serve as a "bridge" between smaller benchmarks like \textit{Lunar Lander} and large-scale games like \textit{Go} or \textit{Poker}. 
 
-\subsection{Research Questions}
-The primary research questions this paper aims to address are:
-\begin{itemize}
-    \item Can the tradeoff between maximizing the single-turn expected score and long-term game performance be quantified?
-    \item Can a deep Reinforcement Learning agent trained only from self-play reach near-DP-optimal performance in full-game solitaire Yahtzee?
-    \item Which design choices (state encoding, $\gamma$ schedule, entropy regularization, baselines, batch size, etc) most affect sample efficiency and final performance?
-\end{itemize}
+Although there are methods for computing optimal play in \textit{Yahtzee} using dynamic programming, these are computationally expensive and do not scale well to multiplayer settings.
+\textit{Yahtzee} offers a rich environment for testing reinforcement learning (RL) solutions due to its combination of a large but manageable state space, randomness, ease of simulation, subtle strategic considerations, and easily identifiable subproblems.
+While there have been a small number of efforts to create RL agents for \textit{Yahtzee}, a comprehensive approach using self-play has yet to be published.
+It remains an open question of whether deep RL methods can approach optimal performance in full-game \textit{Yahtzee}, and which architectural and training choices most affect learning efficiency and final performance.
+Similarly, a robust solution for multiplayer \textit{Yahtzee} using RL methods has yet to be demonstrated.
 
-\subsection{Contributions}
-The main contributions of this paper are:
-\begin{itemize}
-    \item A deep RL agent that achieves <X> average score, within <delta> points of an exact DP baseline under a strict budget of 1 million training games.
-    \item An ablation study of key architectural and training choices and their impact on performance in Yahtzee.
-    \item A failure mode analysis identifying issues in learned policies and their resolution through architectural or training modifications.
-\end{itemize}
+\textit{Yahtzee} is an ideal candidate to serve as a bridge between simple toy problems such as \textit{Lunar Lander} \cite{brockman2016openai} and extremely complex games like Go \cite{silver2016alphago}.
+Typical small benchmarks often offer low stochasticity and simple combinatorics whereas complex games have intractable state spaces and require massive computational resources and heavy engineering to solve.
+\textit{Yahtzee} sits in a middle ground where an analytic optimum exists, but reaching it with RL methods is non-trivial.
+Its blend of stochasticity and large state space makes it a challenging yet feasible benchmark for RL research.
+
+\subsection{Objectives}
+
+In this paper we aim to methodically study whether a deep RL agent can achieve near DP-optimal performance in full-game solitaire \textit{Yahtzee} using only self-play without any shaping rewards or expert demonstrations,
+and how architectural and training choices affect learning efficiency.
+
+Concretely, we ask: \begin{enumerate*}[label=(\roman*)]
+  \item How does the trade-off between maximizing single-turn expected score and full-game performance behave?
+  \item Can a shaping-free self-play agent can reach optimal performance under a fixed training budget?
+  \item Which design choices (state and action encodings, variance controls, baselines, entropy, etc) most affect final performance?
+  \item What failure modes exist in learned policies and how can they be addressed?
+  \item Can we find a successful architecture which could be adapted to multiplayer \textit{Yahtzee}?
+\end{enumerate*}
 
 \section{Related Work}
 % 600-800 words
 % 742 words so far
+
+\subsection{Policy Gradient Methods and Variance Reduction}
+Policy-gradient methods are a family of algorithms which directly optimize a parameterized policy $\pi_{\theta}$ to follow an estimate of the performance gradient \cite{sutton-2000-policy-gradient}.
+A simple formulation of this is the REINFORCE algorithm \cite{williams-1992-reinforce}, which uses Monte-Carlo returns $G_{t}^{MC}$ on finite, episodic tasks; however, while unbiased, it suffers from high variance.
+Actor-critic methods \cite{konda-1999-actorcritic, mnih-2016-a3c} address this by learning a seperate value function, the critic $V_{\phi}$, which serves a variance reducing baseline.
+A recent and popular algorithm, proximal policy optimization (PPO) \cite{schulman-2017-ppo}, utilizes a clipped objective $L^{CLIP}(\theta)$
+and explicit Kulback-Leibler (KL) divergence control to dramatically reduce variance and ensure stable updates.
+
+In long episodic games, the choice of return calculation affects sample efficiency, bias, and variance. Monte-Carlo (MC) returns $G_{t}^{MC}$ use a summation over the full series of rewards until the end of the episode.
+This approach is unbiased but has high variance.
+Temporal Difference returns calculate the TD-error term $\delta_t$ using a bootstrapped estimate for the value of the next state \cite{sutton-1988-temporal-differences}, which is biased but has lower variance.
+n-step returns $G_{t}^{TD(n)}$ \cite{sutton-2018-reinforcement-book} interpolate between MC and single-step TD returns, allowing us to define a time horizon $n$ over which to sum rewards before bootstrapping, this lets us manually control the bias-variance tradeoff.
+This is improved by the $TD(\lambda)$ algorithm \cite{sutton-2018-reinforcement-book}, which uses an exponentially weighted average of n-step returns, effectively blending multiple time horizons.
+Actor-Critic and PPO can use any of these return estimation methods, including the generalized advantage estimate (GAE) \cite{schulman-2016-gae}, which is a special formulation of $TD(\lambda)$.
+
+Aside from return estimation, there is a host of other variance reduction techniques which can be employed for policy gradient methods.
+Subtracting a learned baseline from REINFORCE yields an advantage estimate that reduces variance without changing its expectation \cite{weaver2013optimal, greensmith-2004-variance-reduction}.
+Normalizing advantages across a batch improves gradient conditioning and is common practice.
+Entropy regularization prevents early collapse to suboptimal policies by encouraging exploration via the addition of an explicit entropy bonus term in the loss function \cite{williams-peng-1991-function-optimization}.
+Gradient clipping is frequently used alongside these techniques to stop rare, but large, gradient updates from destabilizing training \cite{pascanu-2013-rnn-clipping}.
+While high variance is unavoidable in deep reinforcement learning, poor performance can often be linked to numerical instability rather than inherent flaws in algorithmic design \cite{bjorck-2022-high-variance};
+simple tweaks like normalizing features before activations can dramatically improve stability.
+
 \subsection{Complex Games}
 Typical board and dice games have extreme state complexity or stochasticity; reinforcement learning methods are a natural fit for these problems.
 In a classic example, \citet{tesauro1995tdgammon} utilized temporal difference learning to achieve superhuman performance in \textit{Backgammon}, another game with a large state space and stochastic elements.
-Tetris has also been studied extensively; \citet{bertsekas1996tetris} utilized approximate dynamic programming methods to learn effective policies for the game.
-Stochastic combinatorial games like Tetris can be effectively tackled using reinforcement learning methods \cite{gabillon2013tetris}.
-Adversarial games with extremely large state spaces, such as Go were solved using Monte-Carlo Tree Search combined with deep value networks \cite{silver2016alphago}, and later work showed Go could be learned purely through self-play \cite{silver2017alphagozero}.
-\citet{moravcik2017deepstack} demonstrated that \textit{Texas Hold'em}, a game with hidden information and stochasticity, could be also effectively learned.
-It has been shown that highly stochastic games can be learned reliably, as long as methods to ensure better exploration are used \cite{osband2016bootstrappeddqn}. 
+Tetris, which is deterministic but combinatorial, has also been studied extensively; \citet{bertsekas1996tetris} utilized approximate dynamic programming methods to learn effective policies for the game,
+while \citet{gabillon2013tetris} effectively tackled the game using reinforcement learning methods.
+\citet{moravcik2017deepstack} demonstrated that \textit{Texas Hold'em}, a stochastic game with hidden information, could be effectively learned.
+Many other stochastic games can be learned we well, so long as methods which ensure better exploration are used \cite{osband2016bootstrappeddqn}.
+Lastly, RL methods can be used to reach superhuman performance on adversarial games, even despite their sparse reward structures.
+For example, the game of Go, which has a notoriously intractable state space was solved using Monte-Carlo Tree Search and deep value networks \cite{silver2016alphago}.
+Subsequent work showed Go could be learned without the use of expert data, purely through self-play \cite{silver2017alphagozero}.
+In total, these works establish that RL methods can handle highly stochastic, combinatorial games, suggesting that \textit{Yahtzee} is a natural but underexplored candidate in this family.
 
 \subsection{DP Methods for Yahtzee}
-Solitaire \textit{Yahtzee} is a complex game with an upper bound of $~7 \times 10^{15}$ possible states in its state space manifold, and has a high degree of stochasticity due to dice rolls being the primary driver of state transitions.
-Despite this, it has been analytically solved using dynamic programming techniques \cite{verhoeff-1999-solitaire-yahtzee} and baseline metrics for optimal play are available, which calculates an ideal play score of $254.59$ points.
-Later work by \citet{glenn-2006-optimal-yahtzee} optimized the DP approach via symmetries to propose an efficient algorithm.
-\citet{glenn-2007-solitaire-yahtzee} calculated the reachable state space to be $~5.3 \times 10^8$, and subsequently implemented this efficint algorithm, which compared favorably to several benchmark heuristics.
+Solitaire \textit{Yahtzee} is a complex game with an upper bound of $~7 \times 10^{15}$ possible states in its state space.
+It has a high degree of stochasticity, as dice rolls are the primary driver of state transitions.
+Despite this, it has been analytically solved using dynamic programming techniques; \citet{verhoeff-1999-solitaire-yahtzee}, calculated an that the average score achieved during ideal play is $254.59$ points, which serves as the gold-standard baselline for solitaire \textit{Yahtzee}.
+Later work by \citet{glenn-2006-optimal-yahtzee} optimized the DP approach via symmetries to propose a more efficient algorithm for computing the optimal policy, with a reachable state space of $~5.3 \times 10^8$ states \cite{glenn-2007-solitaire-yahtzee}.
 
-However, adversarial Yahtzee remains an open problem.
-While \citet{pawlewicz-2011-multiplayer-yahtzee} showed that DP techniques can be expanded to 2-player adversarial \textit{Yahtzee}, they do not scale to more players due to the exponential growth of the state space. Approximation methods must be utilized for larger player counts.
+However, adversarial \textit{Yahtzee} remains an open problem.
+While \citet{pawlewicz-2011-multiplayer-yahtzee} showed that DP techniques can be expanded to 2-player adversarial \textit{Yahtzee}, they do not scale to more players due to the exponential growth of the state space.
+Approximation methods must be utilized for larger player counts.
 
 \subsection{Reinforcement Learning for Yahtzee}
 Some prior attempts have been made to apply reinforcement learning to \textit{Yahtzee}.
-YAMS attempted by Q-learning and SARSA, but was not able to surpass $~120$ points median \cite{belaich-2024-yams}.
-For example, \citet{kang-2018-yahtzee-rl} applied hierarchical MAX-Q, achieving an average score of $129.58$ and a 67\% win-rate over a 1-turn expectimax agent baseline.
-\citet{vasseur-2019-strategy-ladders} explored strategy ladders for multiplayer Yahtzee, to understand how sensitive Deep-Q networks were to the upper-bonus threshold.
+YAMS attempted used Q-learning and SARSA to attempt to learn \textit{Yahtzee}, but was not able to surpass $~120$ points median \cite{belaich-2024-yams}.
+Likewise, \citet{kang-2018-yahtzee-rl} applied hierarchical MAX-Q, achieving an average score of $129.58$ and a 67\% win-rate over a 1-turn expectimax agent baseline.
+\citet{vasseur-2019-strategy-ladders} explored strategy ladders for multiplayer \textit{Yahtzee}, to understand how sensitive Deep-Q networks were to the upper-bonus threshold.
 Later, \cite{yuan-2023-two-player-yahtzee} applied Deep-Q networks to the adversarial setting.
-Yahtzotron used heavy supervised pretraining and A2C to achieve an average of $~236$ points \cite{Haefner2021Yahtzotron}.
-Although not formally written, \citet{DutschkeYahtzee} reports a deep-Q agent achieving a score of $241.6 \pm 40.7$ after just 8,000 games.
 
-\subsection{Policy Gradient Methods and Variance Reduction}
-Temporal Difference (TD) \cite{sutton-1988-temporal-differences} and REINFORCE \cite{williams-1992-reinforce} methods have long been used to assign credit and calculate training signals in long-horizon tasks.
-These have spawned an entire hierarchy of policy gradient methods, including asynchronous advantage actor-critic (A3C) \cite{mnih-2016-a3c}, proximal policy optimization (PPO) \cite{schulman-2017-ppo}, and others \cite{sutton-2000-policy-gradient}. 
+Additionally, some recent informal work has reported success using RL methods for \textit{Yahtzee}.
+For example, Yahtzotron used heavy supervised pretraining and A2C to achieve an average of $~236$ points \cite{Haefner2021Yahtzotron}.
+Although it is unclear if the results are repeatable, \citet{DutschkeYahtzee} reports a deep-Q agent achieving a score of $241.6 \pm 40.7$ after just 8,000 games.
 
-Unfortunately, all reinforcement learning methods struggle with long-horizon credit assignment due to the compounding variance of returns and sparse rewards, leading to high variance updates and unstable training \cite{bjorck-2022-high-variance}. There are numerous architectural and optimization tricks which can be employed to mitigate these issues.
-% TODO: Add the following BibTeX entry to your .bib file (e.g., 3_methods.bib) to resolve the missing citation error:
-At initialization, Kaiming/He weight initialization \cite{he-2015-delving-rectifiers} has been shown to reduce variance in deep networks by normalizing activation variances across layers.
-The SiLU and Swish activation functions \cite{ramachandran-2017-swish} are improvements of GELU \cite{hendrycks-2016-gelu} that have been shown to be highly effective in RL tasks; their smooth and fully differentiable curves improve gradient flow \cite{elfwing-2018-silu-rl}.
+No prior work systemically explores policy gradient methods with variance reduction tricks on full-game solitaire \textit{Yahtzee}, attempts transfer learning from single-turn optimization, provides a detailed ablation and failure mode analysis,
+or offers an architecture that is theoretically transferrable to multiplayer settings.
 
-Another common problem with policy gradient methods is policy collapse due to premature convergence to suboptimal policies. <ENTROPY> <TEMPERATURE> <CLIPPING> <MONITORING ENTROPY>
 
 \section{Problem Formulation}
 % 400-600 words
 \subsection{Game Description}
 \subsubsection{Rules of Yahtzee}
-Yahtzee is played with five standard six-sided dice and a shared scorecard containing 13 categories.
+\textit{Yahtzee} is played with five standard six-sided dice and a shared scorecard containing 13 categories.
 Turns are rotated among players. A turn starts with a player rolling all five dice. They may then choose to keep
 some dice, and re-roll the remaining ones. This process can be repeated up to two more times, for a total of three rolls.
 After the final roll, the player must select one of the 13 scoring categories to apply to their current dice.
 Each category has specific scoring rules, and each can only be used once per game.
 
 \subsubsection{Mathematical Representation of Yahtzee}
+\label{sec:yahtzee-definitions}
 The space of all possible dice configurations is:
 $$\mathcal{D} \in \{1, 2, 3, 4, 5, 6\}^5$$
 and the current state of the dice is represented as:
@@ -126,27 +156,15 @@ and $\varnothing$ indicates an unused category.
 
 Let us also define a dice face counting function which we can use to simplify score calculations:
 \begin{align*}
-n_v(\mathbf{d}) &= \sum_{i=1}^{5} \mathbb{I}(d_i = v),
-\quad v \in \{1,\dots,6\} \\
-\mathbf{n}(\mathbf{d}) &= \big(n_1(\mathbf{d}),\dots,n_6(\mathbf{d})\big)
+  n_v(\mathbf{d})        & = \sum_{i=1}^{5} \mathbb{I}(d_i = v),
+  \quad v \in \{1,\dots,6\}                                                  \\
+  \mathbf{n}(\mathbf{d}) & = \big(n_1(\mathbf{d}),\dots,n_6(\mathbf{d})\big)
 \end{align*}
 
-Let the potential score for each category be defined as follows (where detailed scoring rules can be found in Appendix):
+Let the potential score for each category be defined as follows (where detailed scoring rules can be found in Appendix~\ref{app:scoring}):
 \begin{align*}
-\mathbf{f}(\mathbf{d}) &=
-\bigl(f_1(\mathbf{d}), f_2(\mathbf{d}), \ldots, f_{13}(\mathbf{d})\bigr)
-\end{align*}
-
-The domain of possible scores in a score card for each category is then:
-
-\begin{align*}
-\mathcal{C}_i &= \Bigl\{i \cdot k : k \in \{0, 1, \ldots, 5\}\Bigr\} \forall i \in \{1, \ldots, 6\} \\
-\mathcal{C}_7 &= \mathcal{C}_8 = \mathcal{C}_9 \\
-              &= \{0, 1, 2, \ldots, 30\} \\
-\mathcal{C}_9 &= \{0, 25\} \\
-\mathcal{C}_{10} &= \{0, 30\} \\
-\mathcal{C}_{11} &= \{0, 40\} \\
-\mathcal{C}_{12} &= \{0, 50\}
+  \mathbf{f}(\mathbf{d}) & =
+  \bigl(f_1(\mathbf{d}), f_2(\mathbf{d}), \ldots, f_{13}(\mathbf{d})\bigr)
 \end{align*}
 
 The current turn number can be represented as:
@@ -156,7 +174,7 @@ A single turn is composed of an initial dice roll, two optional re-rolls, and a 
 Let $r = 0$, with $r \in \{0,1,2\}$ which is the number of rolls taken so far.
 Prior to the first roll, the dice are randomized:
 $$
-\mathbf{d}_{r=0} \sim U(\mathcal{D})
+  \mathbf{d}_{r=0} \sim U(\mathcal{D})
 $$
 
 The player must decide which dice to keep and which to re-roll. Let the player define a keep vector:
@@ -165,38 +183,51 @@ where $\mathbf{k}_i = 1$ indicates that die $i$ is kept, otherwise it is re-roll
 
 We can then define the transition of the dice state after a re-roll as:
 \begin{align*}
-\mathbf{d}' &\sim U(\mathcal{D}), \\[2pt]
-\mathbf{d}_{r+1}
-  &= (\mathbf{1} - \mathbf{k}) \odot \mathbf{d}'
-   + \mathbf{k} \odot \mathbf{d}
+  \mathbf{d}' & \sim U(\mathcal{D}),                          \\[2pt]
+  \mathbf{d}_{r+1}
+              & = (\mathbf{1} - \mathbf{k}) \odot \mathbf{d}'
+  + \mathbf{k} \odot \mathbf{d}
 \end{align*}
 
 
 When $r=2$, the player must choose a scoring category to apply their current dice to. Define a scoring choice mask as a one-hot vector:
-$$\mathbf{s} \in \{0,1\}^{13}, \quad \|\mathbf{s}|_1 = 1$$
+$$\mathbf{s} \in \{0,1\}^{13}, \quad \|\mathbf{s}\|_1 = 1$$
 
 For the purposes of calculating the final (or current) score, any field that has not been scored yet can be counted as zero.
 We can define a mask vector for this:
 
 \begin{align*}
-&\mathbf{u}(\mathbf{c}) \in \{0,1\}^{13} \\
-&\mathbf{u}(\mathbf{c})_i = \mathbb{I}\bigl(c_i \neq \varnothing\bigr), \quad \forall i = \{ 1, \ldots 13 \}
+   & \mathbf{u}(\mathbf{c}) \in \{0,1\}^{13}                                                                     \\
+   & \mathbf{u}(\mathbf{c})_i = \mathbb{I}\bigl(c_i \neq \varnothing\bigr), \quad \forall i = \{ 1, \ldots 13 \}
 \end{align*}
 
 
 If a player achieves a total score of 63 or more in the upper section (categories 1-6), they receive a bonus of 35 points:
 $$
-B(\mathbf{c}) = \begin{cases} 
-  0, & 63 \leq \sum_{i=1}^{6} \mathbf{u}(\mathbf{c})_i \cdot \mathbf{c}_i \\
-  35,  & \text{otherwise}
-\end{cases}
+  B(\mathbf{c}) = \begin{cases}
+    0,  & 63 \leq \sum_{i=1}^{6} \mathbf{u}(\mathbf{c})_i \cdot \mathbf{c}_i \\
+    35, & \text{otherwise}
+  \end{cases}
 $$
 
 The player's score can thus be calculated as:
-$$S(\mathbf{c}) = B(\mathbf{c}) + \big\langle \mathbf{u}(\mathbf{c}), \mathbf{c} \big\rangle$$
+$$\mathrm{score}(\mathbf{c}) = B(\mathbf{c}) + \big\langle \mathbf{u}(\mathbf{c}), \mathbf{c} \big\rangle$$
 
 \subsection{MDP Formulation}
-We can formulate Yahtzee as a Markov Decision Process (MDP) defined by the 5-tuple $(\mathcal{S}, \mathcal{A}, P, R, \gamma)$.
+We model \textit{Yahtzee} as a Markov Decision Process $(\mathcal S,\mathcal A,P,R,\gamma)$ \citep{Puterman1994MDP}.
+
+A state is represented as $\mathbf{s} = (\mathbf{d},\mathbf{c},r, t)$, where $\mathbf{d}$ is the current
+dice configuration, $\mathbf{c}$ the scorecard, and $r$ the roll index, and $t$ the current turn index
+(see Section~\ref{sec:yahtzee-definitions}).
+
+For simplicity, we define the action $\mathbf{a} = (\mathbf{k}, \mathbf{s})$, where $\mathbf{k}$ is the keep vector and $\mathbf{s}$ is the score category choice.
+If $r < 2$, the $\mathbf{k}$ is used bt $P$, otherwise $\mathbf{s}$ is used.
+
+The transition function $P$ is is specified in Appendix~\ref{app:transition-function}.
+
+The reward is the change in total score between steps $R_t = \mathrm{score}(c_{t+1}) - \mathrm{score}(c_t)$,
+and since we desire to maximize total score at the end of the game, we set $\gamma = 1$.
+
 
 \subsection{Single-Turn Optimization Task}
 \subsection{Full-Game Reinforcement Learning Task}
@@ -220,7 +251,7 @@ It also requires a different action representation, since actions can no longer 
   \item \textbf{Combined representation:} Both ordered one-hot and bin representations are concatenated.
   \item \textbf{Learnable encoding of dice:} Each die is represented as a learnable embedding vector of length $d$, and self-attention is applied.
   \item \textbf{Learnable encoding of dice with positional encodings:} Similar to above, but with sinusoidal positional encodings added to each die embedding.
-\end{itemize}    
+\end{itemize}
 
 \subsubsection{Scorecard Representation}
 There are two important pieces of information $\mathbf{\phi}$ must encode about the scorecard: whether a category is open or closed,
@@ -230,7 +261,7 @@ and some form of progress towards the upper bonus. For the category availability
   \item \textbf{Distance to bonus:} $63 - \sum_{i \in \mathbf{c}} c_{i}$
   \item \textbf{Norm. upper score:} $\min(\frac{1}{63} \sum_{i \in \mathbf{c}} c_{i}, 1)$
   \item \textbf{Distance to bonus:} $\mathbb{I}(\sum_{i \in \mathbf{c}} c_{i} \geq 63)$
-  \item \textbf{"Golf" score:} 
+  \item \textbf{"Golf" score:}
 \end{itemize}
 
 
@@ -288,7 +319,7 @@ and some form of progress towards the upper bonus. For the category availability
 
 
 \subsubsection{Neural Network Size Bounds}
-One challenge in applying neural networks to approximate the value or policy function for Yahtzee is in 
+One challenge in applying neural networks to approximate the value or policy function for Yahtzee is in
 determining an appropriate network size. We will quickly consider theoretical upper and lower bounds for the number of neurons required using
 both the full state space and a reduced representation.
 
@@ -299,76 +330,91 @@ and a score mask $\mathbf{u}(\mathbf{c})$. This gives input dimensionality of $3
 $2^{52} \approx 4.5 \times 10^{15}$.
 
 
-For a discrete control problem with a finite state size of $|\mathbf{S}|$, there are classical results \cite{horne-1994-bounds-rnn-fsm} 
-showing that a recurrent neural network can represent any $|\mathbf{S}|$-state finite state machine with a number of neurons that 
+For a discrete control problem with a finite state size of $|\mathbf{S}|$, there are classical results \cite{horne-1994-bounds-rnn-fsm}
+showing that a recurrent neural network can represent any $|\mathbf{S}|$-state finite state machine with a number of neurons that
 grows only logarithmically with $|\mathbf{S}|$. This gives us an upper bound of $O(\sqrt{|\mathbf{S}|}) \approx 8.4 \times 10^{7}$ neurons.
-However, this is a prohibitively large number of neurons for practical training and inference. 
+However, this is a prohibitively large number of neurons for practical training and inference.
 
-For a lower bound, \citet{hanin-2017-bounded-width-relu} shows any continuous, convex function 
+For a lower bound, \citet{hanin-2017-bounded-width-relu} shows any continuous, convex function
 can in principle be approximated by a network whose hidden layer width has a lower bound of $\Omega(d+1)$, and a non-convex function
 can be approximated by a network with a hidden layer width of at least $\Omega(d+3)$, where $d$ is the input dimension.
 For a example, assume Yahtzee is non-convex, and we represent the dice state $\mathbf{d}$ and $r$ as one-hot encodings and utilize
-the score mask $\mathbf{u}(\mathbf{c})$, then $x = 6 \cdot 5 + 3 + 13 = 46$ means our \textit{minimum} hidden layer width is 49 neurons. 
+the score mask $\mathbf{u}(\mathbf{c})$, then $x = 6 \cdot 5 + 3 + 13 = 46$ means our \textit{minimum} hidden layer width is 49 neurons.
 
 In practice, the ideal network size is not driven by the cardinality of the state space, but rather by the complexity of the function to be approximated, the richness of the data, and the specific requirements of the task at hand.
-
-\section{AI Usage Disclosure}
-
-This paper utilized artificial intelligence tools in the following ways:
-
-\begin{itemize}
-    \item \textbf{GitHub Copilot} was used for initial typesetting assistance with the LaTeX document structure and formatting.
-    \item \textbf{ChatGPT GPT-5} was used for brainstorming ideas for reinforcement learning applications in games, helping to narrow down to a particular game that was both non-trivial and interesting for this research.
-\end{itemize}
-
-All other content, including research methodology, analysis, results interpretation, and conclusions, represents original work by the author. The AI tools were used only for initial ideation and technical formatting support, not for generating substantive content or analysis.
-
-GitHub Copilot was also used to write this section.
 
 \bibliography{1_introduction,2_related_work,3_methods,4_single_turn_results,5_full_game_experiments,6_discussion,7_appendix}
 \bibliographystyle{acl_natbib}
 
 \appendix
 
-\section{Full Yahtzee Scoring Rules}
+\section{AI Usage}
+
+This paper utilized artificial intelligence tools in the following ways:
+
+\begin{itemize}
+  \item \textbf{GitHub Copilot (Claude Sonnet 4.5)} was used for typesetting assistance with LaTeX/KaTeX and for autocomplete suggestions during coding.
+  \item \textbf{ChatGPT (GPT-5)} was used for brainstorming ideas for reinforcement learning applications in games, guidance in hyperparameter tuning, helping to outline the structure of the paper, and suggesting relevant related work.
+\end{itemize}
+
+All other content, including research methodology, analysis, results interpretation, and conclusions, represents original work by the author. The AI tools were used only for initial ideation and to assist research, not for generating substantive content or analysis.
+
+\section{Yahtzee Scoring Rules}
 \label{app:scoring}
 Next we define the indicator functions for each of the scoring categories:
 
 \begin{align*}
-\mathbb{I}_{3\mathrm{k}}(\mathbf{d})
-&= \mathbb{I}\bigl\{ \max_{v} n_v(\mathbf{d}) \ge 3 \bigr\} \\[4pt]
-\mathbb{I}_{4\mathrm{k}}(\mathbf{d})
-&= \mathbb{I}\bigl\{ \max_{v} n_v(\mathbf{d}) \ge 4 \bigr\} \\[6pt]
-\mathbb{I}_{\mathrm{full}}(\mathbf{d})
-&= \mathbb{I}\Bigl\{
+  \mathbb{I}_{3\mathrm{k}}(\mathbf{d})
+   & = \mathbb{I}\bigl\{ \max_{v} n_v(\mathbf{d}) \ge 3 \bigr\} \\[4pt]
+  \mathbb{I}_{4\mathrm{k}}(\mathbf{d})
+   & = \mathbb{I}\bigl\{ \max_{v} n_v(\mathbf{d}) \ge 4 \bigr\} \\[6pt]
+  \mathbb{I}_{\mathrm{full}}(\mathbf{d})
+   & = \mathbb{I}\Bigl\{
   \exists i, j \in \{1, \mathellipsis, 6 \} \ \text{with} \ n_i(\mathbf{d}) = 3 \land n_j(\mathbf{d}) = 2
-\Bigr\} \\[6pt]
-\mathbb{I}_{\mathrm{ss}}(\mathbf{d})
-&= \mathbb{I}\Bigl\{
-   \exists k \in \{1,2,3\} \ \text{with}\
-   \sum_{v=k}^{k+3} \mathbb{I}\{n_v(\mathbf{d}) > 0\} = 4
-   \Bigr\} \\[6pt]
-\mathbb{I}_{\mathrm{ls}}(\mathbf{d})
-&= \mathbb{I}\Bigl\{
-   \exists k \in \{1,2\} \ \text{with}\
-   \sum_{v=k}^{k+4} \mathbb{I}\{n_v(\mathbf{d}) > 0\} = 5
-   \Bigr\} \\[6pt]
-\mathbb{I}_{\mathrm{yahtzee}}(\mathbf{d})
-  &= \mathbb{I}\bigl\{\max_v n_v(\mathbf{d}) = 5\bigr\}
+  \Bigr\}                                                       \\[6pt]
+  \mathbb{I}_{\mathrm{ss}}(\mathbf{d})
+   & = \mathbb{I}\Bigl\{
+  \exists k \in \{1,2,3\} \ \text{with}\
+  \sum_{v=k}^{k+3} \mathbb{I}\{n_v(\mathbf{d}) > 0\} = 4
+  \Bigr\}                                                       \\[6pt]
+  \mathbb{I}_{\mathrm{ls}}(\mathbf{d})
+   & = \mathbb{I}\Bigl\{
+  \exists k \in \{1,2\} \ \text{with}\
+  \sum_{v=k}^{k+4} \mathbb{I}\{n_v(\mathbf{d}) > 0\} = 5
+  \Bigr\}                                                       \\[6pt]
+  \mathbb{I}_{\mathrm{yahtzee}}(\mathbf{d})
+   & = \mathbb{I}\bigl\{\max_v n_v(\mathbf{d}) = 5\bigr\}
 \end{align*}
 
 The potential score for each category can then be defined as:
 \begin{align*}
-f_j(\mathbf{d})   &= j \cdot n_j(\mathbf{d}), \qquad j \in \{1,\dots,6\} \\[4pt]
-f_7(\mathbf{d})   &= \mathbf{1}^\top \mathbf{d} \cdot \mathbb{I}_{3\mathrm{k}}(\mathbf{d}) \\[4pt]
-f_8(\mathbf{d})   &= \mathbf{1}^\top \mathbf{d} \cdot \mathbb{I}_{4\mathrm{k}}(\mathbf{d}) \\[4pt]
-f_9(\mathbf{d})   &= 25 \cdot \mathbb{I}_{\mathrm{full}}(\mathbf{d}) \\[4pt]
-f_{10}(\mathbf{d})&= 30 \cdot \mathbb{I}_{\mathrm{ss}}(\mathbf{d}) \\[4pt]
-f_{11}(\mathbf{d})&= 40 \cdot \mathbb{I}_{\mathrm{ls}}(\mathbf{d}) \\[4pt]
-f_{12}(\mathbf{d})&= 50 \cdot \mathbb{I}_{\mathrm{yahtzee}}(\mathbf{d}) \\[4pt]
-f_{13}(\mathbf{d})&= \mathbf{1}^\top \cdot \mathbf{d} \\[4pt]
-\mathbf{f}(\mathbf{d}) &=
-\bigl(f_1(\mathbf{d}), f_2(\mathbf{d}), \ldots, f_{13}(\mathbf{d})\bigr)
+  f_j(\mathbf{d})        & = j \cdot n_j(\mathbf{d}), \qquad j \in \{1,\dots,6\}                   \\[4pt]
+  f_7(\mathbf{d})        & = \mathbf{1}^\top \mathbf{d} \cdot \mathbb{I}_{3\mathrm{k}}(\mathbf{d}) \\[4pt]
+  f_8(\mathbf{d})        & = \mathbf{1}^\top \mathbf{d} \cdot \mathbb{I}_{4\mathrm{k}}(\mathbf{d}) \\[4pt]
+  f_9(\mathbf{d})        & = 25 \cdot \mathbb{I}_{\mathrm{full}}(\mathbf{d})                       \\[4pt]
+  f_{10}(\mathbf{d})     & = 30 \cdot \mathbb{I}_{\mathrm{ss}}(\mathbf{d})                         \\[4pt]
+  f_{11}(\mathbf{d})     & = 40 \cdot \mathbb{I}_{\mathrm{ls}}(\mathbf{d})                         \\[4pt]
+  f_{12}(\mathbf{d})     & = 50 \cdot \mathbb{I}_{\mathrm{yahtzee}}(\mathbf{d})                    \\[4pt]
+  f_{13}(\mathbf{d})     & = \mathbf{1}^\top \cdot \mathbf{d}                                      \\[4pt]
+  \mathbf{f}(\mathbf{d}) & =
+  \bigl(f_1(\mathbf{d}), f_2(\mathbf{d}), \ldots, f_{13}(\mathbf{d})\bigr)
 \end{align*}
+
+\section{State Transition Function}
+\label{app:transition-function}
+
+$P$ can be defined by the following generative process.
+
+\begin{itemize}
+  \item If $r < 2$ and $a = k$, for each die $i$:
+        \begin{itemize}
+          \item if $k_i = 1$, keep $d'_i = d_i$;
+          \item else sample $d'_i \sim \mathrm{Unif}\{1,\dots,6\}$ independently.
+        \end{itemize}
+        Set $c' = c,\ r' = r+1,\ t' = t$.
+  \item If $r = 2$ and $a = i$, set $d' = d$, update $c' = \mathrm{score}(c,d,i)$,
+        set $r' = 0,\ t' = t+1$.
+\end{itemize}
+
 
 \end{document}
