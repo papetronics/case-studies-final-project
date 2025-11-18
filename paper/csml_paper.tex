@@ -100,7 +100,7 @@ In a classic example, \citet{tesauro1995tdgammon} utilized temporal difference l
 Tetris, which is deterministic but combinatorial, has also been studied extensively; \citet{bertsekas1996tetris} utilized approximate dynamic programming methods to learn effective policies for the game,
 while \citet{gabillon2013tetris} effectively tackled the game using reinforcement learning methods.
 \citet{moravcik2017deepstack} demonstrated that \textit{Texas Hold'em}, a stochastic game with hidden information, could be effectively learned.
-Many other stochastic games can be learned we well, so long as methods which ensure better exploration are used \cite{osband2016bootstrappeddqn}.
+Many other stochastic games can be learned well, so long as methods which ensure better exploration are used \cite{osband2016bootstrappeddqn}.
 Lastly, RL methods can be used to reach superhuman performance on adversarial games, even despite their sparse reward structures.
 For example, the game of Go, which has a notoriously intractable state space was solved using Monte-Carlo Tree Search and deep value networks \cite{silver2016alphago}.
 Subsequent work showed Go could be learned without the use of expert data, purely through self-play \cite{silver2017alphagozero}.
@@ -220,10 +220,11 @@ A state is represented as $\mathbf{s} = (\mathbf{d},\mathbf{c},r, t)$, where $\m
 dice configuration, $\mathbf{c}$ the scorecard, and $r$ the roll index, and $t$ the current turn index
 (see Section~\ref{sec:yahtzee-definitions}).
 
-For simplicity, we define the action $\mathbf{a} = (\mathbf{k}, \mathbf{s})$, where $\mathbf{k}$ is the keep vector and $\mathbf{s}$ is the score category choice.
-If $r < 2$, the $\mathbf{k}$ is used bt $P$, otherwise $\mathbf{s}$ is used.
+For simplicity, we define the action $\mathbf{a} = (\mathbf{k}, \mathbf{s})$, where $\mathbf{k}$ is the keep vector and $s$ is the score category choice.
+We can define the action as a parameterization of the policy: $\pi_{\theta}(\mathbf{a}|\mathbf{s}) = \pi_{\theta}(\phi(\mathbf{s}))$,
+where $\phi(\mathbf{s})$ is a feature representation of the state $\mathbf{s}$.
 
-The transition function $P$ is is specified in Appendix~\ref{app:transition-function}.
+The transition function $P$ is is specified in Appendix~\ref{app:transition-function}. Note that when $r < 2$, the $\mathbf{k}$ is used by $P$, otherwise $\mathbf{s}$ is used.
 
 The reward is the change in total score between steps $R_t = \mathrm{score}(c_{t+1}) - \mathrm{score}(c_t)$,
 and since we desire to maximize total score at the end of the game, we set $\gamma = 1$.
@@ -246,7 +247,7 @@ the network to learn explicit long-term strategies, such as planning for the upp
 \section{Methodology}
 1400-1700 words
 \subsection{State Representation \& Input Features}
-The design of $\mathbf{\phi}(\mathbf{s}) \rightarrow \mathbf{x}$ is one of the most critical components to the performance of a model \shortcite{sutton-2018-reinforcement-book}.
+The design of $\mathbf{\phi}(\mathbf{s}) \rightarrow \mathbf{x}$ is one of the most critical components to the performance of a model \cite{sutton-2018-reinforcement-book}.
 
 As such, several different representations were tested to evaluate their impact on learning efficiency and final performance.
 
@@ -256,6 +257,7 @@ Preserving ordering information (and implicitly, ranking) gives the model the be
 however, it comes at the cost of implicitly biasing the model to specific dice orderings; in other words, towards a local optima of keeping the highest ranking dice.
 However, eliminating ordering information requires the model to either waste capacity learning permutation invariance or be inherently supportive of invariance (e.g. with self-attention).
 It also requires a different action representation, since actions can no longer correspond to specific dice indices. We attempted 5 different dice representations:
+
 \begin{itemize}
   \item \textbf{One-hot encoding of ordered dice:} Each die is represented as a one-hot vector of length 6, and the 5 dice are concatenated in order.
   \item \textbf{Bin representation:} Here we pass through the dice face count vector $\mathbf{n}(\mathbf{d})$.
@@ -332,10 +334,12 @@ plateau for 70\% of training, and then linearly decay over the final 25\% of tra
 
 \subsubsection{Training Metrics}
 To better understand training dynamics, we log several metrics during training.
-To monitor the quality of the value network, we monitor explained variance \cite{}.
-To monitor for policy collapse, we track the policy entropy \cite{}, mask diversity \cite{}, the KL divergence between policy updates \cite{}, and the top-k action frequency \cite{}.
-To monitor for learning stability, we track gradient norms and clip rate \cite{}.
-To ensure advantages are well-conditioned, we track advantage mean and standard deviation \cite{}.
+To monitor the quality of the value network, we monitor explained variance \cite{schulman2016nutsbolts, schulman-2016-gae}.
+To monitor for policy collapse, we track the policy entropy and KL divergence between policy updates \cite{schulman2016nutsbolts,schulman-2017-ppo},
+mask diversity \cite{Hubara2021MaskDiversity},
+and the top-k action frequency \cite{sun-etal-2025-curiosity}.
+To monitor for learning stability, we track gradient norms and clip rate \cite{pascanu-2013-rnn-clipping, Engstrom2020ImplementationMatters}.
+To ensure advantages are well-conditioned, we track advantage mean and standard deviation \cite{Achiam2018SpinningUp}.
 We also monitor standard training metrics such as average reward and loss values.
 
 \subsection{Reinforcement Learning Algorithms}
@@ -361,9 +365,81 @@ We also monitor standard training metrics such as average reward and loss values
 \subsection{Single-Turn Results}
 <600-700 words>
 \subsubsection{Baseline Model Performance}
-<Score graph>
 
-<train value loss graph>
+\begin{table}[H]
+  \centering
+  \caption{Category statistics for the optimal strategy}
+  \label{tab:category-stats}
+  \begin{tabular}{lcc}
+    \hline
+    \multicolumn{1}{c}{\emph{Category}} & $\bar{s}(c)$ & $\sigma^{2}(c)$ \\
+    \hline
+    Ones                                & <X>          & <Y>             \\
+    Twos                                & <X>          & <Y>             \\
+    Threes                              & <X>          & <Y>             \\
+    Fours                               & <X>          & <Y>             \\
+    Fives                               & <X>          & <Y>             \\
+    Sixes                               & <X>          & <Y>             \\
+    Three of a Kind                     & <X>          & <Y>             \\
+    Four of a Kind                      & <X>          & <Y>             \\
+    Full House                          & <X>          & <Y>             \\
+    Small Straight                      & <X>          & <Y>             \\
+    Large Straight                      & <X>          & <Y>             \\
+    Chance                              & <X>          & <Y>             \\
+    Yahtzee                             & <X>          & <Y>             \\
+    Upper Bonus                         & <X>          & <Y>             \\
+    Yahtzee Bonus                       & <X>          & <Y>             \\
+    \hline
+  \end{tabular}
+\end{table}
+
+
+\begin{figure}[t]
+  \centering
+  \begin{tikzpicture}
+    \begin{axis}[
+        height=7cm,
+        xlabel={Epoch},
+        ylabel={Loss},
+        xmin=0, xmax=500,
+        ymin=0, ymax=4.5,
+        xtick={100,200,300,400,500},
+        grid=both,
+        legend style={at={(0.5,1.05)},anchor=south,legend columns=4},
+        mark options={solid},
+      ]
+
+      % --- Run 1 (placeholder data around 1) ---
+      \addplot+[mark=*] coordinates {
+          ( 50,1.0) (100,0.9) (150,0.8) (200,0.7) (250,0.6)
+          (300,0.5) (350,0.4) (400,0.3) (450,0.2) (500,0.1)
+        };
+
+      % --- Run 2 (placeholder data around 2) ---
+      \addplot+[mark=*] coordinates {
+          ( 50,2.0) (100,1.9) (150,1.8) (200,1.7) (250,1.6)
+          (300,1.5) (350,1.4) (400,1.3) (450,1.2) (500,1.1)
+        };
+
+      % --- Run 3 (placeholder data around 3) ---
+      \addplot+[mark=*] coordinates {
+          ( 50,3.0) (100,2.9) (150,2.8) (200,2.7) (250,2.6)
+          (300,2.5) (350,2.4) (400,2.3) (450,2.2) (500,2.1)
+        };
+
+      % --- Run 4 (placeholder data around 4) ---
+      \addplot+[mark=*] coordinates {
+          ( 50,4.0) (100,3.9) (150,3.8) (200,3.7) (250,3.6)
+          (300,3.5) (350,3.4) (400,3.3) (450,3.2) (500,3.1)
+        };
+
+      \legend{Run 1,Run 2,Run 3,Run 4}
+
+    \end{axis}
+  \end{tikzpicture}
+  \caption{Training loss over epochs (placeholder data).}
+  \label{fig:loss-vs-epoch}
+\end{figure}
 
 <train entropy graph>
 
@@ -403,6 +479,95 @@ We also monitor standard training metrics such as average reward and loss values
 
 \subsubsection{Summary}
 <Summarize full-game results and key findings>
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}
+    \begin{axis}[
+        ybar,
+        width=\columnwidth,      % fit to single column
+        height=5cm,              % a bit shorter
+        bar width=3pt,
+        symbolic x coords={Ones,Twos,Threes,Fours,Fives,Sixes,Bonus,3oK,4oK,FH,SS,LS,Ch,Ytz},
+        xtick=data,
+        xticklabel style={
+            rotate=60,
+            anchor=east,
+            font=\scriptsize       % smaller labels
+          },
+        ylabel={$\bar{s}(c)$},
+        xlabel={Category},
+        ymin=0,
+        legend style={
+            at={(0.5,1.02)},
+            anchor=south,
+            legend columns=3,
+            font=\footnotesize
+          },
+        enlarge x limits=0.02,   % less side padding
+      ]
+
+      % ---- Series 1 ----
+      \addplot coordinates {
+          (Ones,   1.88)
+          (Twos,   5.28)
+          (Threes, 8.57)
+          (Fours,  12.16)
+          (Fives,  15.69)
+          (Sixes,  19.19)
+          (Bonus,  23.84)
+          (3oK,    1)
+          (4oK,    1)
+          (FH,     1)
+          (SS,     1)
+          (LS,     1)
+          (Ch,     1)
+          (Ytz,    1)
+        };
+
+      % ---- Series 2 ----
+      \addplot coordinates {
+          (Ones,   1.50)
+          (Twos,   4.90)
+          (Threes, 8.00)
+          (Fours,  11.70)
+          (Fives,  15.10)
+          (Sixes,  18.60)
+          (Bonus,  22.00)
+          (3oK,    2)
+          (4oK,    2)
+          (FH,     2)
+          (SS,     2)
+          (LS,     2)
+          (Ch,     2)
+          (Ytz,    2)
+        };
+
+      % ---- Series 3 ----
+      \addplot coordinates {
+          (Ones,   2.00)
+          (Twos,   5.60)
+          (Threes, 9.00)
+          (Fours,  13.00)
+          (Fives,  16.00)
+          (Sixes,  20.00)
+          (Bonus,  24.00)
+          (3oK,    2)
+          (4oK,    2)
+          (FH,     2)
+          (SS,     2)
+          (LS,     2)
+          (Ch,     2)
+          (Ytz,    2)
+        };
+
+      \legend{Series 1,Series 2,Series 3}
+
+    \end{axis}
+  \end{tikzpicture}
+  \caption{Average score $\bar{s}(c)$ per category for three strategies.}
+  \label{fig:yahtzee-bar}
+\end{figure}
+
 
 \subsection{Policy Analysis}
 <300-500 words>
