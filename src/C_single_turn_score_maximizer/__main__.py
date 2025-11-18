@@ -212,7 +212,6 @@ def main() -> None:  # noqa: PLR0915
     batch_size = games_per_batch
     updates_per_epoch = games_per_epoch // games_per_batch
     total_updates = updates_per_epoch * epochs
-    games_per_update = games_per_batch
     games_per_epoch_actual = games_per_epoch  # Since we validate exact division
     total_games_actual = games_per_epoch * epochs
 
@@ -224,7 +223,7 @@ def main() -> None:  # noqa: PLR0915
         f"Total Epochs:      {epochs:,}",
         f"Total Updates:     {total_updates:,}",
         f"Updates / Epoch:   {updates_per_epoch:,}",
-        f"Games / Update:    {games_per_update:,}",
+        f"Games / Update:    {games_per_batch:,}",
         f"Games / Epoch:     {games_per_epoch_actual:,}",
         "=" * 50,
     ]
@@ -270,19 +269,21 @@ def main() -> None:  # noqa: PLR0915
                 "gamma_min": gamma_min,
                 "total_train_games": total_train_games,
                 "games_per_batch": games_per_batch,
-                "total_games_actual": total_games_actual,
-                "total_updates": total_updates,
-                "updates_per_epoch": updates_per_epoch,
-                "games_per_update": games_per_update,
-                "games_per_epoch": games_per_epoch_actual,
                 "gradient_clip_val": gradient_clip_val,
                 "entropy_coeff_start": entropy_coeff_start,
                 "entropy_coeff_end": entropy_coeff_end,
                 "entropy_anneal_percentage": entropy_anneal_percentage,
-                "entropy_anneal_epochs": int(entropy_anneal_percentage * epochs),
                 "critic_coeff": critic_coeff,
             }
         )
+
+        model.log(
+            "stat/entropy_anneal_epochs", int(entropy_anneal_percentage * epochs), prog_bar=False
+        )
+        model.log("stat/updates_per_epoch", updates_per_epoch, prog_bar=False)
+        model.log("stat/total_games_actual", total_games_actual, prog_bar=False)
+        model.log("stat/total_updates", total_updates, prog_bar=False)
+        model.log("stat/games_per_epoch", games_per_epoch_actual, prog_bar=False)
 
         run_scope = os.getenv("WANDB_RUN_ID") or "local-run"
 
