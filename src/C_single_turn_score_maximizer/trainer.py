@@ -5,6 +5,7 @@ import numpy as np
 import pytorch_lightning as lightning
 import torch
 
+from C_single_turn_score_maximizer.features import PhiFeature
 from environments.full_yahtzee_env import Action, Observation
 from utilities.activation_functions import ActivationFunctionName
 from utilities.diagnostics import (
@@ -19,7 +20,14 @@ from utilities.diagnostics import (
 )
 from utilities.return_calculators import MonteCarloReturnCalculator, ReturnCalculator
 
-from .model import YahtzeeAgent, phi, sample_action, select_action
+from .model import (
+    RollingActionRepresentation,
+    YahtzeeAgent,
+    convert_rolling_action_to_hold_mask,
+    phi,
+    sample_action,
+    select_action,
+)
 from .self_play_dataset import EpisodeBatch
 
 
@@ -55,19 +63,32 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         min_lr_ratio: float,
         gamma_max: float,
         gamma_min: float,
-        entropy_coef_start: float,
-        entropy_coef_end: float,
-        entropy_anneal_epochs: int,
+        entropy_coeff_rolling_max: float,
+        entropy_coeff_rolling_min: float,
+        entropy_coeff_scoring_max: float,
+        entropy_coeff_scoring_min: float,
+        entropy_hold_period: float,
+        entropy_anneal_period: float,
         critic_coeff: float,
+        num_steps_per_episode: int,
+        features: list[PhiFeature],
+        rolling_action_representation: str,
         return_calculator: ReturnCalculator | None = None,
     ):
         super().__init__()
+
+        # Convert string to enum
+        self.rolling_action_representation = RollingActionRepresentation(
+            rolling_action_representation
+        )
 
         self.policy_net: YahtzeeAgent = YahtzeeAgent(
             hidden_size=hidden_size,
             num_hidden=num_hidden,
             dropout_rate=dropout_rate,
             activation_function=activation_function,
+            features=features,
+            rolling_action_representation=self.rolling_action_representation,
         )
 
         self.learning_rate: float = learning_rate
@@ -75,17 +96,23 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         self.min_lr_ratio: float = min_lr_ratio
         self.gamma_max: float = gamma_max
         self.gamma_min: float = gamma_min
-        self.entropy_coef_start: float = entropy_coef_start
-        self.entropy_coef_end: float = entropy_coef_end
-        self.entropy_anneal_epochs: int = entropy_anneal_epochs
+        self.entropy_coeff_rolling_max: float = entropy_coeff_rolling_max
+        self.entropy_coeff_rolling_min: float = entropy_coeff_rolling_min
+        self.entropy_coeff_scoring_max: float = entropy_coeff_scoring_max
+        self.entropy_coeff_scoring_min: float = entropy_coeff_scoring_min
+        self.entropy_hold_period: float = entropy_hold_period
+        self.entropy_anneal_period: float = entropy_anneal_period
         self.critic_coeff: float = critic_coeff
+        self.num_steps_per_episode: int = num_steps_per_episode
 
         self.return_calculator: ReturnCalculator = return_calculator or MonteCarloReturnCalculator()
         self.return_calculator.gamma = self.gamma_min
 
         self.validation_envs: list[gym.Env[Observation, Action]] = []  # Created on demand
 
-    def run_batched_validation_games(self, num_games: int) -> tuple[list[float], list[float]]:
+    def run_batched_validation_games(
+        self, num_games: int, run_deterministic: bool = True, run_stochastic: bool = False
+    ) -> tuple[list[float], list[float]]:
         """Run multiple Yahtzee games in parallel with both deterministic and stochastic action selection.
 
         Runs num_games with deterministic actions and num_games with stochastic actions
@@ -95,13 +122,24 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         ----------
         num_games : int
             Number of parallel games to run for each mode (deterministic and stochastic)
+        run_deterministic : bool, optional
+            Whether to run deterministic evaluation (default: True)
+        run_stochastic : bool, optional
+            Whether to run stochastic evaluation (default: False)
 
         Returns
         -------
         tuple[list[float], list[float]]
             (deterministic_scores, stochastic_scores) - Lists of total scores for each game
         """
-        total_envs_needed = num_games * 2
+        # Calculate number of environments needed based on which modes are enabled
+        num_det = num_games if run_deterministic else 0
+        num_stoch = num_games if run_stochastic else 0
+        total_envs_needed = num_det + num_stoch
+
+        # Early return if neither mode is enabled
+        if total_envs_needed == 0:
+            return [], []
 
         # Create environments if needed
         if len(self.validation_envs) < total_envs_needed:
@@ -115,7 +153,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
             observations.append(obs)
 
         # Track state for each game
-        # First num_games are deterministic, next num_games are stochastic
+        # First num_det are deterministic, next num_stoch are stochastic
         active_indices = list(range(total_envs_needed))
         total_scores = [0.0] * total_envs_needed
 
@@ -128,7 +166,11 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
                 # Batch convert observations to state tensors
                 state_tensors = torch.stack(
                     [
-                        phi(obs, self.policy_net.bonus_flags, self.policy_net.device)
+                        phi(
+                            obs,
+                            self.policy_net.features,
+                            self.policy_net.device,
+                        )
                         for obs in active_observations
                     ]
                 )  # (num_active, state_size)
@@ -137,19 +179,21 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
                 rolling_probs, scoring_probs, v_ests = self.policy_net.forward(state_tensors)
 
                 # Separate deterministic and stochastic actions
-                # Deterministic for first num_games, stochastic for remaining
+                # Deterministic for first num_det, stochastic for remaining
                 det_mask = torch.tensor(
-                    [idx < num_games for idx in active_indices], device=rolling_probs.device
+                    [idx < num_det for idx in active_indices], device=rolling_probs.device
                 )
 
                 # Get actions for both modes
-                det_actions = select_action(rolling_probs, scoring_probs)
-                stoch_actions, _, _ = sample_action(rolling_probs, scoring_probs, v_ests)
+                det_actions = select_action(
+                    rolling_probs, scoring_probs, self.rolling_action_representation
+                )
+                stoch_actions, _, _ = sample_action(
+                    rolling_probs, scoring_probs, v_ests, self.rolling_action_representation
+                )
 
                 # Select appropriate actions based on game index
-                rolling_action_tensors = torch.where(
-                    det_mask.unsqueeze(1), det_actions[0], stoch_actions[0]
-                )
+                rolling_action_tensors = torch.where(det_mask, det_actions[0], stoch_actions[0])
                 scoring_action_tensors = torch.where(det_mask, det_actions[1], stoch_actions[1])
 
                 # Step each active environment
@@ -161,12 +205,10 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
                     # Convert action based on phase
                     action: Action
                     if obs["phase"] == 0:
-                        action = {
-                            "hold_mask": rolling_action_tensors[batch_idx]
-                            .cpu()
-                            .numpy()
-                            .astype(bool)
-                        }
+                        mask = convert_rolling_action_to_hold_mask(
+                            rolling_action_tensors[batch_idx], self.rolling_action_representation
+                        )
+                        action = {"hold_mask": mask}
                     else:
                         score_category: int = int(scoring_action_tensors[batch_idx].cpu().item())
                         action = {"score_category": score_category}
@@ -185,8 +227,8 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
                     active_indices.remove(game_idx)
 
         # Split results into deterministic and stochastic
-        deterministic_scores = total_scores[:num_games]
-        stochastic_scores = total_scores[num_games:]
+        deterministic_scores = total_scores[:num_det]
+        stochastic_scores = total_scores[num_det:]
 
         return deterministic_scores, stochastic_scores
 
@@ -194,67 +236,120 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         """Run validation using batched parallel games."""
         num_validation_games = 1000
 
-        # Run all games in parallel with batched forward passes (both deterministic and stochastic)
-        det_scores, stoch_scores = self.run_batched_validation_games(num_validation_games)
+        # Run all games in parallel with batched forward passes (only deterministic by default)
+        det_scores, stoch_scores = self.run_batched_validation_games(
+            num_validation_games, run_deterministic=True, run_stochastic=False
+        )
 
-        # Log deterministic results
-        det_mean = float(np.mean(det_scores))
-        det_std = float(np.std(det_scores))
-        self.log("val/mean_total_score_det", det_mean, prog_bar=True)
-        self.log("val/std_total_score_det", det_std, prog_bar=False)
+        # Log deterministic results if available
+        if det_scores:
+            det_mean = float(np.mean(det_scores))
+            det_std = float(np.std(det_scores))
+            self.log("val/mean_total_score_det", det_mean, prog_bar=True)
+            self.log("val/std_total_score_det", det_std, prog_bar=False)
+        else:
+            det_mean = 0.0
 
-        # Log stochastic results
-        stoch_mean = float(np.mean(stoch_scores))
-        stoch_std = float(np.std(stoch_scores))
-        self.log("val/mean_total_score_stoch", stoch_mean, prog_bar=False)
-        self.log("val/std_total_score_stoch", stoch_std, prog_bar=False)
+        # Log stochastic results if available
+        if stoch_scores:
+            stoch_mean = float(np.mean(stoch_scores))
+            stoch_std = float(np.std(stoch_scores))
+            self.log("val/mean_total_score_stoch", stoch_mean, prog_bar=False)
+            self.log("val/std_total_score_stoch", stoch_std, prog_bar=False)
 
         # Return a dict for PyTorch Lightning compatibility (use deterministic for loss)
         return {"val_loss": -det_mean}  # Negative because higher scores are better
 
-    def run_sweep_test_evaluation(self) -> None:
+    def run_sweep_test_evaluation(
+        self, run_deterministic: bool = True, run_stochastic: bool = False
+    ) -> None:
         """Run comprehensive test evaluation for hyperparameter sweeps.
 
-        Runs 10000 games with both deterministic and stochastic action selection.
+        Runs 10000 games with deterministic and/or stochastic action selection.
         Logs test/mean_total_score_det, test/mean_total_score_stoch and their stds.
-        This is called at epochs 99, 199, 299, 399, 499, etc. (every 100 epochs).
+        This is called at the end of training.
+
+        Parameters
+        ----------
+        run_deterministic : bool, optional
+            Whether to run deterministic evaluation (default: True)
+        run_stochastic : bool, optional
+            Whether to run stochastic evaluation (default: False)
         """
         num_test_games = 10000
 
-        # Run all games in parallel with batched forward passes (both deterministic and stochastic)
-        det_scores, stoch_scores = self.run_batched_validation_games(num_test_games)
+        # Run all games in parallel with batched forward passes
+        det_scores, stoch_scores = self.run_batched_validation_games(
+            num_test_games, run_deterministic=run_deterministic, run_stochastic=run_stochastic
+        )
 
-        # Log deterministic results
-        det_mean = float(np.mean(det_scores))
-        det_std = float(np.std(det_scores))
-        self.log("test/mean_total_score_det", det_mean, prog_bar=True)
-        self.log("test/std_total_score_det", det_std, prog_bar=False)
+        # Log deterministic results if available
+        if det_scores:
+            det_mean = float(np.mean(det_scores))
+            det_std = float(np.std(det_scores))
+            self.log("test/mean_total_score_det", det_mean, prog_bar=True)
+            self.log("test/std_total_score_det", det_std, prog_bar=False)
 
-        # Log stochastic results
-        stoch_mean = float(np.mean(stoch_scores))
-        stoch_std = float(np.std(stoch_scores))
-        self.log("test/mean_total_score_stoch", stoch_mean, prog_bar=False)
-        self.log("test/std_total_score_stoch", stoch_std, prog_bar=False)
+        # Log stochastic results if available
+        if stoch_scores:
+            stoch_mean = float(np.mean(stoch_scores))
+            stoch_std = float(np.std(stoch_scores))
+            self.log("test/mean_total_score_stoch", stoch_mean, prog_bar=False)
+            self.log("test/std_total_score_stoch", stoch_std, prog_bar=False)
 
-    def get_entropy_coef(self) -> float:
-        """Get current entropy coefficient with linear annealing."""
-        start = self.entropy_coef_start
-        end = self.entropy_coef_end
-        entropy_t = max(1, self.entropy_anneal_epochs)
+    def get_entropy_coefs(self) -> tuple[float, float]:
+        """Get current entropy coefficients for rolling and scoring heads.
 
-        # clamp at 1.0 so we stop decaying after T epochs
-        progress = min(self.current_epoch / entropy_t, 1.0)
-        return start + (end - start) * progress
+        Schedule:
+        - Hold at max for entropy_hold_period (default 40%) of training
+        - Anneal linearly to min over entropy_anneal_period (default 35%) of training
+        - Hold at min for remaining training
 
-    def training_step(self, batch: EpisodeBatch, batch_idx: int) -> torch.Tensor:  # noqa: ARG002, C901, PLR0915
+        Returns
+        -------
+        tuple[float, float]
+            (rolling_coef, scoring_coef) - current entropy coefficients
+        """
+        # Calculate epoch boundaries
+        hold_end_epoch = self.max_epochs * self.entropy_hold_period
+        anneal_end_epoch = hold_end_epoch + self.max_epochs * self.entropy_anneal_period
+
+        # Determine current phase and progress
+        if self.current_epoch < hold_end_epoch:
+            # Phase 1: Hold at max
+            rolling_coef = self.entropy_coeff_rolling_max
+            scoring_coef = self.entropy_coeff_scoring_max
+        elif self.current_epoch < anneal_end_epoch:
+            # Phase 2: Anneal from max to min
+            anneal_progress = (self.current_epoch - hold_end_epoch) / (
+                self.max_epochs * self.entropy_anneal_period
+            )
+            rolling_coef = (
+                self.entropy_coeff_rolling_max
+                + (self.entropy_coeff_rolling_min - self.entropy_coeff_rolling_max)
+                * anneal_progress
+            )
+            scoring_coef = (
+                self.entropy_coeff_scoring_max
+                + (self.entropy_coeff_scoring_min - self.entropy_coeff_scoring_max)
+                * anneal_progress
+            )
+        else:
+            # Phase 3: Hold at min
+            rolling_coef = self.entropy_coeff_rolling_min
+            scoring_coef = self.entropy_coeff_scoring_min
+
+        return rolling_coef, scoring_coef
+
+    def training_step(self, batch: EpisodeBatch, batch_idx: int) -> torch.Tensor:  # noqa: ARG002, C901, PLR0912, PLR0915
         """Perform a training step using REINFORCE algorithm with vectorized operations."""
         # batch is an EpisodeBatch dict with pre-flattened tensors:
-        # - "states": (BATCH_SIZE*3, state_size) float32
-        # - "rolling_actions": (BATCH_SIZE*3, 5) int
-        # - "scoring_actions": (BATCH_SIZE*3,) int
-        # - "rewards": (BATCH_SIZE*3,) float32
-        # - "next_states": (BATCH_SIZE*3, state_size) float32
-        # - "phases": (BATCH_SIZE*3,) int
+        # - "states": (BATCH_SIZE*39, state_size) float32
+        # - "rolling_actions": (BATCH_SIZE*39, 5) int
+        # - "scoring_actions": (BATCH_SIZE*39,) int
+        # - "rewards": (BATCH_SIZE*39,) float32
+        # - "next_states": (BATCH_SIZE*39, state_size) float32
+        # - "phases": (BATCH_SIZE*39,) int
 
         # Dataset pre-flattens, so we just extract directly
         states_flat = batch["states"]
@@ -264,37 +359,46 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         # next_states = batch["next_states"]  # Not used yet
         phases_flat = batch["phases"]
 
-        # Calculate batch_size and num_steps from flattened shape
+        # Calculate num_episodes and steps_per_episode from flattened shape
+        # single_turn: 338 episodes x 3 steps = 1014 total
+        # full_game: 26 episodes x 39 steps = 1014 total
         total_steps = states_flat.shape[0]
-        num_steps = 3
-        batch_size = total_steps // num_steps
+        steps_per_episode = self.num_steps_per_episode
+        num_episodes = total_steps // steps_per_episode
 
         # Forward pass through current policy to get probabilities and value estimates
         rolling_probs, scoring_probs, v_ests = self.policy_net.forward(states_flat)
 
         # Recompute log probabilities from stored actions
-        # Note: Bernoulli.log_prob expects float values, so cast rolling_actions to float
-        rolling_dist = torch.distributions.Bernoulli(rolling_probs)
-        rolling_log_probs = rolling_dist.log_prob(rolling_actions_flat.float()).sum(
-            dim=1
-        )  # (BATCH_SIZE * 3,)
+        rolling_dist: torch.distributions.Distribution
+        if self.rolling_action_representation == RollingActionRepresentation.CATEGORICAL:
+            rolling_dist = torch.distributions.Categorical(rolling_probs)
+            rolling_log_probs = rolling_dist.log_prob(
+                rolling_actions_flat.float()
+            )  # (BATCH_SIZE * 39,)
+        else:  # BERNOULLI
+            rolling_dist = torch.distributions.Bernoulli(rolling_probs)
+            rolling_log_probs = rolling_dist.log_prob(rolling_actions_flat.float()).sum(
+                dim=1
+            )  # (BATCH_SIZE * 39,)
 
         scoring_dist = torch.distributions.Categorical(scoring_probs)
-        scoring_log_probs = scoring_dist.log_prob(scoring_actions_flat)  # (BATCH_SIZE * 3,)
+        scoring_log_probs = scoring_dist.log_prob(scoring_actions_flat)  # (BATCH_SIZE * 39,)
 
         # Select the appropriate log prob based on phase
         log_probs = torch.where(
             phases_flat == 0, rolling_log_probs, scoring_log_probs
-        )  # (BATCH_SIZE * 3,)
+        )  # (BATCH_SIZE * 39,)
 
         # Calculate returns using Monte Carlo (backward pass through episodes)
+        # Each episode gets its own MC return calculation over steps_per_episode
         gamma = self.return_calculator.gamma
-        returns = torch.zeros_like(rewards_flat)  # (BATCH_SIZE * 3,)
+        returns = torch.zeros_like(rewards_flat)
 
-        for batch_idx_inner in range(batch_size):
+        for episode_idx in range(num_episodes):
             g = 0.0
-            for t in reversed(range(num_steps)):
-                flat_idx = batch_idx_inner * num_steps + t
+            for t in reversed(range(steps_per_episode)):
+                flat_idx = episode_idx * steps_per_episode + t
                 g = rewards_flat[flat_idx] + gamma * g
                 returns[flat_idx] = g
 
@@ -307,8 +411,8 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         # Calculate policy loss
         policy_loss = -(log_probs * normalized_advantages).mean()
 
-        # Calculate average reward per episode (last step contains full return)
-        episode_returns = returns.view(batch_size, num_steps)[:, -1]  # (BATCH_SIZE,)
+        # Calculate reward per episode
+        episode_returns = returns.view(num_episodes, steps_per_episode)[:, 0]
         avg_reward = episode_returns.mean()
 
         # Calculate Huber loss
@@ -318,25 +422,45 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         v_loss = torch.nn.functional.mse_loss(v_ests.squeeze(), returns)
 
         ## Entropy
-        rolling_entropy = rolling_dist.entropy().sum(dim=1)  # (BATCH_SIZE*3,)
-        scoring_entropy = scoring_dist.entropy()  # (BATCH_SIZE*3,)
-        # Match entropy to the active head at each step, same as log_probs
-        entropies = torch.where(
-            phases_flat == 0, rolling_entropy, scoring_entropy
-        )  # (BATCH_SIZE*3,)
-        entropy_mean = entropies.mean()
-        ent_coef = self.get_entropy_coef()
-        entropy_bonus = ent_coef * entropy_mean
+        if self.rolling_action_representation == RollingActionRepresentation.CATEGORICAL:
+            rolling_entropy = rolling_dist.entropy()  # (BATCH_SIZE*39,)
+        else:  # BERNOULLI
+            rolling_entropy = rolling_dist.entropy().sum(dim=1)  # (BATCH_SIZE*39,)
+        scoring_entropy = scoring_dist.entropy()  # (BATCH_SIZE*39,)
 
-        loss = policy_loss + self.critic_coeff * v_loss - entropy_bonus
+        # Compute mean entropy for each head based on which steps use that head
+        rolling_mask = phases_flat == 0
+        scoring_mask = phases_flat == 1
+
+        rolling_entropy_mean = (
+            rolling_entropy[rolling_mask].mean() if rolling_mask.any() else torch.tensor(0.0)
+        )
+        scoring_entropy_mean = (
+            scoring_entropy[scoring_mask].mean() if scoring_mask.any() else torch.tensor(0.0)
+        )
+
+        # Get current entropy coefficients for both heads
+        rolling_coef, scoring_coef = self.get_entropy_coefs()
+
+        # Compute separate entropy bonuses
+        rolling_entropy_bonus = rolling_coef * rolling_entropy_mean
+        scoring_entropy_bonus = scoring_coef * scoring_entropy_mean
+        total_entropy_bonus = rolling_entropy_bonus + scoring_entropy_bonus
+
+        loss = policy_loss + self.critic_coeff * v_loss - total_entropy_bonus
 
         diff = returns - v_ests.squeeze()
         ev = 1 - diff.var() / (returns.var() + 1e-8)
         self.log("train/value_explained_var", ev, prog_bar=False)
 
-        self.log("train/entropy", entropy_mean, prog_bar=False)
-        self.log("train/entropy_bonus", entropy_bonus, prog_bar=False)
-        self.log("train/entropy_coef", ent_coef, prog_bar=False)
+        # Log separate entropy metrics for each head
+        self.log("train/entropy_roll", rolling_entropy_mean, prog_bar=False)
+        self.log("train/entropy_score", scoring_entropy_mean, prog_bar=False)
+        self.log("train/entropy_bonus_roll", rolling_entropy_bonus, prog_bar=False)
+        self.log("train/entropy_bonus_score", scoring_entropy_bonus, prog_bar=False)
+        self.log("train/entropy_bonus_total", total_entropy_bonus, prog_bar=False)
+        self.log("train/entropy_coef_roll", rolling_coef, prog_bar=False)
+        self.log("train/entropy_coef_score", scoring_coef, prog_bar=False)
         self.log("train/policy_loss", policy_loss, prog_bar=True)
         self.log("train/v_loss", v_loss, prog_bar=False)
 
@@ -567,11 +691,6 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
                 policy_movement = (kl_roll_mean + kl_score_mean) / 2.0
                 self.log("diagnostics/policy_movement", policy_movement, prog_bar=False)
 
-        # Run sweep test evaluation at epochs 99, 199, 299, 399, 499, etc.
-        # (every 100 epochs, not counting epoch 0)
-        if (self.current_epoch + 1) % 100 == 0:
-            self.run_sweep_test_evaluation()
-
     def on_train_start(self) -> None:
         """Initialize environments and configure metric visualizations."""
         # Configure WandB-specific visualizations if using WandB
@@ -614,6 +733,9 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
 
     def on_train_end(self) -> None:
         """Close validation environments at the end of training."""
+        # Run comprehensive test evaluation at the end of training
+        self.run_sweep_test_evaluation(run_deterministic=True, run_stochastic=False)
+
         for env in self.validation_envs:
             env.close()
         self.validation_envs.clear()

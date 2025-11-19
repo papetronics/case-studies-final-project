@@ -1,146 +1,63 @@
-from enum import IntEnum
+from collections.abc import Generator
+from enum import Enum
 
 import numpy as np
 import torch
 from torch import nn
 
-from environments.full_yahtzee_env import FINAL_ROLL, Observation
+from environments.full_yahtzee_env import ActionType, Observation
 from utilities.activation_functions import ActivationFunction, ActivationFunctionName
-from utilities.scoring_helper import (
-    NUMBER_OF_CATEGORIES,
-    NUMBER_OF_DICE,
-    NUMBER_OF_DICE_SIDES,
-    YAHTZEE_SCORE,
-    ScoreCategory,
-)
+from utilities.scoring_helper import NUMBER_OF_DICE
 from utilities.sequential_block import SequentialBlock
 
+from .features import PhiFeature
 from .modules import Block, RollingHead, ScoringHead, ValueHead
 
 
-class BonusFlags(IntEnum):
-    """Flags for different bonus information to include in the model input."""
+class RollingActionRepresentation(str, Enum):
+    """Representation for rolling actions."""
 
-    ## The raw upper score 0-105
-    TOTAL_UPPER_SCORE = 0
-
-    ## The raw upper score normalized to [0, 1]
-    NORMALIZED_TOTAL_UPPER_SCORE = 1
-
-    ## Points away from bonus, i.e. max(0, 63-upper)
-    POINTS_AWAY_FROM_BONUS = 2
-
-    ## Percent progress towards bonus (0.0 to 1.0)
-    PERCENT_PROGRESS_TOWARDS_BONUS = 3
-
-    ## Golf Scoring (sum each scored category as +/- from getting 3 dice of that category)
-    GOLF_SCORING = 4
-
-    ## Golf Scoring normalized to [-1, 1]
-    NORMALIZED_GOLF_SCORING = 5
-
-    ## Per-category score needed to achieve bonus
-    AVERAGE_SCORE_NEEDED_PER_OPEN_CATEGORY = 6
+    BERNOULLI = "bernoulli"  # 5 independent binary decisions (one per die)
+    CATEGORICAL = "categorical"  # Single choice from 32 possible masks
 
 
-UPPER_SCORE_THRESHOLD = 63
-MAX_UPPER_SCORE = 5 * (1 + 2 + 3 + 4 + 5 + 6)  # 5 dice, each can contribute 1-6
-GOLF_TARGET = (np.arange(6) + 1) * 3  # Target score for golf scoring per category
+def all_dice_masks() -> Generator[ActionType, None, None]:
+    """Generate all possible dice hold masks (5 dice, each can be held or not)."""
+    for i in [0, 1]:
+        for j in [0, 1]:
+            for k in [0, 1]:
+                for l in [0, 1]:  # noqa: E741
+                    for m in [0, 1]:
+                        yield (i, j, k, l, m)
 
 
-def get_input_dimensions(bonus_flags: set[BonusFlags]) -> int:
-    """Calculate the input dimension for the model based on bonus flags.
+DICE_MASKS = list(all_dice_masks())
+assert len(DICE_MASKS) == 32  # 2^5 possible maskss  # noqa: PLR2004
 
-    Model inputs:
-      - Dice [30]: One-hot encoding of 5 dice (6 sides each) = 5 * 6 = 30
-      - Rolls Used [3]: One-hot encoding of rolls used (0, 1, 2) = 3
-      - Available Categories [13]: One-hot encoding of available scoring categories = 13
-      - Current Phase [1]: Current phase of the game (0: rolling, 1: scoring) = 1
-      - Dice Counts [6]: Counts of each die face (1-6) = 6
-      - Bonus Information [varies]: Various bonus-related inputs = len(bonus_flags)
-      - Has Earned Yahtzee [1]: Whether the player has already scored a Yahtzee = 1
+
+def get_input_dimensions(features: list[PhiFeature]) -> int:
+    """Calculate the input dimension for the model based on features.
+
+    Model inputs are determined by the sum of all feature dimensions.
+    Features should be added in the same order they're concatenated in phi().
     """
-    return int(
-        (NUMBER_OF_DICE * NUMBER_OF_DICE_SIDES)  # Dice one-hot
-        + (FINAL_ROLL + 1)  # Rolls used one-hot
-        + NUMBER_OF_CATEGORIES  # Available categories
-        + 1  # Current phase
-        + NUMBER_OF_DICE_SIDES  # Dice counts
-        + len(bonus_flags)  # Bonus information
-        + 1  # Has earned Yahtzee
-    )
+    return sum(f.size for f in features)
 
 
 def phi(
-    observation: Observation, bonus_flags: set[BonusFlags], device: torch.device
+    observation: Observation,
+    features: list[PhiFeature],
+    device: torch.device,
 ) -> torch.Tensor:
-    """Convert observation dictionary to input tensor for the model."""
-    dice = observation["dice"]  # numpy array showing the actual dice, e.g. [1, 3, 5, 6, 2]
-    dice_counts = np.bincount(dice, minlength=7)[1:]  # counts of dice faces from 1 to 6
-    rolls_used = observation["rolls_used"]  # integer: 0, 1, or 2
-    available_categories = observation[
-        "score_sheet_available_mask"
-    ]  # mask for available scoring categories (13,)
-    phase = observation.get("phase", 0)  # Current phase of the game (0: rolling, 1: scoring)
+    """Convert observation dictionary to input tensor for the model.
 
-    bonus_information = []
+    Simply computes all features in order and concatenates them.
+    """
+    # Compute all features in order
+    feature_vectors = [feature.compute(observation) for feature in features]
 
-    total_upper_score = observation["score_sheet"][:6].sum()
-
-    golf_score = np.sum(
-        (observation["score_sheet"][:6] - GOLF_TARGET) * (1 - available_categories[:6])
-    )
-
-    normalized_golf_score = (
-        golf_score / UPPER_SCORE_THRESHOLD
-        if golf_score < 0
-        else golf_score / (MAX_UPPER_SCORE - UPPER_SCORE_THRESHOLD)
-    )
-
-    if BonusFlags.TOTAL_UPPER_SCORE in bonus_flags:
-        bonus_information.append(total_upper_score)
-
-    if BonusFlags.NORMALIZED_TOTAL_UPPER_SCORE in bonus_flags:
-        bonus_information.append(total_upper_score / MAX_UPPER_SCORE)
-
-    if BonusFlags.POINTS_AWAY_FROM_BONUS in bonus_flags:
-        points_away = max(0, UPPER_SCORE_THRESHOLD - total_upper_score)
-        bonus_information.append(points_away)
-
-    if BonusFlags.PERCENT_PROGRESS_TOWARDS_BONUS in bonus_flags:
-        percent_progress = min(1.0, total_upper_score / UPPER_SCORE_THRESHOLD)
-        bonus_information.append(percent_progress)
-
-    if BonusFlags.GOLF_SCORING in bonus_flags:
-        bonus_information.append(normalized_golf_score)
-
-    if BonusFlags.AVERAGE_SCORE_NEEDED_PER_OPEN_CATEGORY in bonus_flags:
-        num_open_categories = np.sum(available_categories[:6])  # Only upper categories
-        if num_open_categories > 0:
-            points_needed = max(0, UPPER_SCORE_THRESHOLD - total_upper_score)
-            average_needed = points_needed / num_open_categories
-        else:
-            average_needed = 0.0
-        bonus_information.append(average_needed)
-
-    dice_onehot = np.eye(6)[dice - 1].flatten()
-    rolls_onehot = np.eye(3)[rolls_used]
-
-    has_earned_yahtzee = observation["score_sheet"][ScoreCategory.YAHTZEE] == YAHTZEE_SCORE
-
-    # print(available_categories)
-
-    input_vector = np.concatenate(
-        [
-            dice_onehot,
-            dice_counts,
-            rolls_onehot,
-            np.array(bonus_information),
-            [phase],
-            [has_earned_yahtzee],
-            available_categories,
-        ]
-    )
+    # Concatenate all feature vectors
+    input_vector = np.concatenate(feature_vectors)
     return torch.FloatTensor(input_vector).to(device)
 
 
@@ -148,11 +65,18 @@ def sample_action(
     rolling_probs: torch.Tensor,
     scoring_probs: torch.Tensor,
     value_est: torch.Tensor,
+    rolling_action_representation: RollingActionRepresentation,
 ) -> tuple[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
     """Sample an action given logits (rolling probs, scoring probs, and value estimate)."""
-    rolling_dist = torch.distributions.Bernoulli(rolling_probs)
-    rolling_tensor = rolling_dist.sample()
-    rolling_log_prob = rolling_dist.log_prob(rolling_tensor).sum()
+    rolling_dist: torch.distributions.Distribution
+    if rolling_action_representation == RollingActionRepresentation.BERNOULLI:
+        rolling_dist = torch.distributions.Bernoulli(rolling_probs)
+        rolling_tensor = rolling_dist.sample()
+        rolling_log_prob = rolling_dist.log_prob(rolling_tensor).sum(dim=-1)
+    else:  # CATEGORICAL
+        rolling_dist = torch.distributions.Categorical(rolling_probs)
+        rolling_tensor = rolling_dist.sample()
+        rolling_log_prob = rolling_dist.log_prob(rolling_tensor).sum()
 
     scoring_dist = torch.distributions.Categorical(scoring_probs)
     scoring_tensor = scoring_dist.sample()
@@ -162,19 +86,42 @@ def sample_action(
 
 
 def select_action(
-    rolling_probs: torch.Tensor, scoring_probs: torch.Tensor
+    rolling_probs: torch.Tensor,
+    scoring_probs: torch.Tensor,
+    rolling_action_representation: RollingActionRepresentation,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Select deterministic action using argmax/threshold (for validation/testing).
+    """Select deterministic action using argmax/threshold (for validation/testing)."""
+    if rolling_action_representation == RollingActionRepresentation.BERNOULLI:
+        # Threshold at 0.5: keep dice with prob > 0.5
+        rolling_tensor = (rolling_probs > 0.5).float()  # noqa: PLR2004
+    else:  # CATEGORICAL
+        rolling_tensor = rolling_probs.argmax(dim=-1)
 
-    Uses >0.5 threshold for rolling decisions and argmax for scoring decisions.
-    """
-    # Rolling: threshold at 0.5 (keep dice with prob > 0.5)
-    rolling_tensor = (rolling_probs > 0.5).float()  # noqa: PLR2004
-
-    # Scoring: argmax to select highest probability category
     scoring_tensor = scoring_probs.argmax(dim=-1)
 
     return (rolling_tensor, scoring_tensor)
+
+
+def convert_rolling_action_to_hold_mask(
+    rolling_action: torch.Tensor,
+    rolling_action_representation: RollingActionRepresentation,
+) -> np.ndarray:
+    """Convert a rolling action tensor to a numpy hold mask.
+
+    For Categorical: looks up the mask in DICE_MASKS
+    For Bernoulli: directly converts to boolean numpy array
+    """
+    if rolling_action_representation == RollingActionRepresentation.CATEGORICAL:
+        return np.array(DICE_MASKS[int(rolling_action.item())], dtype=bool)
+    else:  # BERNOULLI
+        return rolling_action.cpu().numpy().astype(bool)
+
+
+class CouldNotFindCategoryMaskFeatureError(Exception):
+    """Exception raised when the 'available_categories' feature is not found in the model features."""
+
+    def __init__(self) -> None:
+        super().__init__("Could not find 'available_categories' feature in the model features.")
 
 
 class YahtzeeAgent(nn.Module):
@@ -186,21 +133,43 @@ class YahtzeeAgent(nn.Module):
         num_hidden: int,
         dropout_rate: float,
         activation_function: ActivationFunctionName,
+        features: list[PhiFeature],
+        rolling_action_representation: RollingActionRepresentation | str,
     ):
         super().__init__()
 
         activation = ActivationFunction[activation_function].value
 
         self.dropout_rate = dropout_rate
+        # Convert string to enum if needed
+        self.rolling_action_representation = (
+            RollingActionRepresentation(rolling_action_representation)
+            if isinstance(rolling_action_representation, str)
+            else rolling_action_representation
+        )
 
-        self.bonus_flags: set[BonusFlags] = {BonusFlags.PERCENT_PROGRESS_TOWARDS_BONUS}
+        self.features: list[PhiFeature] = features
 
-        input_size = get_input_dimensions(self.bonus_flags)
+        # Find the index of the available_categories feature to extract the mask
+        self.available_categories_idx: int | None = None
+        current_idx = 0
+        for feature in features:
+            if feature.name == "available_categories":
+                self.available_categories_idx = current_idx
+                break
+            current_idx += feature.size
+
+        input_size = get_input_dimensions(self.features)
 
         ## Model outputs:
-        #   - Action Probabilities [5]: Probability of re-rolling each of the 5 dice
+        #   - Rolling action:
+        #       - Bernoulli: [5] - Probability of re-rolling each die
+        #       - Categorical: [32] - Probability of selecting a particular dice mask
         #   - Scoring probabilities [13]: Probability of selecting each scoring category
-        dice_output_size = 5
+        if self.rolling_action_representation == RollingActionRepresentation.BERNOULLI:
+            dice_output_size = NUMBER_OF_DICE  # 5 independent binary decisions
+        else:  # CATEGORICAL
+            dice_output_size = len(DICE_MASKS)  # 32 possible masks
         scoring_output_size = 13
 
         layers = [Block(input_size, hidden_size, dropout_rate, activation)]
@@ -276,8 +245,15 @@ class YahtzeeAgent(nn.Module):
         spine = self.network(x)
 
         rolling_output = self.rolling_head(spine)
-        # Select last 13 inputs as mask for scoring
-        scoring_output = self.scoring_head(spine, x[:, -13:])
+
+        # Extract available_categories mask from input
+        if self.available_categories_idx is not None:
+            # Extract the 13-element mask from the input features
+            mask = x[:, self.available_categories_idx : self.available_categories_idx + 13]
+        else:
+            raise CouldNotFindCategoryMaskFeatureError()
+
+        scoring_output = self.scoring_head(spine, mask)
         value_output = self.value_head(spine)
 
         return rolling_output.squeeze(0), scoring_output.squeeze(0), value_output.squeeze(0)

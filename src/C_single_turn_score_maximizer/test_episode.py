@@ -4,7 +4,13 @@ import gymnasium as gym
 import numpy as np
 import torch
 
-from C_single_turn_score_maximizer.model import YahtzeeAgent, phi, sample_action
+from C_single_turn_score_maximizer.model import (
+    ActionType,
+    YahtzeeAgent,
+    convert_rolling_action_to_hold_mask,
+    phi,
+    sample_action,
+)
 from C_single_turn_score_maximizer.trainer import SingleTurnScoreMaximizerREINFORCETrainer
 from environments.full_yahtzee_env import Action, Observation
 from utilities.scoring_helper import (
@@ -64,13 +70,19 @@ def run_episode(
 
     with torch.no_grad():
         while True:
-            input_tensor = phi(obs, model.bonus_flags, model.device).unsqueeze(0)
+            input_tensor = phi(obs, model.features, model.device).unsqueeze(0)
             rolling_probs, scoring_probs, v_est = model.forward(input_tensor)
-            actions, _, v_est = sample_action(rolling_probs, scoring_probs, v_est)
-            hold_action_tensor, scoring_action_tensor = actions
+            actions, _, v_est = sample_action(
+                rolling_probs, scoring_probs, v_est, model.rolling_action_representation
+            )
+            rolling_action, scoring_action_tensor = actions
+
+            hold_mask = convert_rolling_action_to_hold_mask(
+                rolling_action, model.rolling_action_representation
+            )
 
             action = {
-                "hold_mask": hold_action_tensor.cpu().numpy().astype(bool),
+                "hold_mask": hold_mask,
                 "score_category": scoring_action_tensor.cpu().item(),
             }
 
@@ -79,8 +91,8 @@ def run_episode(
             # Track dice state for display
             if obs["phase"] == 0:
                 # Rolling phase - update kept dice
-                kept_dice = obs["dice"][~hold_action_tensor.cpu().numpy().astype(bool)].tolist()
-                print_action_description(obs, hold_action_tensor, None)
+                kept_dice = obs["dice"][~np.array(rolling_action, dtype=bool)].tolist()
+                print_action_description(obs, rolling_action, None)
             else:
                 # Scoring phase
                 print_action_description(obs, None, scoring_action_tensor)
@@ -214,14 +226,14 @@ def print_game_state(
 
 def print_action_description(
     observation: Observation,
-    hold_action_tensor: torch.Tensor | None = None,
+    rolling_action: ActionType | None = None,
     scoring_action_tensor: torch.Tensor | None = None,
 ) -> None:
     """Print what action the model is taking."""
     print("\n" + "=" * 50)
-    if hold_action_tensor is not None:
+    if rolling_action is not None:
         # Rolling action
-        hold_mask = hold_action_tensor.cpu().numpy().astype(bool)
+        hold_mask = np.array(rolling_action, dtype=bool)
         reroll_dice = []
         keep_dice = []
 
