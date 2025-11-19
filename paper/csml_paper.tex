@@ -75,7 +75,7 @@ Policy-gradient methods are a family of algorithms which directly optimize a par
 A simple formulation of this is the REINFORCE algorithm \cite{williams-1992-reinforce}, which uses Monte-Carlo returns $G_{t}^{MC}$ on finite, episodic tasks; however, while unbiased, it suffers from high variance.
 Actor-critic methods \cite{konda-1999-actorcritic, mnih-2016-a3c} address this by learning a seperate value function, the critic $V_{\phi}$, which serves a variance reducing baseline.
 A recent and popular algorithm, proximal policy optimization (PPO) \cite{schulman-2017-ppo}, utilizes a clipped objective $L^{CLIP}(\theta)$
-and explicit Kulback-Leibler (KL) divergence control to dramatically reduce variance and ensure stable updates.
+and explicit Kullback-Leibler (KL) divergence control to dramatically reduce variance and ensure stable updates.
 
 In long episodic games, the choice of return calculation affects sample efficiency, bias, and variance. Monte-Carlo (MC) returns $G_{t}^{MC}$ use a summation over the full series of rewards until the end of the episode.
 This approach is unbiased but has high variance.
@@ -107,7 +107,7 @@ In total, these works establish that RL methods can handle highly stochastic, co
 \subsection{DP Methods for Yahtzee}
 Solitaire \textit{Yahtzee} is a complex game with an upper bound of $~7 \times 10^{15}$ possible states in its state space.
 It has a high degree of stochasticity, as dice rolls are the primary driver of state transitions.
-Despite this, it has been analytically solved using dynamic programming techniques; \citet{verhoeff-1999-solitaire-yahtzee}, calculated an that the average score achieved during ideal play is $254.59$ points, which serves as the gold-standard baselline for solitaire \textit{Yahtzee}.
+Despite this, it has been analytically solved using dynamic programming techniques; \citet{verhoeff-1999-solitaire-yahtzee}, calculated that the average score achieved during ideal play is $254.59$ points, which serves as the gold-standard baselline for solitaire \textit{Yahtzee}.
 Later work by \citet{glenn-2006-optimal-yahtzee} optimized the DP approach via symmetries to propose a more efficient algorithm for computing the optimal policy, with a reachable state space of $~5.3 \times 10^8$ states \cite{glenn-2007-solitaire-yahtzee}.
 
 However, adversarial \textit{Yahtzee} remains an open problem.
@@ -116,7 +116,7 @@ Approximation methods must be utilized for larger player counts.
 
 \subsection{Reinforcement Learning for Yahtzee}
 Some prior attempts have been made to apply reinforcement learning to \textit{Yahtzee}.
-YAMS attempted used Q-learning and SARSA to attempt to learn \textit{Yahtzee}, but was not able to surpass $~120$ points median \cite{belaich-2024-yams}.
+YAMS attempted to use Q-learning and SARSA to attempt to learn \textit{Yahtzee}, but was not able to surpass $~120$ points median \cite{belaich-2024-yams}.
 Likewise, \citet{kang-2018-yahtzee-rl} applied hierarchical MAX-Q, achieving an average score of $129.58$ and a 67\% win-rate over a 1-turn expectimax agent baseline.
 \citet{vasseur-2019-strategy-ladders} explored strategy ladders for multiplayer \textit{Yahtzee}, to understand how sensitive Deep-Q networks were to the upper-bonus threshold.
 Later, \cite{yuan-2023-two-player-yahtzee} applied Deep-Q networks to the adversarial setting.
@@ -125,7 +125,7 @@ Additionally, some recent informal work has reported success using RL methods fo
 For example, Yahtzotron used heavy supervised pretraining and A2C to achieve an average of $~236$ points \cite{Haefner2021Yahtzotron}.
 Although it is unclear if the results are repeatable, \citet{DutschkeYahtzee} reports a deep-Q agent achieving a score of $241.6 \pm 40.7$ after just 8,000 games.
 
-No prior work systemically explores policy gradient methods with variance reduction tricks on full-game solitaire \textit{Yahtzee}, attempts transfer learning from single-turn optimization, provides a detailed ablation and failure mode analysis,
+No prior work systematically explores policy gradient methods with variance reduction tricks on full-game solitaire \textit{Yahtzee}, attempts transfer learning from single-turn optimization, provides a detailed ablation and failure mode analysis,
 or offers an architecture that is theoretically transferrable to multiplayer settings.
 
 
@@ -203,8 +203,8 @@ We can define a mask vector for this:
 If a player achieves a total score of 63 or more in the upper section (categories 1-6), they receive a bonus of 35 points:
 $$
   B(\mathbf{c}) = \begin{cases}
-    0,  & 63 \leq \sum_{i=1}^{6} \mathbf{u}(\mathbf{c})_i \cdot \mathbf{c}_i \\
-    35, & \text{otherwise}
+    35, & \sum_{i=1}^{6} \mathbf{u}(\mathbf{c})_i \cdot \mathbf{c}_i \geq 63 \\
+    0,  & \text{otherwise}
   \end{cases}
 $$
 
@@ -247,6 +247,11 @@ the network to learn explicit long-term strategies, such as planning for the upp
 \subsection{State Representation \& Input Features}
 The design of $\mathbf{\phi}(\mathbf{s}) \rightarrow \mathbf{x}$ is one of the most critical components to the performance of a model \cite{sutton-2018-reinforcement-book}.
 
+Formally, we define the state representation function as
+\begin{equation}
+  \mathbf{x} = \mathbf{\phi}(\mathbf{s}),
+\end{equation}
+where $\mathbf{s}$ is the raw MDP state (e.g., dice configuration, scorecard, roll index, turn index), and $\mathbf{x}$ is the feature vector or tensor provided as input to the model. The choice of $\mathbf{\phi}$ determines how information from the environment is encoded for learning and inference.
 As such, several different representations were tested to evaluate their impact on learning efficiency and final performance.
 
 \subsubsection{Dice Representation}
@@ -326,9 +331,9 @@ and Swish activations \cite{ramachandran-2017-swish} to introduce stable non-lin
 We utilize two distinct heads for the rolling and scoring actions, allowing the model to specialize in
 each task \cite{tavakoli2018actionbranching, hausknecht2016parameterized}.
 We also implement a value head, this outputs a scalar which is used as the baseline for REINFORCE and the value estimate for actor-critic methods.
-Each of these networks have a fully connected hidden layer before the final output layer.
+Each of these networks has a fully connected hidden layer before the final output layer.
 
-In the rolling action head, we use either 6 outputs with sigmoid activations for Bernoulli representation, or 32 outputs with softmax activations for the categorical representation.
+In the rolling action head, we use either 5 outputs with sigmoid activations for Bernoulli representation, or 32 outputs with softmax activations for the categorical representation.
 
 In the scoring action head, we use 13 outputs with softmax activations for the categorical distribution over scoring categories.
 
