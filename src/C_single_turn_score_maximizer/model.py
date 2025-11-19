@@ -15,6 +15,7 @@ from utilities.scoring_helper import (
 )
 from utilities.sequential_block import SequentialBlock
 
+from .features import PhiFeature
 from .modules import Block, RollingHead, ScoringHead, ValueHead
 
 
@@ -48,8 +49,8 @@ MAX_UPPER_SCORE = 5 * (1 + 2 + 3 + 4 + 5 + 6)  # 5 dice, each can contribute 1-6
 GOLF_TARGET = (np.arange(6) + 1) * 3  # Target score for golf scoring per category
 
 
-def get_input_dimensions(bonus_flags: set[BonusFlags]) -> int:
-    """Calculate the input dimension for the model based on bonus flags.
+def get_input_dimensions(bonus_flags: set[BonusFlags], features: list[PhiFeature]) -> int:
+    """Calculate the input dimension for the model based on bonus flags and features.
 
     Model inputs:
       - Dice [30]: One-hot encoding of 5 dice (6 sides each) = 5 * 6 = 30
@@ -59,7 +60,9 @@ def get_input_dimensions(bonus_flags: set[BonusFlags]) -> int:
       - Dice Counts [6]: Counts of each die face (1-6) = 6
       - Bonus Information [varies]: Various bonus-related inputs = len(bonus_flags)
       - Has Earned Yahtzee [1]: Whether the player has already scored a Yahtzee = 1
+      - Features [varies]: Sum of all feature dimensions = sum(f.size for f in features)
     """
+    features_size = sum(f.size for f in features)
     return int(
         (NUMBER_OF_DICE * NUMBER_OF_DICE_SIDES)  # Dice one-hot
         + (FINAL_ROLL + 1)  # Rolls used one-hot
@@ -68,12 +71,15 @@ def get_input_dimensions(bonus_flags: set[BonusFlags]) -> int:
         + NUMBER_OF_DICE_SIDES  # Dice counts
         + len(bonus_flags)  # Bonus information
         + 1  # Has earned Yahtzee
-        + 1  # Percent of game remaining
+        + features_size  # Configurable features
     )
 
 
 def phi(
-    observation: Observation, bonus_flags: set[BonusFlags], device: torch.device
+    observation: Observation,
+    bonus_flags: set[BonusFlags],
+    features: list[PhiFeature],
+    device: torch.device,
 ) -> torch.Tensor:
     """Convert observation dictionary to input tensor for the model."""
     dice = observation["dice"]  # numpy array showing the actual dice, e.g. [1, 3, 5, 6, 2]
@@ -129,22 +135,31 @@ def phi(
 
     has_earned_yahtzee = observation["score_sheet"][ScoreCategory.YAHTZEE] == YAHTZEE_SCORE
 
-    # print(available_categories)
+    # Compute all enabled features
+    feature_vectors = [feature.compute(observation) for feature in features]
 
-    percent_of_game_remaining = 1.0 - (np.sum(available_categories) / NUMBER_OF_CATEGORIES)
+    # Build the input vector components
+    components = [
+        dice_onehot,
+        dice_counts,
+        rolls_onehot,
+    ]
 
-    input_vector = np.concatenate(
+    # Add feature vectors if any
+    if feature_vectors:
+        components.extend(feature_vectors)
+
+    # Add remaining components
+    components.extend(
         [
-            dice_onehot,
-            dice_counts,
-            rolls_onehot,
             np.array(bonus_information),
-            [percent_of_game_remaining],
             [phase],
             [has_earned_yahtzee],
             available_categories,
         ]
     )
+
+    input_vector = np.concatenate(components)
     return torch.FloatTensor(input_vector).to(device)
 
 
@@ -190,6 +205,7 @@ class YahtzeeAgent(nn.Module):
         num_hidden: int,
         dropout_rate: float,
         activation_function: ActivationFunctionName,
+        features: list[PhiFeature],
     ):
         super().__init__()
 
@@ -198,8 +214,9 @@ class YahtzeeAgent(nn.Module):
         self.dropout_rate = dropout_rate
 
         self.bonus_flags: set[BonusFlags] = {BonusFlags.PERCENT_PROGRESS_TOWARDS_BONUS}
+        self.features: list[PhiFeature] = features
 
-        input_size = get_input_dimensions(self.bonus_flags)
+        input_size = get_input_dimensions(self.bonus_flags, self.features)
 
         ## Model outputs:
         #   - Action Probabilities [5]: Probability of re-rolling each of the 5 dice

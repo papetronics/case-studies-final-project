@@ -20,6 +20,8 @@
     "mypy.targets": [
         "src"
     ],
+    "latex-workshop.formatting.latex": "latexindent",
+    "latex-workshop.texcount.autorun": "never",
     "latex-workshop.latex.tools": [
         {
             "name": "pdflatex",

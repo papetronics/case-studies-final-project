@@ -2,7 +2,11 @@
     "args": [],
     "entry_point": [],
     "run_config": {
+<<<<<<< HEAD:wandb/long_baseline.json
         "total_train_games": 2000000,
+=======
+        "game_scenario": "single_turn",
+>>>>>>> main:wandb/single_turn_long.json
         "epochs": 500,
         "learning_rate": 0.00025,
         "min_lr_ratio": 0.01,

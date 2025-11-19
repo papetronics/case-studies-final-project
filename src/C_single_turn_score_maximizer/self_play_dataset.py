@@ -17,18 +17,18 @@ class EpisodeBatch(TypedDict):
 
     Tensors are pre-flattened: (BATCH_SIZE * num_steps, ...) where:
     - BATCH_SIZE = number of parallel episodes collected
-    - num_steps = 39 for full game episodes (13 turns * 3 steps per turn)
+    - num_steps = 3 for single-turn episodes, 39 for full-game episodes
 
     The dataset collects in parallel with batched forward passes and flattens
     before returning to avoid reshape operations in the trainer.
     """
 
-    states: torch.Tensor  # (BATCH_SIZE*39, state_size) float32
-    rolling_actions: torch.Tensor  # (BATCH_SIZE*39, 5) int (binary mask)
-    scoring_actions: torch.Tensor  # (BATCH_SIZE*39,) int (category index 0-12)
-    rewards: torch.Tensor  # (BATCH_SIZE*39,) float32
-    next_states: torch.Tensor  # (BATCH_SIZE*39, state_size) float32
-    phases: torch.Tensor  # (BATCH_SIZE*39,) int (0=rolling, 1=scoring)
+    states: torch.Tensor  # (BATCH_SIZE*num_steps, state_size) float32
+    rolling_actions: torch.Tensor  # (BATCH_SIZE*num_steps, 5) int (binary mask)
+    scoring_actions: torch.Tensor  # (BATCH_SIZE*num_steps,) int (category index 0-12)
+    rewards: torch.Tensor  # (BATCH_SIZE*num_steps,) float32
+    next_states: torch.Tensor  # (BATCH_SIZE*num_steps, state_size) float32
+    phases: torch.Tensor  # (BATCH_SIZE*num_steps,) int (0=rolling, 1=scoring)
 
 
 class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
@@ -36,16 +36,20 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
     A dataset that collects episodes by playing against itself using the current policy.
 
     This dataset generates episodes on-the-fly by interacting with the Yahtzee environment
-    using the current policy network. Each __getitem__ call collects a full batch of complete
-    game episodes in parallel with batched forward passes for GPU efficiency.
+    using the current policy network. Each __getitem__ call collects a full batch of episodes
+    in parallel with batched forward passes for GPU efficiency.
 
-    Returns a dict of pre-flattened tensors with shapes (BATCH_SIZE*39, ...):
-      - "states": (BATCH_SIZE*39, state_size) - State tensor for each step
-      - "rolling_actions": (BATCH_SIZE*39, 5) - Binary mask for which dice to reroll
-      - "scoring_actions": (BATCH_SIZE*39,) - Category to score (0-12)
-      - "rewards": (BATCH_SIZE*39,) - Immediate rewards
-      - "next_states": (BATCH_SIZE*39, state_size) - Next state tensors
-      - "phases": (BATCH_SIZE*39,) - Phase indicator (0=rolling, 1=scoring)
+    Supports two modes:
+    - single_turn: 3-step episodes (roll, roll, score) with staggered environments
+    - full_game: 39-step episodes (13 turns * 3 steps) starting from turn 0
+
+    Returns a dict of pre-flattened tensors with shapes (BATCH_SIZE*num_steps, ...):
+      - "states": (BATCH_SIZE*num_steps, state_size) - State tensor for each step
+      - "rolling_actions": (BATCH_SIZE*num_steps, 5) - Binary mask for which dice to reroll
+      - "scoring_actions": (BATCH_SIZE*num_steps,) - Category to score (0-12)
+      - "rewards": (BATCH_SIZE*num_steps,) - Immediate rewards
+      - "next_states": (BATCH_SIZE*num_steps, state_size) - Next state tensors
+      - "phases": (BATCH_SIZE*num_steps,) - Phase indicator (0=rolling, 1=scoring)
     """
 
     def __init__(
@@ -54,6 +58,7 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
         return_calculator: ReturnCalculator,
         size: int,
         batch_size: int,
+        num_steps_per_episode: int,
         stagger_environments: bool = False,
     ) -> None:
         """
@@ -64,6 +69,7 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
             return_calculator: The return calculator to compute returns for each episode
             size: The number of batches in the dataset (batches per epoch)
             batch_size: The number of parallel episodes to collect per batch
+            num_steps_per_episode: Number of steps per episode (3 for single_turn, 39 for full_game)
             stagger_environments: If True, stagger each environment to a different turn
                 (0-12) to avoid temporal bias. Set to False when running full games.
         """
@@ -71,6 +77,7 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
         self.return_calculator = return_calculator
         self.size = size
         self.batch_size = batch_size
+        self.num_steps_per_episode = num_steps_per_episode
         self.stagger_environments = stagger_environments
 
         # Create pool of environments for parallel collection
@@ -120,7 +127,7 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
 
     def __getitem__(self, idx: int) -> EpisodeBatch:
         """
-        Collect and return a batch of complete game episodes in parallel with batched forward passes.
+        Collect and return a batch of episodes in parallel with batched forward passes.
 
         Args:
             idx: Index (not used, but required by Dataset interface)
@@ -129,12 +136,12 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
         -------
         EpisodeBatch
             A dict containing pre-flattened batch episode data with keys:
-            - "states": (BATCH_SIZE*39, state_size) float32
-            - "rolling_actions": (BATCH_SIZE*39, 5) int
-            - "scoring_actions": (BATCH_SIZE*39,) int
-            - "rewards": (BATCH_SIZE*39,) float32
-            - "next_states": (BATCH_SIZE*39, state_size) float32
-            - "phases": (BATCH_SIZE*39,) int
+            - "states": (BATCH_SIZE*num_steps, state_size) float32
+            - "rolling_actions": (BATCH_SIZE*num_steps, 5) int
+            - "scoring_actions": (BATCH_SIZE*num_steps,) int
+            - "rewards": (BATCH_SIZE*num_steps,) float32
+            - "next_states": (BATCH_SIZE*num_steps, state_size) float32
+            - "phases": (BATCH_SIZE*num_steps,) int
         """
         # Get current observations from all environments
         observations = []
@@ -142,11 +149,11 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
             unwrapped: YahtzeeEnv = cast("YahtzeeEnv", env.unwrapped)
             observations.append(unwrapped.observe())
 
-        num_steps = 39  # Full game: 13 turns * 3 steps per turn
+        num_steps = self.num_steps_per_episode
         device = next(self.policy_net.parameters()).device
-        state_size = get_input_dimensions(self.policy_net.bonus_flags)
+        state_size = get_input_dimensions(self.policy_net.bonus_flags, self.policy_net.features)
 
-        # Pre-allocate tensors for all episodes (BATCH_SIZE, 39, ...)
+        # Pre-allocate tensors for all episodes (BATCH_SIZE, num_steps, ...)
         states = torch.zeros(
             self.batch_size, num_steps, state_size, dtype=torch.float32, device=device
         )
@@ -161,10 +168,13 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
         phases = torch.zeros(self.batch_size, num_steps, dtype=torch.long, device=device)
 
         with torch.no_grad():  # No gradients needed during data collection
-            for step_idx in range(num_steps):  # Full game: 39 steps
+            for step_idx in range(num_steps):
                 # Batch convert all observations to state tensors
                 state_tensors = torch.stack(
-                    [phi(obs, self.policy_net.bonus_flags, device) for obs in observations]
+                    [
+                        phi(obs, self.policy_net.bonus_flags, self.policy_net.features, device)
+                        for obs in observations
+                    ]
                 )  # (BATCH_SIZE, state_size)
 
                 states[:, step_idx, :] = state_tensors
@@ -201,7 +211,9 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
                     rewards[env_idx, step_idx] = float(reward)
 
                     # Get next state tensor
-                    next_state_tensor = phi(next_obs, self.policy_net.bonus_flags, device)
+                    next_state_tensor = phi(
+                        next_obs, self.policy_net.bonus_flags, self.policy_net.features, device
+                    )
                     next_states[env_idx, step_idx, :] = next_state_tensor
 
                     # Update observation for next step
@@ -209,10 +221,10 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
                         next_obs, _ = env.reset()
                     observations[env_idx] = next_obs
 
-        # After running full games, all environments should have been reset
-        # (no assertion needed since games naturally terminate after 13 turns)
+        # After collecting episodes, environments may need to be reset
+        # (full_game: naturally terminates after 13 turns; single_turn: after 1 turn)
 
-        # Flatten batch and time dimensions: (BATCH_SIZE, 39, ...) -> (BATCH_SIZE*39, ...)
+        # Flatten batch and time dimensions: (BATCH_SIZE, num_steps, ...) -> (BATCH_SIZE*num_steps, ...)
         return {
             "states": states.view(-1, state_size),
             "rolling_actions": rolling_actions.view(-1, 5),

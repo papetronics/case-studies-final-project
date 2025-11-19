@@ -1,0 +1,249 @@
+% ============================================================================
+% 2. RELATED WORK
+% ============================================================================
+% This is where you dump most of the Yahtzee-specific and game-RL stuff, 
+% plus classic RL theory.
+
+% ----------------------------------------------------------------------------
+% 2.1 Yahtzee and Close Cousins
+% ----------------------------------------------------------------------------
+
+% NOTE: glenn-2006-optimal-yahtzee, glenn-2007-solitaire-yahtzee, 
+% verhoeff-1999-solitaire-yahtzee, pawlewicz-2011-multiplayer-yahtzee 
+% are already defined in 1_introduction.bib and can be re-cited here.
+
+% Student / project work:
+@unpublished{kang-2018-yahtzee-rl,
+  author = {Kang, Minhyung and Schroeder, Luca},
+  title  = {Reinforcement Learning for Solving Yahtzee},
+  year   = {2018},
+  note   = {AA228: Decision Making under Uncertainty, Stanford University, class project report},
+  url    = {https://web.stanford.edu/class/aa228/reports/2018/final75.pdf}
+}
+
+@unpublished{vasseur-2019-strategy-ladders,
+  author  = {Vasseur, Philip},
+  title   = {Using Deep Q-Learning to Compare Strategy Ladders of Yahtzee},
+  school  = {Yale University},
+  type    = {Undergraduate thesis, Department of Computer Science},
+  address = {New Haven, CT},
+  year    = {2019},
+  url     = {https://raw.githubusercontent.com/philvasseur/Yahtzee-DQN-Thesis/dcf2bfe15c3b8c0ff3256f02dd3c0aabdbcbc9bb/webpage/final_report.pdf},
+  note    = {Source code available at \url{https://github.com/philvasseur/Yahtzee-DQN-Thesis}}
+}
+
+@unpublished{yuan-2023-two-player-yahtzee,
+  author      = {Yuan, Max},
+  title       = {Using Deep Q-Learning to Play Two-Player Yahtzee},
+  note        = {Senior essay, Computer Science and Economics},
+  institution = {Yale University},
+  address     = {New Haven, CT, USA},
+  year        = {2023},
+  month       = {12},
+  advisor     = {James R. Glenn},
+  url         = {https://csec.yale.edu/senior-essays/fall-2023/using-deep-q-learning-play-two-player-yahtzee}
+}
+
+% Similar efforts
+@misc{belaich-2024-yams,
+  author = {Belaich, Alae},
+  title  = {{YAMS: Reinforcement Learning Project}},
+  year   = {2024},
+  url    = {https://github.com/abelaich/YAMS-Reinforcement-Learning-Project},
+  note   = {GitHub repository, accessed 2025-11-16}
+}
+
+@misc{Haefner2021Yahtzotron,
+  author = {Dion H{\"a}fner},
+  title  = {Learning to Play Yahtzee with Advantage Actor-Critic (A2C)},
+  url    = {https://dionhaefner.github.io/2021/04/yahtzotron-learning-to-play-yahtzee-with-advantage-actor-critic/},
+  year   = {2021},
+  note   = {Accessed: 2025-11-16}
+}
+
+@misc{DutschkeYahtzee,
+  author = {Markus Dutschke},
+  title  = {A Yahtzee/Kniffel Simulation Making Use of Machine Learning Techniques},
+  url    = {https://github.com/markusdutschke/yahtzee},
+  note   = {GitHub repository; accessed: 2025-11-16}
+}
+
+
+
+% ----------------------------------------------------------------------------
+% 2.2 RL in Stochastic / Combinatorial Games
+% ----------------------------------------------------------------------------
+
+% NOTE: Most of these are already defined in 1_introduction.bib:
+% tesauro1995tdgammon, silver2016alphago, silver2017alphagozero, silver2018alphazero,
+% moravcik2017deepstack, brown2018libratus, bard2020hanabi, bertsekas1996tetris,
+% gabillon2013tetris, osband2016bootstrappeddqn
+
+% Early practical discussion of TD-learning issues (stability, function approximation, etc.).
+% Cite when talking about nuts-and-bolts TD, training details, and convergence concerns.
+@article{tesauro1992practicaltd,
+  title   = {Practical Issues in Temporal Difference Learning},
+  author  = {Tesauro, Gerald},
+  journal = {Machine Learning},
+  volume  = {8},
+  number  = {3-4},
+  pages   = {257--277},
+  year    = {1992},
+  doi     = {10.1007/BF00992697}
+}
+
+% NFSP: deep RL + fictitious play for imperfect-information (poker-style) games.
+% Cite when you mention RL in imperfect-information, highly stochastic settings or mixtures of RL + supervised best-response learning.
+@article{heinrich2016nfsp,
+  title         = {Deep Reinforcement Learning from Self-Play in Imperfect-Information Games},
+  author        = {Heinrich, Johannes and Silver, David},
+  journal       = {CoRR},
+  volume        = {abs/1603.01121},
+  year          = {2016},
+  archiveprefix = {arXiv},
+  eprint        = {1603.01121}
+}
+
+% ----------------------------------------------------------------------------
+% 2.3 RL Foundations / Algorithms
+% ----------------------------------------------------------------------------
+% These can be introduced in Related Work and then re-used later in Methods
+
+% Reinforcement Learning textbook
+@book{sutton-2018-reinforcement-book,
+  title     = {Reinforcement Learning: An Introduction},
+  author    = {Sutton, Richard S. and Barto, Andrew G.},
+  year      = {2018},
+  edition   = {2nd},
+  publisher = {MIT Press},
+  address   = {Cambridge, MA},
+  isbn      = {978-0262039246}
+}
+
+% REINFORCE
+@article{williams-1992-reinforce,
+  author  = {Ronald J. Williams},
+  title   = {Simple Statistical Gradient-Following Algorithms for Connectionist Reinforcement Learning},
+  journal = {Machine Learning},
+  year    = {1992},
+  volume  = {8},
+  number  = {3-4},
+  pages   = {229--256},
+  doi     = {10.1007/BF00992696}
+}
+
+% Temporal Differences
+@article{sutton-1988-temporal-differences,
+  author  = {Richard S. Sutton},
+  title   = {Learning to Predict by the Methods of Temporal Differences},
+  journal = {Machine Learning},
+  year    = {1988},
+  volume  = {3},
+  number  = {1},
+  pages   = {9--44},
+  doi     = {10.1007/BF00115009}
+}
+
+% Policy Gradient
+@inproceedings{sutton-2000-policy-gradient,
+  author    = {Richard S. Sutton and David McAllester and Satinder Singh and Yishay Mansour},
+  title     = {Policy Gradient Methods for Reinforcement Learning with Function Approximation},
+  booktitle = {Advances in Neural Information Processing Systems 12 (NIPS 1999)},
+  year      = {2000},
+  pages     = {1057--1063}
+}
+
+% A2C
+@inproceedings{konda-1999-actorcritic,
+  author    = {Konda, Vijay and Tsitsiklis, John},
+  booktitle = {Advances in Neural Information Processing Systems},
+  editor    = {S. Solla and T. Leen and K. M\"{u}ller},
+  pages     = {},
+  publisher = {MIT Press},
+  title     = {Actor-Critic Algorithms},
+  url       = {https://proceedings.neurips.cc/paper_files/paper/1999/file/6449f44a102fde848669bdd9eb6b76fa-Paper.pdf},
+  volume    = {12},
+  year      = {1999}
+}
+
+
+% A3C
+@inproceedings{mnih-2016-a3c,
+  author    = {Volodymyr Mnih and Adria Puigdom{\`e}nech Badia and Mehdi Mirza and Alex Graves and Timothy Lillicrap and Tim Harley and David Silver and Koray Kavukcuoglu},
+  title     = {Asynchronous Methods for Deep Reinforcement Learning},
+  booktitle = {Proceedings of the 33rd International Conference on Machine Learning (ICML)},
+  year      = {2016}
+}
+
+% GAE (Generalized Advantage Estimation)
+
+@misc{schulman2016nutsbolts,
+  author       = {John Schulman},
+  title        = {The Nuts and Bolts of Deep {RL} Research},
+  howpublished = {NIPS 2016 Deep Reinforcement Learning Workshop},
+  year         = {2016},
+  note         = {Slides},
+  url          = {https://joschu.net/docs/nuts-and-bolts.pdf}
+}
+
+@article{schulman-2016-gae,
+  author  = {John Schulman and Philipp Moritz and Sergey Levine and Michael I. Jordan and Pieter Abbeel},
+  title   = {High-Dimensional Continuous Control Using Generalized Advantage Estimation},
+  journal = {arXiv preprint arXiv:1506.02438},
+  year    = {2016}
+}
+
+% PPO
+@article{schulman-2017-ppo,
+  author  = {John Schulman and Filip Wolski and Prafulla Dhariwal and Alec Radford and Oleg Klimov},
+  title   = {Proximal Policy Optimization Algorithms},
+  journal = {arXiv preprint arXiv:1707.06347},
+  year    = {2017}
+}
+
+% Subtracting a baseline
+@article{weaver2013optimal,
+  title         = {The Optimal Reward Baseline for Gradient-Based Reinforcement Learning},
+  author        = {Weaver, Lex and Tao, Nigel},
+  journal       = {CoRR},
+  volume        = {abs/1301.2315},
+  year          = {2013},
+  url           = {https://arxiv.org/abs/1301.2315},
+  eprint        = {1301.2315},
+  archiveprefix = {arXiv},
+  primaryclass  = {cs.LG}
+}
+
+% Variance reduction in policy gradients
+@article{greensmith-2004-variance-reduction,
+  author  = {Evan Greensmith and Peter L. Bartlett and Jonathan Baxter},
+  title   = {Variance Reduction Techniques for Gradient Estimates in Reinforcement Learning},
+  journal = {Journal of Machine Learning Research},
+  year    = {2004},
+  volume  = {5},
+  pages   = {1471--1530}
+}
+
+% High variance is unavoidable in RL
+@article{bjorck-2022-high-variance,
+  title         = {Is High Variance Unavoidable in RL? A Case Study in Continuous Control},
+  author        = {Bjorck, Johan and Gomes, Carla P. and Weinberger, Kilian Q.},
+  journal       = {arXiv preprint arXiv:2110.11222},
+  year          = {2022},
+  eprint        = {2110.11222},
+  archiveprefix = {arXiv},
+  primaryclass  = {cs.LG},
+  url           = {https://arxiv.org/abs/2110.11222}
+}
+
+% MDP's
+@book{Puterman1994MDP,
+  author    = {Martin L. Puterman},
+  title     = {Markov Decision Processes: Discrete Stochastic Dynamic Programming},
+  publisher = {Wiley},
+  series    = {Wiley Series in Probability and Statistics},
+  year      = {1994},
+  isbn      = {978-0-471-61977-2},
+  doi       = {10.1002/9780470316887},
+  url       = {https://doi.org/10.1002/9780470316887}
+}
