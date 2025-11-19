@@ -4,14 +4,6 @@ import gymnasium as gym
 import numpy as np
 import torch
 
-from C_single_turn_score_maximizer.model import (
-    ActionType,
-    YahtzeeAgent,
-    convert_rolling_action_to_hold_mask,
-    phi,
-    sample_action,
-)
-from C_single_turn_score_maximizer.trainer import SingleTurnScoreMaximizerREINFORCETrainer
 from environments.full_yahtzee_env import Action, Observation
 from utilities.scoring_helper import (
     BONUS_POINTS,
@@ -19,6 +11,14 @@ from utilities.scoring_helper import (
     ScoreCategory,
     get_all_scores_with_target,
 )
+from yahtzee_agent.model import (
+    ActionType,
+    YahtzeeAgent,
+    convert_rolling_action_to_hold_mask,
+    phi,
+    sample_action,
+)
+from yahtzee_agent.trainer import SingleTurnScoreMaximizerREINFORCETrainer
 
 
 def clear_screen() -> None:

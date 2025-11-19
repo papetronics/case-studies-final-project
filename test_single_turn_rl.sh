@@ -29,6 +29,6 @@ else
 fi
 
 # Build and run the test scenario
-./build_image.sh C_single_turn_score_maximizer \
+./build_image.sh yahtzee_agent \
   --mode test \
   --checkpoint-path "$WORKSPACE_CHECKPOINT_PATH"

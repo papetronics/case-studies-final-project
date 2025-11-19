@@ -6,7 +6,7 @@ IMAGE_NAME="csml-final-project"
 # Check if we got the required arguments
 if [ $# -lt 1 ]; then
     echo "Usage: $0 <python_module> [additional_args...]"
-    echo "Example: $0 A_dice_maximizer --epochs 3 --log-dir /workspace/logs"
+    echo "Example: $0 yahtzee_agent --epochs 3 --log-dir /workspace/logs"
     exit 1
 fi
 
