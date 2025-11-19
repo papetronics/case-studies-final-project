@@ -127,7 +127,7 @@ class CouldNotFindCategoryMaskFeatureError(Exception):
 class YahtzeeAgent(nn.Module):
     """Neural network model for maximizing score in a single turn of Yahtzee."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         hidden_size: int,
         num_hidden: int,
@@ -135,6 +135,7 @@ class YahtzeeAgent(nn.Module):
         activation_function: ActivationFunctionName,
         features: list[PhiFeature],
         rolling_action_representation: RollingActionRepresentation | str,
+        he_kaiming_initialization: bool,
     ):
         super().__init__()
 
@@ -187,6 +188,50 @@ class YahtzeeAgent(nn.Module):
             hidden_size, scoring_output_size, dropout_rate, activation
         ).to(self.device)
         self.value_head = ValueHead(hidden_size, activation).to(self.device)
+
+        # Initialize weights for better behavior at high learning rates
+        if he_kaiming_initialization:
+            self._initialize_weights()
+
+    @staticmethod
+    def _init_kaiming_linear(module: nn.Module) -> None:
+        """Initialize linear layers with Kaiming normal initialization."""
+        if isinstance(module, nn.Linear):
+            nn.init.kaiming_normal_(module.weight, mode="fan_in", nonlinearity="relu")
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+
+    @staticmethod
+    def _init_final_linear(module: nn.Module) -> None:
+        """Initialize final layer with small orthogonal gain."""
+        if isinstance(module, nn.Linear):
+            nn.init.orthogonal_(module.weight, gain=0.01)
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+
+    def _initialize_weights(self) -> None:
+        """Initialize network weights for high learning rate stability.
+
+        Uses Kaiming fan-in initialization (good for ReLU/SiLU) for hidden layers
+        and orthogonal initialization with small gains (0.01) for output layers.
+        """
+        # Initialize all hidden layers with Kaiming
+        self.network.apply(self._init_kaiming_linear)
+        self.action_spine.apply(self._init_kaiming_linear)
+
+        # Initialize head hidden layers (all but last)
+        for head in [self.rolling_head, self.scoring_head, self.value_head]:
+            modules_list = list(head.modules())
+            for module in modules_list[:-1]:
+                self._init_kaiming_linear(module)
+
+        # Initialize final layers with small orthogonal gain
+        # Find the last Linear layer in each head and apply final initialization
+        for head in [self.rolling_head, self.scoring_head, self.value_head]:
+            for module in reversed(list(head.modules())):
+                if isinstance(module, nn.Linear):
+                    self._init_final_linear(module)
+                    break
 
     @property
     def device(self) -> torch.device:

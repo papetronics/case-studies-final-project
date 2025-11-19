@@ -91,6 +91,13 @@ def main() -> None:  # noqa: PLR0915
             "num_hidden", int, 4, "Number of hidden layers", display_name="Num hidden layers"
         ),
         ConfigParam(
+            "he_kaiming_initialization",
+            bool,
+            False,
+            "Use He/Kaiming initialization for better behavior at high learning rates",
+            display_name="He/Kaiming initialization",
+        ),
+        ConfigParam(
             "checkpoint_path",
             str,
             None,
