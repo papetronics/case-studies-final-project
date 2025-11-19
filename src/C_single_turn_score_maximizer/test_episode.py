@@ -70,7 +70,7 @@ def run_episode(
 
     with torch.no_grad():
         while True:
-            input_tensor = phi(obs, model.bonus_flags, model.device).unsqueeze(0)
+            input_tensor = phi(obs, model.bonus_flags, model.features, model.device).unsqueeze(0)
             rolling_probs, scoring_probs, v_est = model.forward(input_tensor)
             actions, _, v_est = sample_action(rolling_probs, scoring_probs, v_est)
             rolling_action, scoring_action_tensor = actions

@@ -1,0 +1,26 @@
+{
+    "args": [],
+    "entry_point": [],
+    "run_config": {
+        "game_scenario": "full_game",
+        "epochs": 500,
+        "total_train_games": 260000,
+        "games_per_batch": 26,
+        "learning_rate": 0.0005,
+        "hidden_size": 384,
+        "num_hidden": 4,
+        "activation_function": "Swish",
+        "min_lr_ratio": 0.01,
+        "gamma_min": 1.0,
+        "gamma_max": 1.0,
+        "dropout_rate": 0.1,
+        "phi_features": "potential_scoring_opportunities,game_progress",
+        "entropy_coeff_rolling_max": 0.15,
+        "entropy_coeff_rolling_min": 0.045,
+        "entropy_coeff_scoring_max": 0.3,
+        "entropy_coeff_scoring_min": 0.006,
+        "entropy_hold_period": 0.4,
+        "entropy_anneal_period": 0.35,
+        "critic_coeff": 0.05
+    }
+}
