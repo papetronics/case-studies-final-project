@@ -53,6 +53,14 @@ def main() -> None:  # noqa: PLR0915
     # Define configuration schema
     config_params = [
         ConfigParam("mode", str, "train", "Mode to run (train or test)", choices=["train", "test"]),
+        ConfigParam(
+            "game_scenario",
+            str,
+            "full_game",
+            "Game scenario: full_game (39 steps) or single_turn (3 steps)",
+            choices=["full_game", "single_turn"],
+            display_name="Game scenario",
+        ),
         ConfigParam("epochs", int, 500, "Number of training epochs"),
         ConfigParam(
             "total_train_games",
@@ -118,7 +126,7 @@ def main() -> None:  # noqa: PLR0915
         ConfigParam(
             "gamma_min",
             float,
-            0.9,
+            None,  # Will default based on game_scenario: 0.9 for single_turn, 1.0 for full_game
             "Discount factor for reward calculation (min, start)",
             display_name="Discount factor",
         ),
@@ -176,6 +184,7 @@ def main() -> None:  # noqa: PLR0915
 
     # Extract config values for easy access
     mode = config["mode"]
+    game_scenario = config["game_scenario"]
     epochs = config["epochs"]
     total_train_games = config["total_train_games"]
     games_per_batch = config["games_per_batch"]
@@ -194,6 +203,23 @@ def main() -> None:  # noqa: PLR0915
     entropy_anneal_percentage = config["entropy_anneal_percentage"]
     critic_coeff = config["critic_coeff"]
 
+    # Set gamma_min default based on game_scenario if not explicitly provided
+    if gamma_min is None:
+        gamma_min = 0.9 if game_scenario == "single_turn" else 1.0
+        log.info(f"Setting gamma_min={gamma_min} based on game_scenario={game_scenario}")
+
+    # Calculate derived values based on game scenario
+    if game_scenario == "single_turn":
+        num_steps_per_episode = 3  # One turn: roll, roll, score
+        stagger_environments = True  # Distribute envs across turns 0-12 to avoid temporal bias
+        batch_size_multiplier = TURNS_PER_GAME  # Each game contributes 13 single-turn episodes
+        log.info("Game scenario: single_turn (3 steps per episode, staggered environments)")
+    else:  # full_game
+        num_steps_per_episode = 39  # Full game: 13 turns * 3 steps per turn
+        stagger_environments = False  # All games start from turn 0
+        batch_size_multiplier = 1  # Each game is one full episode
+        log.info("Game scenario: full_game (39 steps per episode, no staggering)")
+
     # Calculate games_per_epoch from total_train_games and epochs
     games_per_epoch = total_train_games // epochs
 
@@ -208,7 +234,10 @@ def main() -> None:  # noqa: PLR0915
         raise BatchSizeTooLargeError(games_per_batch, games_per_epoch)
 
     # Calculate derived training metrics
-    batch_size = games_per_batch * TURNS_PER_GAME
+    # batch_size is the number of parallel environments
+    # In single_turn: games_per_batch * 13 (one env per turn per game)
+    # In full_game: games_per_batch (one env per game)
+    batch_size = games_per_batch * batch_size_multiplier
     updates_per_epoch = games_per_epoch // games_per_batch
     total_updates = updates_per_epoch * epochs
     games_per_update = games_per_batch
@@ -217,6 +246,8 @@ def main() -> None:  # noqa: PLR0915
 
     # Log training configuration table
     config_table = [
+        "=" * 50,
+        "SINGLE TURN" if game_scenario == "single_turn" else "FULL GAME",
         "=" * 50,
         "TRAINING INFORMATION",
         f"Total Games:       {total_games_actual:,}",
@@ -253,6 +284,7 @@ def main() -> None:  # noqa: PLR0915
             entropy_coeff_end=entropy_coeff_end,
             entropy_anneal_epochs=int(entropy_anneal_percentage * epochs),
             critic_coeff=critic_coeff,
+            num_steps_per_episode=num_steps_per_episode,
         )
 
         # Save hyperparameters explicitly
@@ -280,6 +312,7 @@ def main() -> None:  # noqa: PLR0915
                 "entropy_anneal_percentage": entropy_anneal_percentage,
                 "entropy_anneal_epochs": int(entropy_anneal_percentage * epochs),
                 "critic_coeff": critic_coeff,
+                "game_scenario": game_scenario,
             }
         )
 
@@ -312,12 +345,16 @@ def main() -> None:  # noqa: PLR0915
         )
 
         # Create self-play dataset that collects episodes using the policy
-        # Dataset now handles batching internally with parallel environments
+        # Dataset handles batching internally with parallel environments
+        # batch_size = number of parallel environments (games_per_batch * multiplier)
+        # num_steps_per_episode = 3 for single_turn, 39 for full_game
         train_dataset = SelfPlayDataset(
             policy_net=model.policy_net,
             return_calculator=return_calculator,
             size=updates_per_epoch,  # Number of batches per epoch
-            batch_size=batch_size,  # Number of parallel episodes per batch
+            batch_size=batch_size,  # Number of parallel environments
+            num_steps_per_episode=num_steps_per_episode,
+            stagger_environments=stagger_environments,
         )
         # DataLoader batch_size=1 with passthrough collate since dataset already returns full batches
         train_dataloader = torch.utils.data.DataLoader(
