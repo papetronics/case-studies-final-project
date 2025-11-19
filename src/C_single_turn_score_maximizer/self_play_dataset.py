@@ -151,7 +151,7 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
 
         num_steps = self.num_steps_per_episode
         device = next(self.policy_net.parameters()).device
-        state_size = get_input_dimensions(self.policy_net.bonus_flags)
+        state_size = get_input_dimensions(self.policy_net.bonus_flags, self.policy_net.features)
 
         # Pre-allocate tensors for all episodes (BATCH_SIZE, num_steps, ...)
         states = torch.zeros(
@@ -171,7 +171,10 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
             for step_idx in range(num_steps):
                 # Batch convert all observations to state tensors
                 state_tensors = torch.stack(
-                    [phi(obs, self.policy_net.bonus_flags, device) for obs in observations]
+                    [
+                        phi(obs, self.policy_net.bonus_flags, self.policy_net.features, device)
+                        for obs in observations
+                    ]
                 )  # (BATCH_SIZE, state_size)
 
                 states[:, step_idx, :] = state_tensors
@@ -208,7 +211,9 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
                     rewards[env_idx, step_idx] = float(reward)
 
                     # Get next state tensor
-                    next_state_tensor = phi(next_obs, self.policy_net.bonus_flags, device)
+                    next_state_tensor = phi(
+                        next_obs, self.policy_net.bonus_flags, self.policy_net.features, device
+                    )
                     next_states[env_idx, step_idx, :] = next_state_tensor
 
                     # Update observation for next step

@@ -16,6 +16,7 @@ set -e
   --gamma-min 1.0 \
   --gamma-max 1.0 \
   --dropout-rate 0.1 \
+  --phi-features potential_scoring_opportunities \
   --entropy-coeff-start 0.05 \
   --entropy-coeff-end 0.0 \
   --entropy-anneal-percentage 0.4 \

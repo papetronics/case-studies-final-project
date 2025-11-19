@@ -7,6 +7,7 @@ import torch
 from pytorch_lightning.callbacks import ModelCheckpoint
 
 from C_single_turn_score_maximizer import test_episode
+from C_single_turn_score_maximizer.features import FEATURE_REGISTRY, create_features
 from C_single_turn_score_maximizer.self_play_dataset import SelfPlayDataset
 from C_single_turn_score_maximizer.trainer import SingleTurnScoreMaximizerREINFORCETrainer
 from utilities.dummy_dataset import DummyDataset
@@ -48,6 +49,14 @@ class BatchSizeTooLargeError(InvalidTrainingConfigurationError):
         )
 
 
+class MissingPhiFeaturesError(InvalidTrainingConfigurationError):
+    """Exception raised when phi_features configuration is not specified."""
+
+    def __init__(self, available_features: list[str]) -> None:
+        features_str = ", ".join(f"'{f}'" for f in available_features)
+        super().__init__(f"phi_features must be specified. Available features: {features_str}")
+
+
 def main() -> None:  # noqa: PLR0915
     """Run training or testing for single-turn Yahtzee score maximization."""
     # Define configuration schema
@@ -87,6 +96,13 @@ def main() -> None:  # noqa: PLR0915
             None,
             "Path to model checkpoint for evaluation",
             display_name="Checkpoint path",
+        ),
+        ConfigParam(
+            "phi_features",
+            str,
+            "",
+            f"Comma-separated list of phi features to enable. Available: {', '.join(FEATURE_REGISTRY.keys())}",
+            display_name="Phi features",
         ),
         ConfigParam(
             "activation_function",
@@ -192,6 +208,7 @@ def main() -> None:  # noqa: PLR0915
     hidden_size = config["hidden_size"]
     num_hidden = config["num_hidden"]
     checkpoint_path = config["checkpoint_path"]
+    phi_features_str = config["phi_features"]
     activation_function = config["activation_function"]
     min_lr_ratio = config["min_lr_ratio"]
     gamma_min = config["gamma_min"]
@@ -202,6 +219,14 @@ def main() -> None:  # noqa: PLR0915
     entropy_coeff_end = config["entropy_coeff_end"]
     entropy_anneal_percentage = config["entropy_anneal_percentage"]
     critic_coeff = config["critic_coeff"]
+
+    # Parse phi features from comma-separated string
+    if phi_features_str and phi_features_str.strip():
+        feature_names = [name.strip() for name in phi_features_str.split(",") if name.strip()]
+        phi_features = create_features(feature_names)
+        log.info(f"Enabled phi features: {[f.name for f in phi_features]}")
+    else:
+        raise MissingPhiFeaturesError(list(FEATURE_REGISTRY.keys()))
 
     # Set gamma_min default based on game_scenario if not explicitly provided
     if gamma_min is None:
@@ -285,6 +310,7 @@ def main() -> None:  # noqa: PLR0915
             entropy_anneal_epochs=int(entropy_anneal_percentage * epochs),
             critic_coeff=critic_coeff,
             num_steps_per_episode=num_steps_per_episode,
+            features=phi_features,
         )
 
         # Save hyperparameters explicitly
@@ -313,6 +339,7 @@ def main() -> None:  # noqa: PLR0915
                 "entropy_anneal_epochs": int(entropy_anneal_percentage * epochs),
                 "critic_coeff": critic_coeff,
                 "game_scenario": game_scenario,
+                "phi_features": phi_features_str,
             }
         )
 

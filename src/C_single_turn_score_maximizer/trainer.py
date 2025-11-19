@@ -5,6 +5,7 @@ import numpy as np
 import pytorch_lightning as lightning
 import torch
 
+from C_single_turn_score_maximizer.features import PhiFeature
 from environments.full_yahtzee_env import Action, Observation
 from utilities.activation_functions import ActivationFunctionName
 from utilities.diagnostics import (
@@ -60,6 +61,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         entropy_anneal_epochs: int,
         critic_coeff: float,
         num_steps_per_episode: int,
+        features: list[PhiFeature],
         return_calculator: ReturnCalculator | None = None,
     ):
         super().__init__()
@@ -69,6 +71,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
             num_hidden=num_hidden,
             dropout_rate=dropout_rate,
             activation_function=activation_function,
+            features=features,
         )
 
         self.learning_rate: float = learning_rate
@@ -130,7 +133,12 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
                 # Batch convert observations to state tensors
                 state_tensors = torch.stack(
                     [
-                        phi(obs, self.policy_net.bonus_flags, self.policy_net.device)
+                        phi(
+                            obs,
+                            self.policy_net.bonus_flags,
+                            self.policy_net.features,
+                            self.policy_net.device,
+                        )
                         for obs in active_observations
                     ]
                 )  # (num_active, state_size)
