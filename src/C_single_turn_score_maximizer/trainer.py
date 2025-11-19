@@ -59,6 +59,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         entropy_coeff_end: float,
         entropy_anneal_epochs: int,
         critic_coeff: float,
+        num_steps_per_episode: int,
         return_calculator: ReturnCalculator | None = None,
     ):
         super().__init__()
@@ -79,6 +80,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         self.entropy_coeff_end: float = entropy_coeff_end
         self.entropy_anneal_epochs: int = entropy_anneal_epochs
         self.critic_coeff: float = critic_coeff
+        self.num_steps_per_episode: int = num_steps_per_episode
 
         self.return_calculator: ReturnCalculator = return_calculator or MonteCarloReturnCalculator()
         self.return_calculator.gamma = self.gamma_min
@@ -264,10 +266,12 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         # next_states = batch["next_states"]  # Not used yet
         phases_flat = batch["phases"]
 
-        # Calculate batch_size and num_steps from flattened shape
+        # Calculate num_episodes and steps_per_episode from flattened shape
+        # single_turn: 338 episodes x 3 steps = 1014 total
+        # full_game: 26 episodes x 39 steps = 1014 total
         total_steps = states_flat.shape[0]
-        num_steps = 39  # Full game: 13 turns * 3 steps per turn
-        batch_size = total_steps // num_steps
+        steps_per_episode = self.num_steps_per_episode
+        num_episodes = total_steps // steps_per_episode
 
         # Forward pass through current policy to get probabilities and value estimates
         rolling_probs, scoring_probs, v_ests = self.policy_net.forward(states_flat)
@@ -288,13 +292,14 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         )  # (BATCH_SIZE * 39,)
 
         # Calculate returns using Monte Carlo (backward pass through episodes)
+        # Each episode gets its own MC return calculation over steps_per_episode
         gamma = self.return_calculator.gamma
-        returns = torch.zeros_like(rewards_flat)  # (BATCH_SIZE * 39,)
+        returns = torch.zeros_like(rewards_flat)
 
-        for batch_idx_inner in range(batch_size):
+        for episode_idx in range(num_episodes):
             g = 0.0
-            for t in reversed(range(num_steps)):
-                flat_idx = batch_idx_inner * num_steps + t
+            for t in reversed(range(steps_per_episode)):
+                flat_idx = episode_idx * steps_per_episode + t
                 g = rewards_flat[flat_idx] + gamma * g
                 returns[flat_idx] = g
 
@@ -308,7 +313,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         policy_loss = -(log_probs * normalized_advantages).mean()
 
         # Calculate average reward per episode (last step contains full return)
-        episode_returns = returns.view(batch_size, num_steps)[:, -1]  # (BATCH_SIZE,)
+        episode_returns = returns.view(num_episodes, steps_per_episode)[:, -1]
         avg_reward = episode_returns.mean()
 
         # Calculate Huber loss
