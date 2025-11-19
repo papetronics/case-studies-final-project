@@ -209,6 +209,14 @@ def main() -> None:  # noqa: PLR0915
             "Coefficient for the critic loss term",
             display_name="Critic coefficient",
         ),
+        ConfigParam(
+            "rolling_action_representation",
+            str,
+            "bernoulli",
+            "Representation for rolling actions: 'bernoulli' (5 independent binary) or 'categorical' (32 discrete masks)",
+            choices=["bernoulli", "categorical"],
+            display_name="Rolling action representation",
+        ),
     ]
 
     # Initialize project with configuration
@@ -243,6 +251,7 @@ def main() -> None:  # noqa: PLR0915
     entropy_hold_period = config["entropy_hold_period"]
     entropy_anneal_period = config["entropy_anneal_period"]
     critic_coeff = config["critic_coeff"]
+    rolling_action_representation = config["rolling_action_representation"]
 
     # Parse phi features from comma-separated string
     if phi_features_str and phi_features_str.strip():
@@ -337,6 +346,7 @@ def main() -> None:  # noqa: PLR0915
             critic_coeff=critic_coeff,
             num_steps_per_episode=num_steps_per_episode,
             features=phi_features,
+            rolling_action_representation=rolling_action_representation,
         )
 
         # Save hyperparameters explicitly
@@ -363,6 +373,7 @@ def main() -> None:  # noqa: PLR0915
                 "critic_coeff": critic_coeff,
                 "game_scenario": game_scenario,
                 "phi_features": phi_features_str,
+                "rolling_action_representation": rolling_action_representation,
             }
         )
 

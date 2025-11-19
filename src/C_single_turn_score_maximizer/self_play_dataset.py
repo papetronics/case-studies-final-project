@@ -1,13 +1,12 @@
 from typing import TYPE_CHECKING, TypedDict, cast
 
 import gymnasium as gym
-import numpy as np
 import torch
 
 from environments.full_yahtzee_env import Action, Observation, YahtzeeEnv
 from utilities.return_calculators import ReturnCalculator
 
-from .model import DICE_MASKS, get_input_dimensions, phi, sample_action
+from .model import convert_rolling_action_to_hold_mask, get_input_dimensions, phi, sample_action
 
 if TYPE_CHECKING:
     from .model import YahtzeeAgent
@@ -25,7 +24,9 @@ class EpisodeBatch(TypedDict):
     """
 
     states: torch.Tensor  # (BATCH_SIZE*num_steps, state_size) float32
-    rolling_actions: torch.Tensor  # (BATCH_SIZE*num_steps, 5) int (binary mask)
+    rolling_actions: (
+        torch.Tensor
+    )  # Bernoulli: (BATCH_SIZE*num_steps, 5) int, Categorical: (BATCH_SIZE*num_steps,) int
     scoring_actions: torch.Tensor  # (BATCH_SIZE*num_steps,) int (category index 0-12)
     rewards: torch.Tensor  # (BATCH_SIZE*num_steps,) float32
     next_states: torch.Tensor  # (BATCH_SIZE*num_steps, state_size) float32
@@ -46,7 +47,7 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
 
     Returns a dict of pre-flattened tensors with shapes (BATCH_SIZE*num_steps, ...):
       - "states": (BATCH_SIZE*num_steps, state_size) - State tensor for each step
-      - "rolling_actions": (BATCH_SIZE*num_steps, 5) - Binary mask for which dice to reroll
+      - "rolling_actions": Bernoulli: (BATCH_SIZE*num_steps, 5), Categorical: (BATCH_SIZE*num_steps,)
       - "scoring_actions": (BATCH_SIZE*num_steps,) - Category to score (0-12)
       - "rewards": (BATCH_SIZE*num_steps,) - Immediate rewards
       - "next_states": (BATCH_SIZE*num_steps, state_size) - Next state tensors
@@ -158,7 +159,18 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
         states = torch.zeros(
             self.batch_size, num_steps, state_size, dtype=torch.float32, device=device
         )
-        rolling_actions = torch.zeros(self.batch_size, num_steps, dtype=torch.long, device=device)
+
+        # Allocate rolling_actions based on representation mode
+        rolling_action_representation = self.policy_net.rolling_action_representation
+        if rolling_action_representation.value == "bernoulli":
+            rolling_actions = torch.zeros(
+                self.batch_size, num_steps, 5, dtype=torch.long, device=device
+            )
+        else:  # CATEGORICAL
+            rolling_actions = torch.zeros(
+                self.batch_size, num_steps, dtype=torch.long, device=device
+            )
+
         scoring_actions = torch.zeros(self.batch_size, num_steps, dtype=torch.long, device=device)
         rewards = torch.zeros(self.batch_size, num_steps, dtype=torch.float32, device=device)
         next_states = torch.zeros(
@@ -183,11 +195,18 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
 
                 # Sample actions for all environments
                 actions, _, _ = sample_action(
-                    rolling_probs, scoring_probs, torch.zeros(self.batch_size, device=device)
+                    rolling_probs,
+                    scoring_probs,
+                    torch.zeros(self.batch_size, device=device),
+                    rolling_action_representation,
                 )
                 rolling_action_tensor, scoring_action_tensors = actions
 
-                rolling_actions[:, step_idx] = rolling_action_tensor.long()
+                # Store actions based on representation mode
+                if rolling_action_representation.value == "bernoulli":
+                    rolling_actions[:, step_idx, :] = rolling_action_tensor.long()
+                else:  # CATEGORICAL
+                    rolling_actions[:, step_idx] = rolling_action_tensor.long()
                 scoring_actions[:, step_idx] = scoring_action_tensors.long()
 
                 # Step each environment and collect results
@@ -199,8 +218,8 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
                     action: Action
                     if phase == 0:
                         action = {
-                            "hold_mask": np.array(
-                                DICE_MASKS[int(rolling_action_tensor[env_idx].item())], dtype=bool
+                            "hold_mask": convert_rolling_action_to_hold_mask(
+                                rolling_action_tensor[env_idx], rolling_action_representation
                             )
                         }
                     else:
@@ -226,9 +245,14 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
         # (full_game: naturally terminates after 13 turns; single_turn: after 1 turn)
 
         # Flatten batch and time dimensions: (BATCH_SIZE, num_steps, ...) -> (BATCH_SIZE*num_steps, ...)
+        if rolling_action_representation.value == "bernoulli":
+            rolling_actions_flat = rolling_actions.view(-1, 5)
+        else:  # CATEGORICAL
+            rolling_actions_flat = rolling_actions.view(-1)
+
         return {
             "states": states.view(-1, state_size),
-            "rolling_actions": rolling_actions.view(-1),
+            "rolling_actions": rolling_actions_flat,
             "scoring_actions": scoring_actions.view(-1),
             "rewards": rewards.view(-1),
             "next_states": next_states.view(-1, state_size),

@@ -5,9 +5,9 @@ import numpy as np
 import torch
 
 from C_single_turn_score_maximizer.model import (
-    DICE_MASKS,
     ActionType,
     YahtzeeAgent,
+    convert_rolling_action_to_hold_mask,
     phi,
     sample_action,
 )
@@ -72,11 +72,17 @@ def run_episode(
         while True:
             input_tensor = phi(obs, model.bonus_flags, model.features, model.device).unsqueeze(0)
             rolling_probs, scoring_probs, v_est = model.forward(input_tensor)
-            actions, _, v_est = sample_action(rolling_probs, scoring_probs, v_est)
+            actions, _, v_est = sample_action(
+                rolling_probs, scoring_probs, v_est, model.rolling_action_representation
+            )
             rolling_action, scoring_action_tensor = actions
 
+            hold_mask = convert_rolling_action_to_hold_mask(
+                rolling_action, model.rolling_action_representation
+            )
+
             action = {
-                "hold_mask": np.array(DICE_MASKS[rolling_action.item()], dtype=bool),
+                "hold_mask": hold_mask,
                 "score_category": scoring_action_tensor.cpu().item(),
             }
 
