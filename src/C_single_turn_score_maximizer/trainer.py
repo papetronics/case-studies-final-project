@@ -168,7 +168,6 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
                     [
                         phi(
                             obs,
-                            self.policy_net.bonus_flags,
                             self.policy_net.features,
                             self.policy_net.device,
                         )

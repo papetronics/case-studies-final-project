@@ -100,7 +100,7 @@ def main() -> None:  # noqa: PLR0915
         ConfigParam(
             "phi_features",
             str,
-            "",
+            "dice_onehot,dice_counts,rolls_used,phase,has_earned_yahtzee,available_categories,percent_progress_towards_bonus,potential_scoring_opportunities,game_progress",
             f"Comma-separated list of phi features to enable. Available: {', '.join(FEATURE_REGISTRY.keys())}",
             display_name="Phi features",
         ),
