@@ -6,7 +6,12 @@ import numpy as np
 from numpy.typing import NDArray
 
 from environments.full_yahtzee_env import Observation
-from utilities.scoring_helper import YAHTZEE_SCORE, ScoreCategory, get_all_scores
+from utilities.scoring_helper import (
+    NUMBER_OF_CATEGORIES,
+    YAHTZEE_SCORE,
+    ScoreCategory,
+    get_all_scores,
+)
 
 
 class PhiFeature(ABC):
@@ -30,6 +35,25 @@ class PhiFeature(ABC):
         pass
 
 
+NORMAL_SCORE_MAX = np.array(
+    [
+        5,  # Ones
+        10,  # Twos
+        15,  # Threes
+        20,  # Fours
+        25,  # Fives
+        30,  # Sixes
+        30,  # Three of a Kind
+        30,  # Four of a Kind
+        25,  # Full House
+        30,  # Small Straight
+        40,  # Large Straight
+        50,  # Yahtzee
+        30,  # Chance
+    ]
+)
+
+
 class PotentialScoringOpportunitiesFeature(PhiFeature):
     """Feature that encodes the potential scores available for each category.
 
@@ -50,7 +74,7 @@ class PotentialScoringOpportunitiesFeature(PhiFeature):
     @property
     def size(self) -> int:
         """13 categories + 1 joker indicator = 14 dimensions."""
-        return 14
+        return int(NUMBER_OF_CATEGORIES + 1)
 
     def compute(self, observation: Observation) -> NDArray[np.floating]:
         """Compute potential scores and joker status from current dice and scoresheet."""
@@ -64,7 +88,7 @@ class PotentialScoringOpportunitiesFeature(PhiFeature):
             has_scored_yahtzee,
         )
 
-        return np.concatenate([score_values.astype(np.float64), [float(joker)]])
+        return np.concatenate([(score_values / NORMAL_SCORE_MAX), [float(joker)]])
 
 
 FEATURE_REGISTRY: dict[str, type[PhiFeature]] = {

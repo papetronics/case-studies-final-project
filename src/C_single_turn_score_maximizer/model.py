@@ -75,25 +75,6 @@ def get_input_dimensions(bonus_flags: set[BonusFlags], features: list[PhiFeature
     )
 
 
-NORMAL_SCORE_MAX = np.array(
-    [
-        5,  # Ones
-        10,  # Twos
-        15,  # Threes
-        20,  # Fours
-        25,  # Fives
-        30,  # Sixes
-        30,  # Three of a Kind
-        30,  # Four of a Kind
-        25,  # Full House
-        30,  # Small Straight
-        40,  # Large Straight
-        50,  # Yahtzee
-        30,  # Chance
-    ]
-)
-
-
 def phi(
     observation: Observation,
     bonus_flags: set[BonusFlags],
