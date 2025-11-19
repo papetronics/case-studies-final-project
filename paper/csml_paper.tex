@@ -330,7 +330,7 @@ and Swish activations \cite{ramachandran-2017-swish} to introduce stable non-lin
 \subsubsection{Policy and Value Heads}
 We utilize two distinct heads for the rolling and scoring actions, allowing the model to specialize in
 each task \cite{tavakoli2018actionbranching, hausknecht2016parameterized}.
-We also implement a value head, this outputs a scalar which is used as the baseline for REINFORCE and the value estimate for actor-critic methods.
+We also implement a value head. This outputs a scalar which is used as the baseline for REINFORCE and the value estimate for actor-critic methods.
 Each of these networks has a fully connected hidden layer before the final output layer.
 
 In the rolling action head, we use either 5 outputs with sigmoid activations for Bernoulli representation, or 32 outputs with softmax activations for the categorical representation.
