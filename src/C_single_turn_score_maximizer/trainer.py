@@ -90,7 +90,9 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
 
         self.validation_envs: list[gym.Env[Observation, Action]] = []  # Created on demand
 
-    def run_batched_validation_games(self, num_games: int) -> tuple[list[float], list[float]]:
+    def run_batched_validation_games(
+        self, num_games: int, run_deterministic: bool = True, run_stochastic: bool = False
+    ) -> tuple[list[float], list[float]]:
         """Run multiple Yahtzee games in parallel with both deterministic and stochastic action selection.
 
         Runs num_games with deterministic actions and num_games with stochastic actions
@@ -100,13 +102,24 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         ----------
         num_games : int
             Number of parallel games to run for each mode (deterministic and stochastic)
+        run_deterministic : bool, optional
+            Whether to run deterministic evaluation (default: True)
+        run_stochastic : bool, optional
+            Whether to run stochastic evaluation (default: False)
 
         Returns
         -------
         tuple[list[float], list[float]]
             (deterministic_scores, stochastic_scores) - Lists of total scores for each game
         """
-        total_envs_needed = num_games * 2
+        # Calculate number of environments needed based on which modes are enabled
+        num_det = num_games if run_deterministic else 0
+        num_stoch = num_games if run_stochastic else 0
+        total_envs_needed = num_det + num_stoch
+
+        # Early return if neither mode is enabled
+        if total_envs_needed == 0:
+            return [], []
 
         # Create environments if needed
         if len(self.validation_envs) < total_envs_needed:
@@ -120,7 +133,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
             observations.append(obs)
 
         # Track state for each game
-        # First num_games are deterministic, next num_games are stochastic
+        # First num_det are deterministic, next num_stoch are stochastic
         active_indices = list(range(total_envs_needed))
         total_scores = [0.0] * total_envs_needed
 
@@ -147,9 +160,9 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
                 rolling_probs, scoring_probs, v_ests = self.policy_net.forward(state_tensors)
 
                 # Separate deterministic and stochastic actions
-                # Deterministic for first num_games, stochastic for remaining
+                # Deterministic for first num_det, stochastic for remaining
                 det_mask = torch.tensor(
-                    [idx < num_games for idx in active_indices], device=rolling_probs.device
+                    [idx < num_det for idx in active_indices], device=rolling_probs.device
                 )
 
                 # Get actions for both modes
@@ -195,8 +208,8 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
                     active_indices.remove(game_idx)
 
         # Split results into deterministic and stochastic
-        deterministic_scores = total_scores[:num_games]
-        stochastic_scores = total_scores[num_games:]
+        deterministic_scores = total_scores[:num_det]
+        stochastic_scores = total_scores[num_det:]
 
         return deterministic_scores, stochastic_scores
 
@@ -204,47 +217,66 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         """Run validation using batched parallel games."""
         num_validation_games = 1000
 
-        # Run all games in parallel with batched forward passes (both deterministic and stochastic)
-        det_scores, stoch_scores = self.run_batched_validation_games(num_validation_games)
+        # Run all games in parallel with batched forward passes (only deterministic by default)
+        det_scores, stoch_scores = self.run_batched_validation_games(
+            num_validation_games, run_deterministic=True, run_stochastic=False
+        )
 
-        # Log deterministic results
-        det_mean = float(np.mean(det_scores))
-        det_std = float(np.std(det_scores))
-        self.log("val/mean_total_score_det", det_mean, prog_bar=True)
-        self.log("val/std_total_score_det", det_std, prog_bar=False)
+        # Log deterministic results if available
+        if det_scores:
+            det_mean = float(np.mean(det_scores))
+            det_std = float(np.std(det_scores))
+            self.log("val/mean_total_score_det", det_mean, prog_bar=True)
+            self.log("val/std_total_score_det", det_std, prog_bar=False)
+        else:
+            det_mean = 0.0
 
-        # Log stochastic results
-        stoch_mean = float(np.mean(stoch_scores))
-        stoch_std = float(np.std(stoch_scores))
-        self.log("val/mean_total_score_stoch", stoch_mean, prog_bar=False)
-        self.log("val/std_total_score_stoch", stoch_std, prog_bar=False)
+        # Log stochastic results if available
+        if stoch_scores:
+            stoch_mean = float(np.mean(stoch_scores))
+            stoch_std = float(np.std(stoch_scores))
+            self.log("val/mean_total_score_stoch", stoch_mean, prog_bar=False)
+            self.log("val/std_total_score_stoch", stoch_std, prog_bar=False)
 
         # Return a dict for PyTorch Lightning compatibility (use deterministic for loss)
         return {"val_loss": -det_mean}  # Negative because higher scores are better
 
-    def run_sweep_test_evaluation(self) -> None:
+    def run_sweep_test_evaluation(
+        self, run_deterministic: bool = True, run_stochastic: bool = False
+    ) -> None:
         """Run comprehensive test evaluation for hyperparameter sweeps.
 
-        Runs 10000 games with both deterministic and stochastic action selection.
+        Runs 10000 games with deterministic and/or stochastic action selection.
         Logs test/mean_total_score_det, test/mean_total_score_stoch and their stds.
-        This is called at epochs 99, 199, 299, 399, 499, etc. (every 100 epochs).
+        This is called at the end of training.
+
+        Parameters
+        ----------
+        run_deterministic : bool, optional
+            Whether to run deterministic evaluation (default: True)
+        run_stochastic : bool, optional
+            Whether to run stochastic evaluation (default: False)
         """
         num_test_games = 10000
 
-        # Run all games in parallel with batched forward passes (both deterministic and stochastic)
-        det_scores, stoch_scores = self.run_batched_validation_games(num_test_games)
+        # Run all games in parallel with batched forward passes
+        det_scores, stoch_scores = self.run_batched_validation_games(
+            num_test_games, run_deterministic=run_deterministic, run_stochastic=run_stochastic
+        )
 
-        # Log deterministic results
-        det_mean = float(np.mean(det_scores))
-        det_std = float(np.std(det_scores))
-        self.log("test/mean_total_score_det", det_mean, prog_bar=True)
-        self.log("test/std_total_score_det", det_std, prog_bar=False)
+        # Log deterministic results if available
+        if det_scores:
+            det_mean = float(np.mean(det_scores))
+            det_std = float(np.std(det_scores))
+            self.log("test/mean_total_score_det", det_mean, prog_bar=True)
+            self.log("test/std_total_score_det", det_std, prog_bar=False)
 
-        # Log stochastic results
-        stoch_mean = float(np.mean(stoch_scores))
-        stoch_std = float(np.std(stoch_scores))
-        self.log("test/mean_total_score_stoch", stoch_mean, prog_bar=False)
-        self.log("test/std_total_score_stoch", stoch_std, prog_bar=False)
+        # Log stochastic results if available
+        if stoch_scores:
+            stoch_mean = float(np.mean(stoch_scores))
+            stoch_std = float(np.std(stoch_scores))
+            self.log("test/mean_total_score_stoch", stoch_mean, prog_bar=False)
+            self.log("test/std_total_score_stoch", stoch_std, prog_bar=False)
 
     def get_entropy_coef(self) -> float:
         """Get current entropy coefficient with linear annealing."""
@@ -320,8 +352,8 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         # Calculate policy loss
         policy_loss = -(log_probs * normalized_advantages).mean()
 
-        # Calculate average reward per episode (last step contains full return)
-        episode_returns = returns.view(num_episodes, steps_per_episode)[:, -1]
+        # Calculate reward per episode
+        episode_returns = returns.view(num_episodes, steps_per_episode)[:, 0]
         avg_reward = episode_returns.mean()
 
         # Calculate Huber loss
@@ -580,11 +612,6 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
                 policy_movement = (kl_roll_mean + kl_score_mean) / 2.0
                 self.log("diagnostics/policy_movement", policy_movement, prog_bar=False)
 
-        # Run sweep test evaluation at epochs 99, 199, 299, 399, 499, etc.
-        # (every 100 epochs, not counting epoch 0)
-        if (self.current_epoch + 1) % 100 == 0:
-            self.run_sweep_test_evaluation()
-
     def on_train_start(self) -> None:
         """Initialize environments and configure metric visualizations."""
         # Configure WandB-specific visualizations if using WandB
@@ -627,6 +654,9 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
 
     def on_train_end(self) -> None:
         """Close validation environments at the end of training."""
+        # Run comprehensive test evaluation at the end of training
+        self.run_sweep_test_evaluation(run_deterministic=True, run_stochastic=False)
+
         for env in self.validation_envs:
             env.close()
         self.validation_envs.clear()
