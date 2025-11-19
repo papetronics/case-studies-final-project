@@ -39,8 +39,7 @@
 \end{abstract}
 
 \section{Introduction}
-% 600-900 words
-% 513 words so far
+<600-900 words> % 361 words so far
 \subsection{Yahtzee as a Reinforcement Learning Benchmark}
 While on the surface \textit{Yahtzee} appears to be a trivial dice game \cite{hasbro-2022-yahtzee-rules}, it is actually a complex stochastic optimization problem with combinatorial complexity.
 
@@ -69,8 +68,7 @@ Concretely, we ask: \begin{enumerate*}[label=(\roman*)]
 \end{enumerate*}
 
 \section{Related Work}
-% 600-800 words
-% 742 words so far
+<600-800 words> % 930 words so far
 
 \subsection{Policy Gradient Methods and Variance Reduction}
 Policy-gradient methods are a family of algorithms which directly optimize a parameterized policy $\pi_{\theta}$ to follow an estimate of the performance gradient \cite{sutton-2000-policy-gradient}.
@@ -132,7 +130,7 @@ or offers an architecture that is theoretically transferrable to multiplayer set
 
 
 \section{Problem Formulation}
-% 400-600 words
+<400-600 words> % 703 words so far
 \subsection{Game Description}
 \subsubsection{Rules of Yahtzee}
 \textit{Yahtzee} is played with five standard six-sided dice and a shared scorecard containing 13 categories.
@@ -245,7 +243,7 @@ This task is more challenging due to the longer horizon, increased variance, and
 the network to learn explicit long-term strategies, such as planning for the upper bonus.
 
 \section{Methodology}
-1400-1700 words
+<1400-1700 words> % 1076 words so far
 \subsection{State Representation \& Input Features}
 The design of $\mathbf{\phi}(\mathbf{s}) \rightarrow \mathbf{x}$ is one of the most critical components to the performance of a model \cite{sutton-2018-reinforcement-book}.
 
@@ -288,7 +286,6 @@ There are some key features that can be computed from the raw state, providing t
 \end{align*}
 where $m_k = \max_{\mathbf{d}'} f_k(\mathbf{d}')$ is the maximum possible score for category $k$.
 
-
 \subsection{Action Representation}
 \subsubsection{Rolling Action}
 We experiment with two different rolling action representations.
@@ -309,6 +306,11 @@ The scoring action is always a categorical distribution over the 13 scoring cate
   a_{\mathrm{score}} \sim \mathrm{Categorical}\!\left(\mathrm{softmax}\!\left(f_\theta(\phi(x))\right)\right)
 \]
 
+\subsubsection{Rewards}
+We intentionally do not use any reward shaping or extra rewards beyond the change in score after each action.
+While this poses a greater challenge for the model, it ensures that the learned policy is not biased by hand-crafted rewards,
+and allows us to better focus on other aspects of the learning process.
+
 \subsection{Neural Network Architecture}
 The neural network uses a unique architecture designed to handle the specific challenges of \textit{Yahtzee}.
 The architecture consists of a trunk, followed by heads for the policy and value functions.
@@ -323,6 +325,14 @@ and Swish activations \cite{ramachandran-2017-swish} to introduce stable non-lin
 \subsubsection{Policy and Value Heads}
 We utilize two distinct heads for the rolling and scoring actions, allowing the model to specialize in
 each task \cite{tavakoli2018actionbranching, hausknecht2016parameterized}.
+We also implement a value head, this outputs a scalar which is used as the baseline for REINFORCE and the value estimate for actor-critic methods.
+Each of these networks have a fully connected hidden layer before the final output layer.
+
+In the rolling action head, we use either 6 outputs with sigmoid activations for Bernoulli representation, or 32 outputs with softmax activations for the categorical representation.
+
+In the scoring action head, we use 13 outputs with softmax activations for the categorical distribution over scoring categories.
+
+For the value head, we use a single linear output, constrained with ELU activation to clamp negative value estimates \cite{clevert2016elu}, since negative rewards are not possible in \textit{Yahtzee}.
 
 \subsubsection{Weight Initialization}
 <KAIMING OR XAVIER?>
@@ -331,6 +341,9 @@ each task \cite{tavakoli2018actionbranching, hausknecht2016parameterized}.
 We utilize the Adam optimizer \cite{kingma2014adam} with maximum learning rate between $1\times 10^{-4}$ and $5\times 10^{-4}$.
 To improve training stability, we utilize a warmup schedule over the first 5\% of training \cite{kalra-2024-warmup},
 plateau for 70\% of training, and then linearly decay over the final 25\% of training steps \cite{defazio2023optimal, lyle2024normalization}.
+We also inject an entropy bonus into the loss function to encourage exploration \cite{williams-peng-1991-function-optimization}, these held
+constant at the start of training then linearly decayed to a final value near the end of training. Different entropy bonuses were used for rolling and scoring actions,
+as rolling actions had a tendency to collapse early in training.
 
 \subsubsection{Training Metrics}
 To better understand training dynamics, we log several metrics during training.
@@ -344,16 +357,125 @@ We also monitor standard training metrics such as average reward and loss values
 
 \subsection{Reinforcement Learning Algorithms}
 \subsubsection{REINFORCE}
-<Talk about REINFORCE loss function, how it is used with baseline, single vs full game, etc.>
-\subsubsection{TD}
-<Talk about TD(n) and TD(lambda), how they are used with actor-critic, application to full game, etc.>
-\subsubsection{PPO}
-<Talk about PPO loss function, clipping, KL control, application to full game, etc.>
+We first implement the REINFORCE algorithm \cite{williams-1992-reinforce} with baseline for single-turn optimization,
+then attempt to extend it to full-game optimization. Here, the baseline is the output of the value head, $V_{\phi}(\mathbf{s})$.
+The loss function is defined as:
+\begin{align*}
+  \mathcal{L}(\theta,\phi)
+  = &
+  \underbrace{
+  \overbrace{- \log \big(\pi_\theta(a_t \mid s_t)\big)}^{\text{negative log likelihood}} \,
+  \overbrace{\big(\hat{R}_t - V_\phi(s_t)\big)}^{\text{advantage }}
+  }_{\text{policy loss}}   \\
+    & +
+  \underbrace{
+  \overbrace{\lambda_V}^{\text{weight}}
+  \|
+  V_\phi(s_t) - \hat{R}_t\big
+  \|_2
+  }_{\text{value loss}}    \\
+    & -
+  \underbrace{
+  \overbrace{\beta}^{\text{weight}}
+  \mathcal{H}\big[\pi_\theta(\cdot \mid s_t)\big]
+  }_{\text{entropy bonus}} \\
+\end{align*}
 
-\subsection{Training Regimes}
-<Talk about single-turn vs full-game training, transfer learning, etc.>
-\subsubsection{Evaluation Protocol}
-<Talk about how many eval games, deterministic vs stochastic eval, etc.>
+
+
+\subsubsection{TD}
+Temporal Difference differs from REINFORCE by calculating the TD error. This uses an estimate of the value of the next state to bootstrap the return.
+By doing so, TD methods reduce variance at the cost of introducing some bias. TD also has the benefit of being an online method;
+we can learn from every step rather than waiting until the end of an episode, which greatly improves sample efficiency.
+
+\begin{align*}
+  \delta_t
+  = &
+  \overbrace{r_t}^{\text{reward}}
+  +
+  \overbrace{\gamma V_\phi(s_{t+1})}^{\text{discounted future}}
+  -
+  \overbrace{V_\phi(s_t)}^{\text{current estimate}}
+  \\[8pt]
+  \mathcal{L}_{\text{TD-AC}}(\theta,\phi)
+  = &
+  \underbrace{
+  \overbrace{- \log \big(\pi_\theta(a_t \mid s_t)\big)}^{\text{negative log likelihood}}
+  \,
+  \overbrace{\delta_t}^{\text{TD-error}}
+  }_{\text{policy loss}}   \\[4pt]
+    & +
+  \underbrace{
+  \overbrace{\lambda_V}^{\text{weight}}
+  \,
+  \big\|
+  \delta_t
+  \big\|_2^2
+  }_{\text{value loss}}    \\[4pt]
+    & -
+  \underbrace{
+  \overbrace{\beta}^{\text{weight}}
+  \,
+  \mathcal{H}\big[\pi_\theta(\cdot \mid s_t)\big]
+  }_{\text{entropy bonus}} \\
+\end{align*}
+
+In TD(0), the value function effectively learns using a single timestep; this is a much simpler problem than estimating the entire sequence of rewards.
+Pure TD methods can be considered a form of estimated DP, which makes them potentially well suited for \textit{Yahtzee}, for which a DP solution is known to exist.
+
+Other forms of TD returns, such as n-step TD and TD($\lambda$) can be used by replacing $\delta_t$ with the appropriate return estimate.
+
+\subsubsection{PPO}
+PPO improves on TD by utilizing a "surrogate" objective which clips large policy updates, improving training stability.
+This allows for substantially larger batch sizes and learning rates.
+
+\begin{align*}
+  r_t(\theta)
+  = &
+  \frac{
+  \overbrace{\pi_\theta(a_t \mid s_t)}^{\text{current policy}}
+  }{
+  \underbrace{\pi_{\theta_{\text{old}}}(a_t \mid s_t)}_{\text{behavior policy}}
+  }                      \\[8pt]
+  \mathcal{L}(\theta,\phi)
+  = &
+  \underbrace{
+    - \min \bigg\{
+    \begin{aligned}
+       & r_t(\theta)\,\hat{A}_t,                                                         \\
+       & \operatorname{clip}\big(r_t(\theta), 1 - \epsilon, 1 + \epsilon\big)\,\hat{A}_t
+    \end{aligned}
+    \bigg\}
+  }_{\text{policy loss}} \\[6pt]
+    & +
+  \underbrace{
+  \overbrace{\lambda_V}^{\text{weight}}
+  \big\|
+  V_\phi(s_t) - \hat{R}_t
+  \big\|_2^2
+  }_{\text{value loss}}  \\[4pt]
+    & -
+  \underbrace{
+  \overbrace{\beta}^{\text{weight}}
+  \mathcal{H}\big[\pi_\theta(\cdot \mid s_t)\big]
+  }_{\text{entropy bonus}}
+\end{align*}
+
+\subsubsection{Training Regimes}
+We analyze several distinct training regimes for \textit{Yahtzee} agents:
+\begin{enumerate*}[label=(\roman*)]
+  \item REINFORCE directly on the single-turn optimization task and evaluating full-game performance
+  \item REINFORCE, TD, and PPO directly on the full-game optimization task
+        % \item transfer learning from single-turn to full-game optimization
+        % \item behavioral cloning from an optimal DP agent
+\end{enumerate*}.
+
+\subsection{Evaluation Protocol}
+During training, we run 1,000 game episodes every 5 epochs (1\% of training) to monitor progress.
+
+For a model's final evaluation, we run 10,000 games, reporting the mean score and standard deviation.
+For a typical variance $\sigma^2 \approx 50$, this generally gives us a standard error $\sigma / \sqrt{10000} = \pm 0.5$.
+Likewise, we compute category statistics to analyze strategic preferences of different agents.
 
 \section{Results}
 
@@ -365,6 +487,13 @@ We also monitor standard training metrics such as average reward and loss values
 \subsection{Single-Turn Results}
 <600-700 words>
 \subsubsection{Baseline Model Performance}
+For state representation, the baseline model utilizes a combined dice representation (ordered one-hot + bin),
+the category usage mask for the scorecard, and computed features for bonus progress, and roll index.
+For outputs, it uses Bernoulli rolling actions and categorical scoring actions.
+We utilized REINFORCE algorithm to train on <X> single-turn episodes (consisting of 3 steps), using a batch size of <Y> episodes, for <Z> total gradient updates.
+
+Although it does not nearly reach optimal performance, it performs surprisingly well over the full game; this is likely due to the high correlation between single-turn and full-game optimal actions.
+However, we suspected target leakage (selecting parameters and architectures based on full-game performance) could also play a role and analyze the full-game vs. single-turn tradeoff in Section~\ref{sec:tradeoff-curve}.
 
 \begin{table}[H]
   \centering
@@ -393,8 +522,9 @@ We also monitor standard training metrics such as average reward and loss values
   \end{tabular}
 \end{table}
 
+Some of our training metrics are shown in Figure~\ref{fig:loss-vs-epoch}.
 
-\begin{figure}[t]
+\begin{figure}[H]
   \centering
   \begin{tikzpicture}
     \begin{axis}[
@@ -456,6 +586,51 @@ We also monitor standard training metrics such as average reward and loss values
 \subsubsection{Architectural Ablations}
 <Show how changing architecture (layer norm, activation fn, width, depth) affects performance.>
 <Graph average score vs architecture choice>
+
+\subsubsection{Single vs Full-game Tradeoff Curve}
+\label{sec:tradeoff-curve}
+To understand the tradeoff between single-turn and full-game performance, we ablated our model using small changes to various hyperparameters and captured
+the resulting performance on both the primary single-turn score, as well as the auxiliary full-game score.
+We expect that there is a Pareto frontier between these two objectives, and that some hyperparameter choices push performance towards one or the other.
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}
+    \begin{axis}[
+      xlabel={$\bar{s}_{\text{single-turn}}$},
+      ylabel={$\bar{s}_{\text{full-game}}$},
+      title={Pareto Frontier of Single-Turn vs. Full-Game Performance},
+      grid=both,
+      grid style={dotted},
+      tick align=outside,
+      tick label style={font=\small},
+      label style={font=\small},
+      title style={font=\small},
+      enlargelimits=0.05,
+      legend style={at={(0.02,0.98)},anchor=north west,font=\small}
+      ]
+
+      % --- Scatter points: replace these with your data ---
+      \addplot[
+        only marks,
+        mark=*,
+        mark size=1.5pt
+      ] coordinates {
+          (150, 160)
+          (160, 170)
+          (170, 178)
+          (180, 182)
+          (190, 184)
+        };
+      \addlegendentry{RL configurations}
+
+    \end{axis}
+  \end{tikzpicture}
+  \caption{Empirical Pareto frontier between single-turn and full-game average scores.}
+  \label{fig:pareto-frontier}
+\end{figure}
+
+
 
 \subsubsection{Summary}
 <Talk about the biggest levers>
