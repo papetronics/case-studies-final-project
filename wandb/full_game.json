@@ -14,7 +14,7 @@
         "gamma_min": 1.0,
         "gamma_max": 1.0,
         "dropout_rate": 0.1,
-        "phi_features": "potential_scoring_opportunities,game_progress",
+        "phi_features": "dice_onehot,dice_counts,rolls_used,phase,has_earned_yahtzee,available_categories,percent_progress_towards_bonus,potential_scoring_opportunities,game_progress",
         "entropy_coeff_rolling_max": 0.15,
         "entropy_coeff_rolling_min": 0.045,
         "entropy_coeff_scoring_max": 0.3,

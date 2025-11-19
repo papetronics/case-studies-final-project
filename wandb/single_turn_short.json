@@ -20,6 +20,7 @@
         "entropy_coeff_scoring_min": 0.006,
         "entropy_hold_period": 0.4,
         "entropy_anneal_period": 0.35,
-        "critic_coeff": 0.05
+        "critic_coeff": 0.05,
+        "phi_features": "dice_onehot,dice_counts,rolls_used,phase,has_earned_yahtzee,available_categories,percent_progress_towards_bonus"
     }
 }
