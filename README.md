@@ -24,14 +24,14 @@ Training agents to play **complete 13-round games**, learning long-term strategy
 
 ### Run Single-Turn RL Training
 ```bash
-./run_single_turn_rl.sh
+./single_turn_rl.sh
 ```
 
 Trains an agent on isolated single-turn gameplay. The agent learns optimal dice-keeping and scoring strategies for maximizing points in a single turn.
 
 ### Run Full-Game RL Training
 ```bash
-./run_full_game_rl.sh
+./full_game_rl.sh
 ```
 
 Trains an agent to play complete Yahtzee games. The agent must learn strategic category selection, timing, and trade-offs across all 13 turns.
