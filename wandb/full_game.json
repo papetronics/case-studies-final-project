@@ -14,7 +14,7 @@
         "gamma_min": 1.0,
         "gamma_max": 1.0,
         "dropout_rate": 0.1,
-        "phi_features": "potential_scoring_opportunities,game_progress",
+        "phi_features": "potential_scoring_opportunities",
         "entropy_coeff_start": 0.05,
         "entropy_coeff_end": 0.0,
         "entropy_anneal_percentage": 0.4,
