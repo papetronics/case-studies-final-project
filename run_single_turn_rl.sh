@@ -16,6 +16,7 @@ set -e
   --gamma-min 0.9 \
   --gamma-max 1.0 \
   --dropout-rate 0.1 \
+  --phi-features dice_onehot,dice_counts,rolls_used,phase,has_earned_yahtzee,available_categories,percent_progress_towards_bonus \
   --entropy-coeff-rolling-max 0.15 \
   --entropy-coeff-rolling-min 0.045 \
   --entropy-coeff-scoring-max 0.3 \
