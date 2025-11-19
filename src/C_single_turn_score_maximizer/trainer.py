@@ -20,7 +20,14 @@ from utilities.diagnostics import (
 )
 from utilities.return_calculators import MonteCarloReturnCalculator, ReturnCalculator
 
-from .model import YahtzeeAgent, phi, sample_action, select_action
+from .model import (
+    RollingActionRepresentation,
+    YahtzeeAgent,
+    convert_rolling_action_to_hold_mask,
+    phi,
+    sample_action,
+    select_action,
+)
 from .self_play_dataset import EpisodeBatch
 
 
@@ -65,9 +72,15 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         critic_coeff: float,
         num_steps_per_episode: int,
         features: list[PhiFeature],
+        rolling_action_representation: str,
         return_calculator: ReturnCalculator | None = None,
     ):
         super().__init__()
+
+        # Convert string to enum
+        self.rolling_action_representation = RollingActionRepresentation(
+            rolling_action_representation
+        )
 
         self.policy_net: YahtzeeAgent = YahtzeeAgent(
             hidden_size=hidden_size,
@@ -75,6 +88,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
             dropout_rate=dropout_rate,
             activation_function=activation_function,
             features=features,
+            rolling_action_representation=self.rolling_action_representation,
         )
 
         self.learning_rate: float = learning_rate
@@ -172,13 +186,15 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
                 )
 
                 # Get actions for both modes
-                det_actions = select_action(rolling_probs, scoring_probs)
-                stoch_actions, _, _ = sample_action(rolling_probs, scoring_probs, v_ests)
+                det_actions = select_action(
+                    rolling_probs, scoring_probs, self.rolling_action_representation
+                )
+                stoch_actions, _, _ = sample_action(
+                    rolling_probs, scoring_probs, v_ests, self.rolling_action_representation
+                )
 
                 # Select appropriate actions based on game index
-                rolling_action_tensors = torch.where(
-                    det_mask.unsqueeze(1), det_actions[0], stoch_actions[0]
-                )
+                rolling_action_tensors = torch.where(det_mask, det_actions[0], stoch_actions[0])
                 scoring_action_tensors = torch.where(det_mask, det_actions[1], stoch_actions[1])
 
                 # Step each active environment
@@ -190,12 +206,10 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
                     # Convert action based on phase
                     action: Action
                     if obs["phase"] == 0:
-                        action = {
-                            "hold_mask": rolling_action_tensors[batch_idx]
-                            .cpu()
-                            .numpy()
-                            .astype(bool)
-                        }
+                        mask = convert_rolling_action_to_hold_mask(
+                            rolling_action_tensors[batch_idx], self.rolling_action_representation
+                        )
+                        action = {"hold_mask": mask}
                     else:
                         score_category: int = int(scoring_action_tensors[batch_idx].cpu().item())
                         action = {"score_category": score_category}
@@ -328,7 +342,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
 
         return rolling_coef, scoring_coef
 
-    def training_step(self, batch: EpisodeBatch, batch_idx: int) -> torch.Tensor:  # noqa: ARG002, C901, PLR0915
+    def training_step(self, batch: EpisodeBatch, batch_idx: int) -> torch.Tensor:  # noqa: ARG002, C901, PLR0912, PLR0915
         """Perform a training step using REINFORCE algorithm with vectorized operations."""
         # batch is an EpisodeBatch dict with pre-flattened tensors:
         # - "states": (BATCH_SIZE*39, state_size) float32
@@ -357,11 +371,17 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         rolling_probs, scoring_probs, v_ests = self.policy_net.forward(states_flat)
 
         # Recompute log probabilities from stored actions
-        # Note: Bernoulli.log_prob expects float values, so cast rolling_actions to float
-        rolling_dist = torch.distributions.Bernoulli(rolling_probs)
-        rolling_log_probs = rolling_dist.log_prob(rolling_actions_flat.float()).sum(
-            dim=1
-        )  # (BATCH_SIZE * 39,)
+        rolling_dist: torch.distributions.Distribution
+        if self.rolling_action_representation == RollingActionRepresentation.CATEGORICAL:
+            rolling_dist = torch.distributions.Categorical(rolling_probs)
+            rolling_log_probs = rolling_dist.log_prob(
+                rolling_actions_flat.float()
+            )  # (BATCH_SIZE * 39,)
+        else:  # BERNOULLI
+            rolling_dist = torch.distributions.Bernoulli(rolling_probs)
+            rolling_log_probs = rolling_dist.log_prob(rolling_actions_flat.float()).sum(
+                dim=1
+            )  # (BATCH_SIZE * 39,)
 
         scoring_dist = torch.distributions.Categorical(scoring_probs)
         scoring_log_probs = scoring_dist.log_prob(scoring_actions_flat)  # (BATCH_SIZE * 39,)
@@ -402,8 +422,11 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         # Use MSE loss for critic
         v_loss = torch.nn.functional.mse_loss(v_ests.squeeze(), returns)
 
-        ## Entropy - separate for rolling and scoring heads
-        rolling_entropy = rolling_dist.entropy().sum(dim=1)  # (BATCH_SIZE*39,)
+        ## Entropy
+        if self.rolling_action_representation == RollingActionRepresentation.CATEGORICAL:
+            rolling_entropy = rolling_dist.entropy()  # (BATCH_SIZE*39,)
+        else:  # BERNOULLI
+            rolling_entropy = rolling_dist.entropy().sum(dim=1)  # (BATCH_SIZE*39,)
         scoring_entropy = scoring_dist.entropy()  # (BATCH_SIZE*39,)
 
         # Compute mean entropy for each head based on which steps use that head

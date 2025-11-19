@@ -64,6 +64,9 @@ class ScoringAction(TypedDict):
     score_category: int
 
 
+ActionType = tuple[int, int, int, int, int]
+
+
 class RollingAction(TypedDict):
     """Rolling action type for the Yahtzee environment."""
 

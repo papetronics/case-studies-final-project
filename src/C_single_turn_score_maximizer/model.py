@@ -1,10 +1,11 @@
-from enum import IntEnum
+from collections.abc import Generator
+from enum import Enum, IntEnum
 
 import numpy as np
 import torch
 from torch import nn
 
-from environments.full_yahtzee_env import FINAL_ROLL, Observation
+from environments.full_yahtzee_env import FINAL_ROLL, ActionType, Observation
 from utilities.activation_functions import ActivationFunction, ActivationFunctionName
 from utilities.scoring_helper import (
     NUMBER_OF_CATEGORIES,
@@ -17,6 +18,27 @@ from utilities.sequential_block import SequentialBlock
 
 from .features import PhiFeature
 from .modules import Block, RollingHead, ScoringHead, ValueHead
+
+
+class RollingActionRepresentation(str, Enum):
+    """Representation for rolling actions."""
+
+    BERNOULLI = "bernoulli"  # 5 independent binary decisions (one per die)
+    CATEGORICAL = "categorical"  # Single choice from 32 possible masks
+
+
+def all_dice_masks() -> Generator[ActionType, None, None]:
+    """Generate all possible dice hold masks (5 dice, each can be held or not)."""
+    for i in [0, 1]:
+        for j in [0, 1]:
+            for k in [0, 1]:
+                for l in [0, 1]:  # noqa: E741
+                    for m in [0, 1]:
+                        yield (i, j, k, l, m)
+
+
+DICE_MASKS = list(all_dice_masks())
+assert len(DICE_MASKS) == 32  # 2^5 possible maskss  # noqa: PLR2004
 
 
 class BonusFlags(IntEnum):
@@ -167,11 +189,18 @@ def sample_action(
     rolling_probs: torch.Tensor,
     scoring_probs: torch.Tensor,
     value_est: torch.Tensor,
+    rolling_action_representation: RollingActionRepresentation,
 ) -> tuple[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
     """Sample an action given logits (rolling probs, scoring probs, and value estimate)."""
-    rolling_dist = torch.distributions.Bernoulli(rolling_probs)
-    rolling_tensor = rolling_dist.sample()
-    rolling_log_prob = rolling_dist.log_prob(rolling_tensor).sum()
+    rolling_dist: torch.distributions.Distribution
+    if rolling_action_representation == RollingActionRepresentation.BERNOULLI:
+        rolling_dist = torch.distributions.Bernoulli(rolling_probs)
+        rolling_tensor = rolling_dist.sample()
+        rolling_log_prob = rolling_dist.log_prob(rolling_tensor).sum(dim=-1)
+    else:  # CATEGORICAL
+        rolling_dist = torch.distributions.Categorical(rolling_probs)
+        rolling_tensor = rolling_dist.sample()
+        rolling_log_prob = rolling_dist.log_prob(rolling_tensor).sum()
 
     scoring_dist = torch.distributions.Categorical(scoring_probs)
     scoring_tensor = scoring_dist.sample()
@@ -181,19 +210,35 @@ def sample_action(
 
 
 def select_action(
-    rolling_probs: torch.Tensor, scoring_probs: torch.Tensor
+    rolling_probs: torch.Tensor,
+    scoring_probs: torch.Tensor,
+    rolling_action_representation: RollingActionRepresentation,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Select deterministic action using argmax/threshold (for validation/testing).
+    """Select deterministic action using argmax/threshold (for validation/testing)."""
+    if rolling_action_representation == RollingActionRepresentation.BERNOULLI:
+        # Threshold at 0.5: keep dice with prob > 0.5
+        rolling_tensor = (rolling_probs > 0.5).float()  # noqa: PLR2004
+    else:  # CATEGORICAL
+        rolling_tensor = rolling_probs.argmax(dim=-1)
 
-    Uses >0.5 threshold for rolling decisions and argmax for scoring decisions.
-    """
-    # Rolling: threshold at 0.5 (keep dice with prob > 0.5)
-    rolling_tensor = (rolling_probs > 0.5).float()  # noqa: PLR2004
-
-    # Scoring: argmax to select highest probability category
     scoring_tensor = scoring_probs.argmax(dim=-1)
 
     return (rolling_tensor, scoring_tensor)
+
+
+def convert_rolling_action_to_hold_mask(
+    rolling_action: torch.Tensor,
+    rolling_action_representation: RollingActionRepresentation,
+) -> np.ndarray:
+    """Convert a rolling action tensor to a numpy hold mask.
+
+    For Categorical: looks up the mask in DICE_MASKS
+    For Bernoulli: directly converts to boolean numpy array
+    """
+    if rolling_action_representation == RollingActionRepresentation.CATEGORICAL:
+        return np.array(DICE_MASKS[int(rolling_action.item())], dtype=bool)
+    else:  # BERNOULLI
+        return rolling_action.cpu().numpy().astype(bool)
 
 
 class YahtzeeAgent(nn.Module):
@@ -206,12 +251,19 @@ class YahtzeeAgent(nn.Module):
         dropout_rate: float,
         activation_function: ActivationFunctionName,
         features: list[PhiFeature],
+        rolling_action_representation: RollingActionRepresentation | str,
     ):
         super().__init__()
 
         activation = ActivationFunction[activation_function].value
 
         self.dropout_rate = dropout_rate
+        # Convert string to enum if needed
+        self.rolling_action_representation = (
+            RollingActionRepresentation(rolling_action_representation)
+            if isinstance(rolling_action_representation, str)
+            else rolling_action_representation
+        )
 
         self.bonus_flags: set[BonusFlags] = {BonusFlags.PERCENT_PROGRESS_TOWARDS_BONUS}
         self.features: list[PhiFeature] = features
@@ -219,9 +271,14 @@ class YahtzeeAgent(nn.Module):
         input_size = get_input_dimensions(self.bonus_flags, self.features)
 
         ## Model outputs:
-        #   - Action Probabilities [5]: Probability of re-rolling each of the 5 dice
+        #   - Rolling action:
+        #       - Bernoulli: [5] - Probability of re-rolling each die
+        #       - Categorical: [32] - Probability of selecting a particular dice mask
         #   - Scoring probabilities [13]: Probability of selecting each scoring category
-        dice_output_size = 5
+        if self.rolling_action_representation == RollingActionRepresentation.BERNOULLI:
+            dice_output_size = NUMBER_OF_DICE  # 5 independent binary decisions
+        else:  # CATEGORICAL
+            dice_output_size = len(DICE_MASKS)  # 32 possible masks
         scoring_output_size = 13
 
         layers = [Block(input_size, hidden_size, dropout_rate, activation)]
