@@ -1,13 +1,16 @@
 """Feature definitions for the phi() state representation function."""
+# ruff: noqa: D102
 
 from abc import ABC, abstractmethod
 
 import numpy as np
 from numpy.typing import NDArray
 
-from environments.full_yahtzee_env import Observation
+from environments.full_yahtzee_env import FINAL_ROLL, Observation
 from utilities.scoring_helper import (
     NUMBER_OF_CATEGORIES,
+    NUMBER_OF_DICE,
+    NUMBER_OF_DICE_SIDES,
     YAHTZEE_SCORE,
     ScoreCategory,
     get_all_scores,
@@ -20,13 +23,11 @@ class PhiFeature(ABC):
     @property
     @abstractmethod
     def name(self) -> str:
-        """Return the unique identifier for this feature (used in config)."""
         pass
 
     @property
     @abstractmethod
     def size(self) -> int:
-        """The number of elements this feature contributes to the input vector."""
         pass
 
     @abstractmethod
@@ -55,25 +56,14 @@ NORMAL_SCORE_MAX = np.array(
 
 
 class PotentialScoringOpportunitiesFeature(PhiFeature):
-    """Feature that encodes the potential scores available for each category.
-
-    This feature provides information about what scores are achievable with the current
-    dice roll across all scoring categories, plus a joker indicator for when yahtzee
-    joker rules are active.
-
-    Output dimensions:
-        - Potential scores [13]: The score value achievable in each category (0 if unavailable)
-        - Joker indicator [1]: 1.0 if joker rules are active, 0.0 otherwise
-    """
+    """Potential scores available for each category plus joker indicator."""
 
     @property
     def name(self) -> str:
-        """Return the unique identifier for this feature."""
         return "potential_scoring_opportunities"
 
     @property
     def size(self) -> int:
-        """13 categories + 1 joker indicator = 14 dimensions."""
         return int(NUMBER_OF_CATEGORIES + 1)
 
     def compute(self, observation: Observation) -> NDArray[np.floating]:
@@ -92,23 +82,14 @@ class PotentialScoringOpportunitiesFeature(PhiFeature):
 
 
 class GameProgressFeature(PhiFeature):
-    """Feature that encodes how far through the game we are.
-
-    This feature provides information about game progression by calculating what
-    percentage of the game remains based on how many scoring categories are still available.
-
-    Output dimensions:
-        - Percent of game remaining [1]: Value from 0.0 (game complete) to 1.0 (game start)
-    """
+    """Percentage of game remaining based on available scoring categories."""
 
     @property
     def name(self) -> str:
-        """Return the unique identifier for this feature."""
         return "game_progress"
 
     @property
     def size(self) -> int:
-        """1 dimension for percent of game remaining."""
         return 1
 
     def compute(self, observation: Observation) -> NDArray[np.floating]:
@@ -118,9 +99,154 @@ class GameProgressFeature(PhiFeature):
         return np.array([percent_of_game_remaining])
 
 
+# Base observation features (always included)
+
+
+class DiceOneHotFeature(PhiFeature):
+    """One-hot encoding of the 5 dice values."""
+
+    @property
+    def name(self) -> str:
+        return "dice_onehot"
+
+    @property
+    def size(self) -> int:
+        return int(NUMBER_OF_DICE * NUMBER_OF_DICE_SIDES)
+
+    def compute(self, observation: Observation) -> NDArray[np.floating]:
+        """Compute one-hot encoding of dice."""
+        dice = observation["dice"]  # numpy array showing actual dice, e.g. [1, 3, 5, 6, 2]
+        dice_onehot: NDArray[np.floating] = (
+            np.eye(NUMBER_OF_DICE_SIDES)[dice - 1].flatten().astype(np.float64)
+        )
+        return dice_onehot
+
+
+class DiceCountsFeature(PhiFeature):
+    """Counts of each die face (1-6)."""
+
+    @property
+    def name(self) -> str:
+        return "dice_counts"
+
+    @property
+    def size(self) -> int:
+        return int(NUMBER_OF_DICE_SIDES)
+
+    def compute(self, observation: Observation) -> NDArray[np.floating]:
+        """Compute counts of each die face."""
+        dice = observation["dice"]
+        dice_counts = np.bincount(dice, minlength=7)[1:]  # counts of dice faces from 1 to 6
+        return dice_counts.astype(np.float64)
+
+
+class RollsUsedFeature(PhiFeature):
+    """One-hot encoding of rolls used (0, 1, or 2)."""
+
+    @property
+    def name(self) -> str:
+        return "rolls_used"
+
+    @property
+    def size(self) -> int:
+        return int(FINAL_ROLL + 1)
+
+    def compute(self, observation: Observation) -> NDArray[np.floating]:
+        """Compute one-hot encoding of rolls used."""
+        rolls_used = observation["rolls_used"]  # integer: 0, 1, or 2
+        rolls_onehot: NDArray[np.floating] = np.eye(FINAL_ROLL + 1)[rolls_used].astype(np.float64)
+        return rolls_onehot
+
+
+class PhaseFeature(PhiFeature):
+    """Current phase of the game (0: rolling, 1: scoring)."""
+
+    @property
+    def name(self) -> str:
+        return "phase"
+
+    @property
+    def size(self) -> int:
+        return 1
+
+    def compute(self, observation: Observation) -> NDArray[np.floating]:
+        """Compute current phase."""
+        phase = observation.get("phase", 0)  # Current phase (0: rolling, 1: scoring)
+        return np.array([phase], dtype=np.float64)
+
+
+class HasEarnedYahtzeeFeature(PhiFeature):
+    """Whether the player has already scored a Yahtzee (50 points)."""
+
+    @property
+    def name(self) -> str:
+        return "has_earned_yahtzee"
+
+    @property
+    def size(self) -> int:
+        return 1
+
+    def compute(self, observation: Observation) -> NDArray[np.floating]:
+        """Compute whether Yahtzee has been scored."""
+        has_earned_yahtzee = observation["score_sheet"][ScoreCategory.YAHTZEE] == YAHTZEE_SCORE
+        return np.array([float(has_earned_yahtzee)], dtype=np.float64)
+
+
+class AvailableCategoriesFeature(PhiFeature):
+    """Binary mask of which scoring categories are still available."""
+
+    @property
+    def name(self) -> str:
+        return "available_categories"
+
+    @property
+    def size(self) -> int:
+        return int(NUMBER_OF_CATEGORIES)
+
+    def compute(self, observation: Observation) -> NDArray[np.floating]:
+        """Compute available categories mask."""
+        available_categories: NDArray[np.floating] = observation[
+            "score_sheet_available_mask"
+        ].astype(np.float64)
+        return available_categories
+
+
+# Bonus-related features
+
+UPPER_SCORE_THRESHOLD = 63
+
+
+class PercentProgressTowardsBonusFeature(PhiFeature):
+    """Percent progress towards upper section bonus (0.0 to 1.0)."""
+
+    @property
+    def name(self) -> str:
+        return "percent_progress_towards_bonus"
+
+    @property
+    def size(self) -> int:
+        return 1
+
+    def compute(self, observation: Observation) -> NDArray[np.floating]:
+        """Compute percent progress towards bonus."""
+        total_upper_score = observation["score_sheet"][:6].sum()
+        percent_progress = min(1.0, total_upper_score / UPPER_SCORE_THRESHOLD)
+        return np.array([percent_progress], dtype=np.float64)
+
+
 FEATURE_REGISTRY: dict[str, type[PhiFeature]] = {
+    # Advanced features
     "potential_scoring_opportunities": PotentialScoringOpportunitiesFeature,
     "game_progress": GameProgressFeature,
+    # Base observation features
+    "dice_onehot": DiceOneHotFeature,
+    "dice_counts": DiceCountsFeature,
+    "rolls_used": RollsUsedFeature,
+    "phase": PhaseFeature,
+    "has_earned_yahtzee": HasEarnedYahtzeeFeature,
+    "available_categories": AvailableCategoriesFeature,
+    # Bonus-related features
+    "percent_progress_towards_bonus": PercentProgressTowardsBonusFeature,
 }
 
 
