@@ -247,6 +247,8 @@ def main() -> None:  # noqa: PLR0915
     # Log training configuration table
     config_table = [
         "=" * 50,
+        "SINGLE TURN" if game_scenario == "single_turn" else "FULL GAME",
+        "=" * 50,
         "TRAINING INFORMATION",
         f"Total Games:       {total_games_actual:,}",
         f"Total Epochs:      {epochs:,}",
@@ -310,6 +312,7 @@ def main() -> None:  # noqa: PLR0915
                 "entropy_anneal_percentage": entropy_anneal_percentage,
                 "entropy_anneal_epochs": int(entropy_anneal_percentage * epochs),
                 "critic_coeff": critic_coeff,
+                "game_scenario": game_scenario,
             }
         )
 
