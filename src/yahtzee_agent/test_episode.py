@@ -18,7 +18,7 @@ from yahtzee_agent.model import (
     phi,
     sample_action,
 )
-from yahtzee_agent.trainer import SingleTurnScoreMaximizerREINFORCETrainer
+from yahtzee_agent.trainer import YahtzeeAgentTrainer
 
 
 def clear_screen() -> None:
@@ -42,7 +42,7 @@ def main(
     # load the model from checkpoint path
     if checkpoint_path is not None:
         # Load the Lightning trainer from checkpoint
-        trainer = SingleTurnScoreMaximizerREINFORCETrainer.load_from_checkpoint(checkpoint_path)
+        trainer = YahtzeeAgentTrainer.load_from_checkpoint(checkpoint_path)
         model = trainer.policy_net
     elif model is None:
         raise ValueError("Either checkpoint_path or model must be provided.")  # noqa: TRY003

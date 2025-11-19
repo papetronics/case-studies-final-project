@@ -31,7 +31,7 @@ from .model import (
 from .self_play_dataset import EpisodeBatch
 
 
-class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
+class YahtzeeAgentTrainer(lightning.LightningModule):
     """PyTorch Lightning trainer for single-turn Yahtzee score maximization using REINFORCE.
 
     DIAGNOSTIC QUICK REFERENCE:

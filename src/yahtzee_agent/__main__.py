@@ -13,7 +13,7 @@ from utilities.return_calculators import MonteCarloReturnCalculator
 from yahtzee_agent import test_episode
 from yahtzee_agent.features import FEATURE_REGISTRY, create_features
 from yahtzee_agent.self_play_dataset import SelfPlayDataset
-from yahtzee_agent.trainer import SingleTurnScoreMaximizerREINFORCETrainer
+from yahtzee_agent.trainer import YahtzeeAgentTrainer
 
 log = logging.getLogger(__name__)
 
@@ -335,7 +335,7 @@ def main() -> None:  # noqa: PLR0915
         # Create return calculator and model
         return_calculator = MonteCarloReturnCalculator()
         he_kaiming_initialization = config.get("he_kaiming_initialization", False)
-        model = SingleTurnScoreMaximizerREINFORCETrainer(
+        model = YahtzeeAgentTrainer(
             hidden_size=hidden_size,
             learning_rate=learning_rate,
             return_calculator=return_calculator,
