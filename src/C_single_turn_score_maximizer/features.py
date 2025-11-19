@@ -91,8 +91,36 @@ class PotentialScoringOpportunitiesFeature(PhiFeature):
         return np.concatenate([(score_values / NORMAL_SCORE_MAX), [float(joker)]])
 
 
+class GameProgressFeature(PhiFeature):
+    """Feature that encodes how far through the game we are.
+
+    This feature provides information about game progression by calculating what
+    percentage of the game remains based on how many scoring categories are still available.
+
+    Output dimensions:
+        - Percent of game remaining [1]: Value from 0.0 (game complete) to 1.0 (game start)
+    """
+
+    @property
+    def name(self) -> str:
+        """Return the unique identifier for this feature."""
+        return "game_progress"
+
+    @property
+    def size(self) -> int:
+        """1 dimension for percent of game remaining."""
+        return 1
+
+    def compute(self, observation: Observation) -> NDArray[np.floating]:
+        """Compute percent of game remaining from available categories."""
+        available_categories = observation["score_sheet_available_mask"]
+        percent_of_game_remaining = 1.0 - (np.sum(available_categories) / NUMBER_OF_CATEGORIES)
+        return np.array([percent_of_game_remaining])
+
+
 FEATURE_REGISTRY: dict[str, type[PhiFeature]] = {
     "potential_scoring_opportunities": PotentialScoringOpportunitiesFeature,
+    "game_progress": GameProgressFeature,
 }
 
 
