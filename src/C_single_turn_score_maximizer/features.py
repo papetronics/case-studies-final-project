@@ -64,7 +64,7 @@ class PotentialScoringOpportunitiesFeature(PhiFeature):
             has_scored_yahtzee,
         )
 
-        return np.concatenate([score_values, [joker]])
+        return np.concatenate([score_values.astype(np.float64), [float(joker)]])
 
 
 FEATURE_REGISTRY: dict[str, type[PhiFeature]] = {
