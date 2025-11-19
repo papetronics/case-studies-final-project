@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import logging
 import os
+import secrets
 
 import pytorch_lightning as lightning
 import torch
@@ -394,7 +395,7 @@ def main() -> None:  # noqa: PLR0915
         model.log("stat/total_updates", total_updates, prog_bar=False)
         model.log("stat/games_per_epoch", games_per_epoch_actual, prog_bar=False)
 
-        run_scope = os.getenv("WANDB_RUN_ID") or "local-run"
+        run_scope = os.getenv("WANDB_RUN_ID") or secrets.token_hex(4)
 
         checkpoint_dir = os.path.join(CKPT_DIR, run_scope)
         last = os.path.join(checkpoint_dir, "last.ckpt")
