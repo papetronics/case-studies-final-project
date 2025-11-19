@@ -127,7 +127,7 @@ class CouldNotFindCategoryMaskFeatureError(Exception):
 class YahtzeeAgent(nn.Module):
     """Neural network model for maximizing score in a single turn of Yahtzee."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         hidden_size: int,
         num_hidden: int,
@@ -135,6 +135,7 @@ class YahtzeeAgent(nn.Module):
         activation_function: ActivationFunctionName,
         features: list[PhiFeature],
         rolling_action_representation: RollingActionRepresentation | str,
+        he_kaiming_initialization: bool,
     ):
         super().__init__()
 
@@ -189,7 +190,8 @@ class YahtzeeAgent(nn.Module):
         self.value_head = ValueHead(hidden_size, activation).to(self.device)
 
         # Initialize weights for better behavior at high learning rates
-        self._initialize_weights()
+        if he_kaiming_initialization:
+            self._initialize_weights()
 
     @staticmethod
     def _init_kaiming_linear(module: nn.Module) -> None:

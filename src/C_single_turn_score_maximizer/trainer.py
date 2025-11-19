@@ -73,6 +73,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         num_steps_per_episode: int,
         features: list[PhiFeature],
         rolling_action_representation: str,
+        he_kaiming_initialization: bool,
         return_calculator: ReturnCalculator | None = None,
     ):
         super().__init__()
@@ -89,6 +90,7 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
             activation_function=activation_function,
             features=features,
             rolling_action_representation=self.rolling_action_representation,
+            he_kaiming_initialization=he_kaiming_initialization,
         )
 
         self.learning_rate: float = learning_rate
