@@ -56,9 +56,12 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         min_lr_ratio: float,
         gamma_max: float,
         gamma_min: float,
-        entropy_coeff_start: float,
-        entropy_coeff_end: float,
-        entropy_anneal_epochs: int,
+        entropy_coeff_rolling_max: float,
+        entropy_coeff_rolling_min: float,
+        entropy_coeff_scoring_max: float,
+        entropy_coeff_scoring_min: float,
+        entropy_hold_period: float,
+        entropy_anneal_period: float,
         critic_coeff: float,
         num_steps_per_episode: int,
         features: list[PhiFeature],
@@ -79,9 +82,12 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         self.min_lr_ratio: float = min_lr_ratio
         self.gamma_max: float = gamma_max
         self.gamma_min: float = gamma_min
-        self.entropy_coeff_start: float = entropy_coeff_start
-        self.entropy_coeff_end: float = entropy_coeff_end
-        self.entropy_anneal_epochs: int = entropy_anneal_epochs
+        self.entropy_coeff_rolling_max: float = entropy_coeff_rolling_max
+        self.entropy_coeff_rolling_min: float = entropy_coeff_rolling_min
+        self.entropy_coeff_scoring_max: float = entropy_coeff_scoring_max
+        self.entropy_coeff_scoring_min: float = entropy_coeff_scoring_min
+        self.entropy_hold_period: float = entropy_hold_period
+        self.entropy_anneal_period: float = entropy_anneal_period
         self.critic_coeff: float = critic_coeff
         self.num_steps_per_episode: int = num_steps_per_episode
 
@@ -278,15 +284,49 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
             self.log("test/mean_total_score_stoch", stoch_mean, prog_bar=False)
             self.log("test/std_total_score_stoch", stoch_std, prog_bar=False)
 
-    def get_entropy_coef(self) -> float:
-        """Get current entropy coefficient with linear annealing."""
-        start = self.entropy_coeff_start
-        end = self.entropy_coeff_end
-        entropy_t = max(1, self.entropy_anneal_epochs)
+    def get_entropy_coefs(self) -> tuple[float, float]:
+        """Get current entropy coefficients for rolling and scoring heads.
 
-        # clamp at 1.0 so we stop decaying after T epochs
-        progress = min(self.current_epoch / entropy_t, 1.0)
-        return start + (end - start) * progress
+        Schedule:
+        - Hold at max for entropy_hold_period (default 40%) of training
+        - Anneal linearly to min over entropy_anneal_period (default 35%) of training
+        - Hold at min for remaining training
+
+        Returns
+        -------
+        tuple[float, float]
+            (rolling_coef, scoring_coef) - current entropy coefficients
+        """
+        # Calculate epoch boundaries
+        hold_end_epoch = self.max_epochs * self.entropy_hold_period
+        anneal_end_epoch = hold_end_epoch + self.max_epochs * self.entropy_anneal_period
+
+        # Determine current phase and progress
+        if self.current_epoch < hold_end_epoch:
+            # Phase 1: Hold at max
+            rolling_coef = self.entropy_coeff_rolling_max
+            scoring_coef = self.entropy_coeff_scoring_max
+        elif self.current_epoch < anneal_end_epoch:
+            # Phase 2: Anneal from max to min
+            anneal_progress = (self.current_epoch - hold_end_epoch) / (
+                self.max_epochs * self.entropy_anneal_period
+            )
+            rolling_coef = (
+                self.entropy_coeff_rolling_max
+                + (self.entropy_coeff_rolling_min - self.entropy_coeff_rolling_max)
+                * anneal_progress
+            )
+            scoring_coef = (
+                self.entropy_coeff_scoring_max
+                + (self.entropy_coeff_scoring_min - self.entropy_coeff_scoring_max)
+                * anneal_progress
+            )
+        else:
+            # Phase 3: Hold at min
+            rolling_coef = self.entropy_coeff_rolling_min
+            scoring_coef = self.entropy_coeff_scoring_min
+
+        return rolling_coef, scoring_coef
 
     def training_step(self, batch: EpisodeBatch, batch_idx: int) -> torch.Tensor:  # noqa: ARG002, C901, PLR0915
         """Perform a training step using REINFORCE algorithm with vectorized operations."""
@@ -362,26 +402,43 @@ class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
         # Use MSE loss for critic
         v_loss = torch.nn.functional.mse_loss(v_ests.squeeze(), returns)
 
-        ## Entropy
+        ## Entropy - separate for rolling and scoring heads
         rolling_entropy = rolling_dist.entropy().sum(dim=1)  # (BATCH_SIZE*39,)
         scoring_entropy = scoring_dist.entropy()  # (BATCH_SIZE*39,)
-        # Match entropy to the active head at each step, same as log_probs
-        entropies = torch.where(
-            phases_flat == 0, rolling_entropy, scoring_entropy
-        )  # (BATCH_SIZE*39,)
-        entropy_mean = entropies.mean()
-        ent_coef = self.get_entropy_coef()
-        entropy_bonus = ent_coef * entropy_mean
 
-        loss = policy_loss + self.critic_coeff * v_loss - entropy_bonus
+        # Compute mean entropy for each head based on which steps use that head
+        rolling_mask = phases_flat == 0
+        scoring_mask = phases_flat == 1
+
+        rolling_entropy_mean = (
+            rolling_entropy[rolling_mask].mean() if rolling_mask.any() else torch.tensor(0.0)
+        )
+        scoring_entropy_mean = (
+            scoring_entropy[scoring_mask].mean() if scoring_mask.any() else torch.tensor(0.0)
+        )
+
+        # Get current entropy coefficients for both heads
+        rolling_coef, scoring_coef = self.get_entropy_coefs()
+
+        # Compute separate entropy bonuses
+        rolling_entropy_bonus = rolling_coef * rolling_entropy_mean
+        scoring_entropy_bonus = scoring_coef * scoring_entropy_mean
+        total_entropy_bonus = rolling_entropy_bonus + scoring_entropy_bonus
+
+        loss = policy_loss + self.critic_coeff * v_loss - total_entropy_bonus
 
         diff = returns - v_ests.squeeze()
         ev = 1 - diff.var() / (returns.var() + 1e-8)
         self.log("train/value_explained_var", ev, prog_bar=False)
 
-        self.log("train/entropy", entropy_mean, prog_bar=False)
-        self.log("train/entropy_bonus", entropy_bonus, prog_bar=False)
-        self.log("train/entropy_coef", ent_coef, prog_bar=False)
+        # Log separate entropy metrics for each head
+        self.log("train/entropy_roll", rolling_entropy_mean, prog_bar=False)
+        self.log("train/entropy_score", scoring_entropy_mean, prog_bar=False)
+        self.log("train/entropy_bonus_roll", rolling_entropy_bonus, prog_bar=False)
+        self.log("train/entropy_bonus_score", scoring_entropy_bonus, prog_bar=False)
+        self.log("train/entropy_bonus_total", total_entropy_bonus, prog_bar=False)
+        self.log("train/entropy_coef_roll", rolling_coef, prog_bar=False)
+        self.log("train/entropy_coef_score", scoring_coef, prog_bar=False)
         self.log("train/policy_loss", policy_loss, prog_bar=True)
         self.log("train/v_loss", v_loss, prog_bar=False)
 
