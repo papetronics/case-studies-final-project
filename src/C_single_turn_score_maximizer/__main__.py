@@ -137,25 +137,46 @@ def main() -> None:  # noqa: PLR0915
             display_name="Gradient clip value",
         ),
         ConfigParam(
-            "entropy_coeff_start",
+            "entropy_coeff_rolling_max",
             float,
-            0.05,
-            "Starting coefficient for entropy regularization",
-            display_name="Entropy coeff start",
+            0.15,
+            "Maximum entropy coefficient for rolling head",
+            display_name="Entropy coeff rolling max",
         ),
         ConfigParam(
-            "entropy_coeff_end",
+            "entropy_coeff_rolling_min",
             float,
-            0.0,
-            "Ending coefficient for entropy regularization",
-            display_name="Entropy coeff end",
+            0.045,
+            "Minimum entropy coefficient for rolling head",
+            display_name="Entropy coeff rolling min",
         ),
         ConfigParam(
-            "entropy_anneal_percentage",
+            "entropy_coeff_scoring_max",
+            float,
+            0.3,
+            "Maximum entropy coefficient for scoring head",
+            display_name="Entropy coeff scoring max",
+        ),
+        ConfigParam(
+            "entropy_coeff_scoring_min",
+            float,
+            0.006,
+            "Minimum entropy coefficient for scoring head",
+            display_name="Entropy coeff scoring min",
+        ),
+        ConfigParam(
+            "entropy_hold_period",
             float,
             0.4,
-            "Percentage of training epochs over which to anneal entropy coefficient",
-            display_name="Entropy anneal percentage",
+            "Fraction of training to hold entropy at max before annealing",
+            display_name="Entropy hold period",
+        ),
+        ConfigParam(
+            "entropy_anneal_period",
+            float,
+            0.35,
+            "Fraction of training over which to anneal entropy from max to min",
+            display_name="Entropy anneal period",
         ),
         ConfigParam(
             "critic_coeff",
@@ -189,9 +210,12 @@ def main() -> None:  # noqa: PLR0915
     gamma_max = config["gamma_max"]
     dropout_rate = config["dropout_rate"]
     gradient_clip_val = config["gradient_clip_val"]
-    entropy_coeff_start = config["entropy_coeff_start"]
-    entropy_coeff_end = config["entropy_coeff_end"]
-    entropy_anneal_percentage = config["entropy_anneal_percentage"]
+    entropy_coeff_rolling_max = config["entropy_coeff_rolling_max"]
+    entropy_coeff_rolling_min = config["entropy_coeff_rolling_min"]
+    entropy_coeff_scoring_max = config["entropy_coeff_scoring_max"]
+    entropy_coeff_scoring_min = config["entropy_coeff_scoring_min"]
+    entropy_hold_period = config["entropy_hold_period"]
+    entropy_anneal_period = config["entropy_anneal_period"]
     critic_coeff = config["critic_coeff"]
 
     # Calculate games_per_epoch from total_train_games and epochs
@@ -249,9 +273,12 @@ def main() -> None:  # noqa: PLR0915
             min_lr_ratio=min_lr_ratio,
             gamma_min=gamma_min,
             gamma_max=gamma_max,
-            entropy_coeff_start=entropy_coeff_start,
-            entropy_coeff_end=entropy_coeff_end,
-            entropy_anneal_epochs=int(entropy_anneal_percentage * epochs),
+            entropy_coeff_rolling_max=entropy_coeff_rolling_max,
+            entropy_coeff_rolling_min=entropy_coeff_rolling_min,
+            entropy_coeff_scoring_max=entropy_coeff_scoring_max,
+            entropy_coeff_scoring_min=entropy_coeff_scoring_min,
+            entropy_hold_period=entropy_hold_period,
+            entropy_anneal_period=entropy_anneal_period,
             critic_coeff=critic_coeff,
         )
 
@@ -270,16 +297,21 @@ def main() -> None:  # noqa: PLR0915
                 "total_train_games": total_train_games,
                 "games_per_batch": games_per_batch,
                 "gradient_clip_val": gradient_clip_val,
-                "entropy_coeff_start": entropy_coeff_start,
-                "entropy_coeff_end": entropy_coeff_end,
-                "entropy_anneal_percentage": entropy_anneal_percentage,
+                "entropy_coeff_rolling_max": entropy_coeff_rolling_max,
+                "entropy_coeff_rolling_min": entropy_coeff_rolling_min,
+                "entropy_coeff_scoring_max": entropy_coeff_scoring_max,
+                "entropy_coeff_scoring_min": entropy_coeff_scoring_min,
+                "entropy_hold_period": entropy_hold_period,
+                "entropy_anneal_period": entropy_anneal_period,
                 "critic_coeff": critic_coeff,
             }
         )
 
-        model.log(
-            "stat/entropy_anneal_epochs", int(entropy_anneal_percentage * epochs), prog_bar=False
-        )
+        # Log entropy schedule info
+        entropy_hold_epochs = int(entropy_hold_period * epochs)
+        entropy_anneal_epochs = int(entropy_anneal_period * epochs)
+        model.log("stat/entropy_hold_epochs", entropy_hold_epochs, prog_bar=False)
+        model.log("stat/entropy_anneal_epochs", entropy_anneal_epochs, prog_bar=False)
         model.log("stat/updates_per_epoch", updates_per_epoch, prog_bar=False)
         model.log("stat/total_games_actual", total_games_actual, prog_bar=False)
         model.log("stat/total_updates", total_updates, prog_bar=False)

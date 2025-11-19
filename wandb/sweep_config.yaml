@@ -6,10 +6,30 @@ metric:
 parameters:
   epochs:
     values: [500]
-  entropy_coeff_start:
+  entropy_coeff_rolling_max:
+    distribution: uniform
+    min: 0.05
+    max: 0.3
+  entropy_coeff_rolling_min:
     distribution: uniform
     min: 0.01
-    max: 0.25
+    max: 0.1
+  entropy_coeff_scoring_max:
+    distribution: uniform
+    min: 0.1
+    max: 0.5
+  entropy_coeff_scoring_min:
+    distribution: uniform
+    min: 0.001
+    max: 0.02
+  entropy_hold_period:
+    distribution: uniform
+    min: 0.2
+    max: 0.5
+  entropy_anneal_period:
+    distribution: uniform
+    min: 0.2
+    max: 0.5
   learning_rate:
     distribution: log_uniform_values
     min: 0.00005
@@ -32,10 +52,6 @@ parameters:
     distribution: uniform
     min: 0.05
     max: 0.15
-  entropy_anneal_percentage:
-    distribution: uniform
-    min: 0.1
-    max: 0.7
   critic_coeff:
     distribution: log_uniform_values
     min: 0.005

@@ -15,7 +15,10 @@ set -e
   --gamma-min 0.9 \
   --gamma-max 1.0 \
   --dropout-rate 0.1 \
-  --entropy-coeff-start 0.05 \
-  --entropy-coeff-end 0.0 \
-  --entropy-anneal-percentage 0.4 \
+  --entropy-coeff-rolling-max 0.15 \
+  --entropy-coeff-rolling-min 0.045 \
+  --entropy-coeff-scoring-max 0.3 \
+  --entropy-coeff-scoring-min 0.006 \
+  --entropy-hold-period 0.4 \
+  --entropy-anneal-period 0.35 \
   --critic-coeff 0.05
