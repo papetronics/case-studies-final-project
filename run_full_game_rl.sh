@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -e
 
-# Build and run the single turn RL scenario
+# Build and run the full game RL scenario
 ./build_image.sh C_single_turn_score_maximizer \
-  --game-scenario single_turn \
+  --game-scenario full_game \
   --epochs 500 \
   --total-train-games 260000 \
   --games-per-batch 26 \
@@ -13,7 +13,7 @@ set -e
   --activation-function Swish \
   --learning-rate 0.0005 \
   --min-lr-ratio 0.01 \
-  --gamma-min 0.9 \
+  --gamma-min 1.0 \
   --gamma-max 1.0 \
   --dropout-rate 0.1 \
   --entropy-coeff-start 0.05 \
