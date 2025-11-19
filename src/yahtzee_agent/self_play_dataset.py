@@ -3,9 +3,9 @@ from typing import TYPE_CHECKING, TypedDict, cast
 import gymnasium as gym
 import torch
 
-from C_single_turn_score_maximizer.features import PhiFeature
 from environments.full_yahtzee_env import Action, Observation, YahtzeeEnv
 from utilities.return_calculators import ReturnCalculator
+from yahtzee_agent.features import PhiFeature
 
 from .model import convert_rolling_action_to_hold_mask, get_input_dimensions, phi, sample_action
 

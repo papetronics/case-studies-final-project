@@ -7,13 +7,13 @@ import pytorch_lightning as lightning
 import torch
 from pytorch_lightning.callbacks import ModelCheckpoint
 
-from C_single_turn_score_maximizer import test_episode
-from C_single_turn_score_maximizer.features import FEATURE_REGISTRY, create_features
-from C_single_turn_score_maximizer.self_play_dataset import SelfPlayDataset
-from C_single_turn_score_maximizer.trainer import SingleTurnScoreMaximizerREINFORCETrainer
 from utilities.dummy_dataset import DummyDataset
 from utilities.initialize import ConfigParam, finish, initialize
 from utilities.return_calculators import MonteCarloReturnCalculator
+from yahtzee_agent import test_episode
+from yahtzee_agent.features import FEATURE_REGISTRY, create_features
+from yahtzee_agent.self_play_dataset import SelfPlayDataset
+from yahtzee_agent.trainer import YahtzeeAgentTrainer
 
 log = logging.getLogger(__name__)
 
@@ -334,7 +334,8 @@ def main() -> None:  # noqa: PLR0915
     else:
         # Create return calculator and model
         return_calculator = MonteCarloReturnCalculator()
-        model = SingleTurnScoreMaximizerREINFORCETrainer(
+        he_kaiming_initialization = config.get("he_kaiming_initialization", False)
+        model = YahtzeeAgentTrainer(
             hidden_size=hidden_size,
             learning_rate=learning_rate,
             return_calculator=return_calculator,
@@ -355,6 +356,7 @@ def main() -> None:  # noqa: PLR0915
             num_steps_per_episode=num_steps_per_episode,
             features=phi_features,
             rolling_action_representation=rolling_action_representation,
+            he_kaiming_initialization=he_kaiming_initialization,
         )
 
         # Save hyperparameters explicitly

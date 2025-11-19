@@ -5,7 +5,6 @@ import numpy as np
 import pytorch_lightning as lightning
 import torch
 
-from C_single_turn_score_maximizer.features import PhiFeature
 from environments.full_yahtzee_env import Action, Observation
 from utilities.activation_functions import ActivationFunctionName
 from utilities.diagnostics import (
@@ -19,6 +18,7 @@ from utilities.diagnostics import (
     compute_rolling_mask_diversity,
 )
 from utilities.return_calculators import MonteCarloReturnCalculator, ReturnCalculator
+from yahtzee_agent.features import PhiFeature
 
 from .model import (
     RollingActionRepresentation,
@@ -31,7 +31,7 @@ from .model import (
 from .self_play_dataset import EpisodeBatch
 
 
-class SingleTurnScoreMaximizerREINFORCETrainer(lightning.LightningModule):
+class YahtzeeAgentTrainer(lightning.LightningModule):
     """PyTorch Lightning trainer for single-turn Yahtzee score maximization using REINFORCE.
 
     DIAGNOSTIC QUICK REFERENCE:
