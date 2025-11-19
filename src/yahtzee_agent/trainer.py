@@ -112,7 +112,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
 
         self.validation_envs: list[gym.Env[Observation, Action]] = []  # Created on demand
 
-    def run_batched_validation_games(
+    def run_batched_validation_games(  # noqa: C901, PLR0912
         self, num_games: int, run_deterministic: bool = True, run_stochastic: bool = False
     ) -> tuple[list[float], list[float]]:
         """Run multiple Yahtzee games in parallel with both deterministic and stochastic action selection.
@@ -195,7 +195,13 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
                 )
 
                 # Select appropriate actions based on game index
-                rolling_action_tensors = torch.where(det_mask, det_actions[0], stoch_actions[0])
+                # For BERNOULLI representation, rolling actions are (batch, 5), so expand mask
+                if self.rolling_action_representation == RollingActionRepresentation.BERNOULLI:
+                    rolling_mask = det_mask.unsqueeze(1)  # (batch,) -> (batch, 1)
+                else:
+                    rolling_mask = det_mask
+
+                rolling_action_tensors = torch.where(rolling_mask, det_actions[0], stoch_actions[0])
                 scoring_action_tensors = torch.where(det_mask, det_actions[1], stoch_actions[1])
 
                 # Step each active environment

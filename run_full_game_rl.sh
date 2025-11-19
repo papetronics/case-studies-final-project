@@ -16,8 +16,11 @@ set -e
   --gamma-min 1.0 \
   --gamma-max 1.0 \
   --dropout-rate 0.1 \
-  --phi-features potential_scoring_opportunities,game_progress \
-  --entropy-coeff-start 0.05 \
-  --entropy-coeff-end 0.0 \
-  --entropy-anneal-percentage 0.4 \
+  --phi-features dice_onehot,dice_counts,rolls_used,phase,has_earned_yahtzee,available_categories,percent_progress_towards_bonus,potential_scoring_opportunities,game_progress \
+  --entropy-coeff-rolling-max 0.05 \
+  --entropy-coeff-rolling-min 0.0 \
+  --entropy-coeff-scoring-max 0.05 \
+  --entropy-coeff-scoring-min 0.0 \
+  --entropy-hold-period 0.4 \
+  --entropy-anneal-period 0.4 \
   --critic-coeff 0.05
