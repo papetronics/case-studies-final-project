@@ -384,7 +384,8 @@ The loss function is defined as:
 
 
 \subsubsection{TD}
-Temporal Difference differs from REINFORCE by calculating the TD error. This uses an estimate of the value of the next state to bootstrap the return.
+Temporal Difference differs from REINFORCE by calculating the TD error, which is the difference between the estimated value of the
+current state and the discounted value of the next state plus rewards earned \cite{sutton-1988-temporal-differences}.
 By doing so, TD methods reduce variance at the cost of introducing some bias. TD also has the benefit of being an online method;
 we can learn from every step rather than waiting until the end of an episode, which greatly improves sample efficiency.
 
@@ -427,7 +428,7 @@ Other forms of TD returns, such as n-step TD and TD($\lambda$) can be used by re
 
 \subsubsection{PPO}
 PPO improves on TD by utilizing a "surrogate" objective which clips large policy updates, improving training stability.
-This allows for substantially larger batch sizes and learning rates.
+This allows for substantially larger batch sizes and learning rates \cite{schulman-2017-ppo}.
 
 \begin{align*}
   r_t(\theta)
