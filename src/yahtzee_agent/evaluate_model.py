@@ -63,7 +63,7 @@ def run_batch_games(
     total_rewards = np.zeros(batch_size, dtype=np.float64)
 
     with torch.no_grad():
-        for _ in range(39):
+        for _ in tqdm(range(39), desc="Steps", leave=False):
             input_tensors = torch.stack(
                 [
                     phi(
@@ -88,31 +88,25 @@ def run_batch_games(
                 rolling_probs, scoring_probs, model.rolling_action_representation
             )
 
-            if batch_size == 1:
-                actions = {
-                    "hold_mask": np.array(
-                        [
-                            convert_rolling_action_to_hold_mask(
-                                rolling_actions, model.rolling_action_representation
-                            )
-                        ]
-                    ),
-                    "score_category": np.array([scoring_actions.cpu().item()]),
-                }
-            else:
-                actions = {
-                    "hold_mask": np.array(
-                        [
-                            convert_rolling_action_to_hold_mask(
-                                rolling_actions[i], model.rolling_action_representation
-                            )
-                            for i in range(batch_size)
-                        ]
-                    ),
-                    "score_category": np.array(
-                        [scoring_actions[i].cpu().item() for i in range(batch_size)]
-                    ),
-                }
+            actions = {
+                "hold_mask": np.array(
+                    [
+                        convert_rolling_action_to_hold_mask(
+                            rolling_actions[i] if batch_size > 1 else rolling_actions,
+                            model.rolling_action_representation,
+                        )
+                        for i in range(batch_size)
+                    ]
+                ),
+                "score_category": np.array(
+                    [
+                        scoring_actions[i].cpu().item()
+                        if batch_size > 1
+                        else scoring_actions.cpu().item()
+                        for i in range(batch_size)
+                    ]
+                ),
+            }
 
             rewards: NDArray[np.float64]
             observations, rewards = envs.step(actions)[:2]
@@ -272,16 +266,11 @@ def evaluate_model(checkpoint_path: str, num_games: int, baseline_path: str, alp
     model = load_model(checkpoint_path)
     baseline = load_baseline_stats(baseline_path)
 
-    all_rewards, all_scoresheets = [], []
+    envs = SyncVectorEnv([create_env for _ in range(num_games)])
+    batch_rewards, batch_scoresheets = run_batch_games(envs, model, num_games)
+    envs.close()
 
-    for _ in tqdm(range(num_games), desc="Evaluating"):
-        envs = SyncVectorEnv([create_env])
-        batch_rewards, batch_scoresheets = run_batch_games(envs, model, 1)
-        all_rewards.append(batch_rewards)
-        all_scoresheets.append(batch_scoresheets)
-        envs.close()
-
-    stats = compute_statistics(np.concatenate(all_rewards), np.concatenate(all_scoresheets))
+    stats = compute_statistics(batch_rewards, batch_scoresheets)
     print_results_table(stats, baseline, alpha)
 
 
