@@ -40,5 +40,3 @@ docker run $DOCKER_FLAGS \
   -e HOME=/tmp \
   $IMAGE_NAME \
   python -m "$PYTHON_MODULE" "$@"
-
-echo "✅ Done."

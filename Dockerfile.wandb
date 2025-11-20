@@ -13,6 +13,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy all necessary Python scripts for the W&B job
 COPY --link src ./src
 
+# Copy baseline statistics file
+COPY --link dp_ideal_baseline.json .
+
 # Set working directory to src so everything runs relative to src
 WORKDIR /workspace/src
 
