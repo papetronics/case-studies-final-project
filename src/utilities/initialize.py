@@ -45,7 +45,7 @@ def initialize(  # noqa: C901, PLR0912
     -------
         tuple: (None, config_dict, logger)
     """
-    run_id = os.getenv("WANDB_RUN_ID") or None
+    run_id = os.getenv("WANDB_RUN_ID")
     use_wandb = run_id is not None
 
     if use_wandb:
