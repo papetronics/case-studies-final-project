@@ -270,6 +270,8 @@ def main() -> None:  # noqa: PLR0915
     rolling_action_representation = config["rolling_action_representation"]
     algorithm = config["algorithm"]
 
+    torch.set_float32_matmul_precision("medium")
+
     # Parse phi features from comma-separated string
     if phi_features_str and phi_features_str.strip():
         feature_names = [name.strip() for name in phi_features_str.split(",") if name.strip()]
