@@ -33,3 +33,20 @@ class MonteCarloReturnCalculator(ReturnCalculator):
             returns.insert(0, g)
 
         return returns
+
+
+class TD0ReturnCalculator(ReturnCalculator):
+    """TD(0) return calculator - uses one-step bootstrapping."""
+
+    def __init__(self, gamma: float = 1.0):
+        self.gamma: float = gamma
+
+    def calculate_returns(self, episode: Episode) -> list[float]:
+        """Calculate TD(0) targets for each time step: r_t + gamma * V(s_{t+1}).
+
+        Note: This method is not used in the vectorized training loop.
+        TD(0) targets are calculated directly in the trainer using the batch data.
+        """
+        # This is kept for compatibility but won't be called in practice
+        # The actual TD(0) calculation happens in trainer.py using vectorized operations
+        return [0.0] * len(episode.states)

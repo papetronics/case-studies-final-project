@@ -9,7 +9,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 
 from utilities.dummy_dataset import DummyDataset
 from utilities.initialize import ConfigParam, finish, initialize
-from utilities.return_calculators import MonteCarloReturnCalculator
+from utilities.return_calculators import MonteCarloReturnCalculator, TD0ReturnCalculator
 from yahtzee_agent import test_episode
 from yahtzee_agent.features import FEATURE_REGISTRY, create_features
 from yahtzee_agent.self_play_dataset import SelfPlayDataset
@@ -225,6 +225,14 @@ def main() -> None:  # noqa: PLR0915
             choices=["bernoulli", "categorical"],
             display_name="Rolling action representation",
         ),
+        ConfigParam(
+            "algorithm",
+            str,
+            "monte_carlo",
+            "Algorithm for return calculation: 'monte_carlo' (MC returns) or 'td0' (TD(0) bootstrapping)",
+            choices=["monte_carlo", "td0"],
+            display_name="Algorithm",
+        ),
     ]
 
     # Initialize project with configuration
@@ -260,6 +268,7 @@ def main() -> None:  # noqa: PLR0915
     entropy_anneal_period = config["entropy_anneal_period"]
     critic_coeff = config["critic_coeff"]
     rolling_action_representation = config["rolling_action_representation"]
+    algorithm = config["algorithm"]
 
     # Parse phi features from comma-separated string
     if phi_features_str and phi_features_str.strip():
@@ -332,8 +341,16 @@ def main() -> None:  # noqa: PLR0915
         # Test mode
         test_episode.main(checkpoint_path=checkpoint_path)
     else:
-        # Create return calculator and model
-        return_calculator = MonteCarloReturnCalculator()
+        # Create return calculator based on algorithm choice
+        if algorithm == "td0":
+            return_calculator: MonteCarloReturnCalculator | TD0ReturnCalculator = (
+                TD0ReturnCalculator()
+            )
+            log.info("Using TD(0) algorithm for return calculation")
+        else:  # monte_carlo
+            return_calculator = MonteCarloReturnCalculator()
+            log.info("Using Monte Carlo algorithm for return calculation")
+
         he_kaiming_initialization = config.get("he_kaiming_initialization", False)
         model = YahtzeeAgentTrainer(
             hidden_size=hidden_size,
@@ -384,6 +401,7 @@ def main() -> None:  # noqa: PLR0915
                 "game_scenario": game_scenario,
                 "phi_features": phi_features_str,
                 "rolling_action_representation": rolling_action_representation,
+                "algorithm": algorithm,
             }
         )
 

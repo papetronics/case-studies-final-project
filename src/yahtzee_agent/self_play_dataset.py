@@ -32,6 +32,10 @@ class EpisodeBatch(TypedDict):
     rewards: torch.Tensor  # (BATCH_SIZE*num_steps,) float32
     next_states: torch.Tensor  # (BATCH_SIZE*num_steps, state_size) float32
     phases: torch.Tensor  # (BATCH_SIZE*num_steps,) int (0=rolling, 1=scoring)
+    v_baseline: torch.Tensor  # (BATCH_SIZE*num_steps,) float32 - value estimates for current states
+    next_v_baseline: (
+        torch.Tensor
+    )  # (BATCH_SIZE*num_steps,) float32 - value estimates for next states
 
 
 class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
@@ -128,7 +132,7 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
         """Return the size of the dataset."""
         return self.size
 
-    def __getitem__(self, idx: int) -> EpisodeBatch:
+    def __getitem__(self, idx: int) -> EpisodeBatch:  # noqa: PLR0915
         """
         Collect and return a batch of episodes in parallel with batched forward passes.
 
@@ -179,6 +183,7 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
             self.batch_size, num_steps, state_size, dtype=torch.float32, device=device
         )
         phases = torch.zeros(self.batch_size, num_steps, dtype=torch.long, device=device)
+        v_baseline = torch.zeros(self.batch_size, num_steps, dtype=torch.float32, device=device)
 
         with torch.no_grad():  # No gradients needed during data collection
             for step_idx in range(num_steps):
@@ -190,13 +195,16 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
                 states[:, step_idx, :] = state_tensors
 
                 # Single batched forward pass for all environments
-                rolling_probs, scoring_probs, _ = self.policy_net.forward(state_tensors)
+                rolling_probs, scoring_probs, v_ests = self.policy_net.forward(state_tensors)
+
+                # Store value estimates for current states
+                v_baseline[:, step_idx] = v_ests.squeeze()
 
                 # Sample actions for all environments
                 actions, _, _ = sample_action(
                     rolling_probs,
                     scoring_probs,
-                    torch.zeros(self.batch_size, device=device),
+                    v_ests,
                     rolling_action_representation,
                 )
                 rolling_action_tensor, scoring_action_tensors = actions
@@ -241,6 +249,12 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
         # After collecting episodes, environments may need to be reset
         # (full_game: naturally terminates after 13 turns; single_turn: after 1 turn)
 
+        # Compute value estimates for next states using a batched forward pass
+        # Flatten next_states for batched forward pass
+        next_states_flat = next_states.view(-1, state_size)
+        _, _, next_v_ests = self.policy_net.forward(next_states_flat)
+        next_v_baseline_flat = next_v_ests.squeeze()  # (BATCH_SIZE*num_steps,)
+
         # Flatten batch and time dimensions: (BATCH_SIZE, num_steps, ...) -> (BATCH_SIZE*num_steps, ...)
         if rolling_action_representation.value == "bernoulli":
             rolling_actions_flat = rolling_actions.view(-1, 5)
@@ -254,4 +268,6 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
             "rewards": rewards.view(-1),
             "next_states": next_states.view(-1, state_size),
             "phases": phases.view(-1),
+            "v_baseline": v_baseline.view(-1),
+            "next_v_baseline": next_v_baseline_flat,
         }

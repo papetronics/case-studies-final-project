@@ -358,13 +358,15 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         # - "rewards": (BATCH_SIZE*39,) float32
         # - "next_states": (BATCH_SIZE*39, state_size) float32
         # - "phases": (BATCH_SIZE*39,) int
+        # - "v_baseline": (BATCH_SIZE*39,) float32
+        # - "next_v_baseline": (BATCH_SIZE*39,) float32
 
         # Dataset pre-flattens, so we just extract directly
         states_flat = batch["states"]
         rolling_actions_flat = batch["rolling_actions"]
         scoring_actions_flat = batch["scoring_actions"]
         rewards_flat = batch["rewards"]
-        # next_states = batch["next_states"]  # Not used yet
+        next_v_baseline = batch["next_v_baseline"]
         phases_flat = batch["phases"]
 
         # Calculate num_episodes and steps_per_episode from flattened shape
@@ -398,17 +400,34 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
             phases_flat == 0, rolling_log_probs, scoring_log_probs
         )  # (BATCH_SIZE * 39,)
 
-        # Calculate returns using Monte Carlo (backward pass through episodes)
-        # Each episode gets its own MC return calculation over steps_per_episode
+        # Calculate targets based on algorithm type
         gamma = self.return_calculator.gamma
         returns = torch.zeros_like(rewards_flat)
 
-        for episode_idx in range(num_episodes):
-            g = 0.0
-            for t in reversed(range(steps_per_episode)):
-                flat_idx = episode_idx * steps_per_episode + t
-                g = rewards_flat[flat_idx] + gamma * g
-                returns[flat_idx] = g
+        if isinstance(self.return_calculator, MonteCarloReturnCalculator):
+            # Monte Carlo: backward pass through episodes calculating cumulative discounted returns
+            for episode_idx in range(num_episodes):
+                g = 0.0
+                for t in reversed(range(steps_per_episode)):
+                    flat_idx = episode_idx * steps_per_episode + t
+                    g = rewards_flat[flat_idx] + gamma * g
+                    returns[flat_idx] = g
+        else:  # TD(0)
+            # TD(0): one-step bootstrapping using r_t + gamma * V(s_{t+1})
+            # For terminal states (last step of episode), target is just the reward
+            # For non-terminal states, target is r_t + gamma * V(s_{t+1})
+            for episode_idx in range(num_episodes):
+                for t in range(steps_per_episode):
+                    flat_idx = episode_idx * steps_per_episode + t
+                    if t == steps_per_episode - 1:  # Terminal step
+                        # At terminal state, no bootstrap - just use the reward
+                        returns[flat_idx] = rewards_flat[flat_idx]
+                    else:
+                        # Non-terminal: r_t + gamma * V(s_{t+1})
+                        next_idx = flat_idx + 1
+                        returns[flat_idx] = (
+                            rewards_flat[flat_idx] + gamma * next_v_baseline[next_idx].detach()
+                        )
 
         # Calculate advantages
         advantages = returns - v_ests.detach().squeeze()
@@ -419,9 +438,9 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         # Calculate policy loss
         policy_loss = -(log_probs * normalized_advantages).mean()
 
-        # Calculate reward per episode
-        episode_returns = returns.view(num_episodes, steps_per_episode)[:, 0]
-        avg_reward = episode_returns.mean()
+        # Calculate average reward per episode (sum of all step rewards)
+        episode_rewards = rewards_flat.view(num_episodes, steps_per_episode).sum(dim=1)
+        avg_reward = episode_rewards.mean()
 
         # Calculate Huber loss
         # v_loss = torch.nn.functional.smooth_l1_loss(v_ests.squeeze(), returns)
@@ -485,7 +504,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         self.log_dict({f"train/{k}": v for k, v in adv_stats.items()}, prog_bar=False)
 
         # Return std: high early (stochastic), stabilizes; collapsing to tiny values = degenerate policy
-        ret_stats = compute_return_stats(episode_returns)
+        ret_stats = compute_return_stats(episode_rewards)
         self.log_dict({f"train/{k}": v for k, v in ret_stats.items()}, prog_bar=False)
 
         # Critic EV: Good = 0.3-0.7, rising. Red flags: stuck at 0 (not learning), <0 (harmful), wild swings (unstable)
