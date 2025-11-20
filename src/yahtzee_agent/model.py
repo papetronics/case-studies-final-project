@@ -76,11 +76,11 @@ def sample_action(
     else:  # CATEGORICAL
         rolling_dist = torch.distributions.Categorical(rolling_probs)
         rolling_tensor = rolling_dist.sample()
-        rolling_log_prob = rolling_dist.log_prob(rolling_tensor).sum()
+        rolling_log_prob = rolling_dist.log_prob(rolling_tensor)
 
     scoring_dist = torch.distributions.Categorical(scoring_probs)
     scoring_tensor = scoring_dist.sample()
-    scoring_log_prob = scoring_dist.log_prob(scoring_tensor).sum()
+    scoring_log_prob = scoring_dist.log_prob(scoring_tensor)
 
     return (rolling_tensor, scoring_tensor), (rolling_log_prob, scoring_log_prob), value_est
 

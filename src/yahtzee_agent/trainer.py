@@ -75,6 +75,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         rolling_action_representation: str,
         he_kaiming_initialization: bool,
         return_calculator: ReturnCalculator | None = None,
+        mode: str = "reinforce",
     ):
         super().__init__()
 
@@ -109,6 +110,14 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
 
         self.return_calculator: ReturnCalculator = return_calculator or MonteCarloReturnCalculator()
         self.return_calculator.gamma = self.gamma_min
+
+        self.mode: str = mode
+        self.env_steps_seen: int = 0
+        self.examples_seen: int = 0
+
+        # Collector and dataset will be set by main
+        self.collector: Any | None = None
+        self.algorithm: str = mode
 
         self.validation_envs: list[gym.Env[Observation, Action]] = []  # Created on demand
 
@@ -350,84 +359,82 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         return rolling_coef, scoring_coef
 
     def training_step(self, batch: EpisodeBatch, batch_idx: int) -> torch.Tensor:  # noqa: ARG002, C901, PLR0912, PLR0915
-        """Perform a training step using REINFORCE algorithm with vectorized operations."""
-        # batch is an EpisodeBatch dict with pre-flattened tensors:
-        # - "states": (BATCH_SIZE*39, state_size) float32
-        # - "rolling_actions": (BATCH_SIZE*39, 5) int
-        # - "scoring_actions": (BATCH_SIZE*39,) int
-        # - "rewards": (BATCH_SIZE*39,) float32
-        # - "next_states": (BATCH_SIZE*39, state_size) float32
-        # - "phases": (BATCH_SIZE*39,) int
-
-        # Dataset pre-flattens, so we just extract directly
+        """Perform a training step with mode-specific loss computation."""
+        # Extract batch data (batch_size timesteps)
         states_flat = batch["states"]
         rolling_actions_flat = batch["rolling_actions"]
         scoring_actions_flat = batch["scoring_actions"]
-        rewards_flat = batch["rewards"]
-        # next_states = batch["next_states"]  # Not used yet
         phases_flat = batch["phases"]
+        # logp_old available in batch for future importance sampling support
 
-        # Calculate num_episodes and steps_per_episode from flattened shape
-        # single_turn: 338 episodes x 3 steps = 1014 total
-        # full_game: 26 episodes x 39 steps = 1014 total
-        total_steps = states_flat.shape[0]
-        steps_per_episode = self.num_steps_per_episode
-        num_episodes = total_steps // steps_per_episode
+        batch_size = states_flat.shape[0]
 
-        # Forward pass through current policy to get probabilities and value estimates
+        # Track custom counters
+        self.examples_seen += batch_size
+        self.env_steps_seen += batch_size
+
+        # Forward pass through current policy
         rolling_probs, scoring_probs, v_ests = self.policy_net.forward(states_flat)
 
         # Recompute log probabilities from stored actions
         rolling_dist: torch.distributions.Distribution
         if self.rolling_action_representation == RollingActionRepresentation.CATEGORICAL:
             rolling_dist = torch.distributions.Categorical(rolling_probs)
-            rolling_log_probs = rolling_dist.log_prob(
-                rolling_actions_flat.float()
-            )  # (BATCH_SIZE * 39,)
+            rolling_log_probs = rolling_dist.log_prob(rolling_actions_flat.float())
         else:  # BERNOULLI
             rolling_dist = torch.distributions.Bernoulli(rolling_probs)
-            rolling_log_probs = rolling_dist.log_prob(rolling_actions_flat.float()).sum(
-                dim=1
-            )  # (BATCH_SIZE * 39,)
+            rolling_log_probs = rolling_dist.log_prob(rolling_actions_flat.float()).sum(dim=1)
 
         scoring_dist = torch.distributions.Categorical(scoring_probs)
-        scoring_log_probs = scoring_dist.log_prob(scoring_actions_flat)  # (BATCH_SIZE * 39,)
+        scoring_log_probs = scoring_dist.log_prob(scoring_actions_flat)
 
-        # Select the appropriate log prob based on phase
-        log_probs = torch.where(
-            phases_flat == 0, rolling_log_probs, scoring_log_probs
-        )  # (BATCH_SIZE * 39,)
+        # Select log prob based on phase
+        log_probs = torch.where(phases_flat == 0, rolling_log_probs, scoring_log_probs)
 
-        # Calculate returns using Monte Carlo (backward pass through episodes)
-        # Each episode gets its own MC return calculation over steps_per_episode
-        gamma = self.return_calculator.gamma
-        returns = torch.zeros_like(rewards_flat)
+        # Branch on mode for loss computation
+        if self.mode == "reinforce":
+            # REINFORCE: use MC returns as targets
+            returns = batch.get("returns")
+            if returns is None:
+                raise ValueError("Returns not computed for REINFORCE mode")  # noqa: TRY003
 
-        for episode_idx in range(num_episodes):
-            g = 0.0
-            for t in reversed(range(steps_per_episode)):
-                flat_idx = episode_idx * steps_per_episode + t
-                g = rewards_flat[flat_idx] + gamma * g
-                returns[flat_idx] = g
+            # Value used as baseline
+            advantages = returns - v_ests.detach().squeeze()
+            normalized_advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
-        # Calculate advantages
-        advantages = returns - v_ests.detach().squeeze()
+            # Policy loss with importance sampling support
+            policy_loss = -(log_probs * normalized_advantages).mean()
 
-        # Normalize advantages
-        normalized_advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+            # Critic loss to learn value function
+            v_loss = torch.nn.functional.mse_loss(v_ests.squeeze(), returns)
 
-        # Calculate policy loss
-        policy_loss = -(log_probs * normalized_advantages).mean()
+            # Compute avg reward for logging (approximation from returns)
+            avg_reward = returns.mean()
 
-        # Calculate reward per episode
-        episode_returns = returns.view(num_episodes, steps_per_episode)[:, 0]
-        avg_reward = episode_returns.mean()
+        elif self.mode == "td0":
+            # TD(0): use TD targets for value, advantages for policy
+            td_target = batch.get("td_target")
+            if td_target is None:
+                raise ValueError("TD target not computed for TD mode")  # noqa: TRY003
 
-        # Calculate Huber loss
-        # v_loss = torch.nn.functional.smooth_l1_loss(v_ests.squeeze(), returns)
+            # TD advantage: r + gamma*V(s') - V(s)
+            v_current = v_ests.squeeze()
+            advantages = td_target - v_current.detach()
+            normalized_advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
-        # Use MSE loss for critic
-        v_loss = torch.nn.functional.mse_loss(v_ests.squeeze(), returns)
+            # Policy loss
+            policy_loss = -(log_probs * normalized_advantages).mean()
+
+            # Critic loss from TD target
+            v_loss = torch.nn.functional.mse_loss(v_current, td_target.detach())
+
+            # Compute avg reward for logging
+            rewards = batch.get("rewards")
+            if rewards is None:
+                raise ValueError("Rewards not in batch for TD mode")  # noqa: TRY003
+            avg_reward = rewards.mean()
+        else:
+            raise ValueError(f"Unknown mode: {self.mode}")  # noqa: TRY003
 
         ## Entropy
         if self.rolling_action_representation == RollingActionRepresentation.CATEGORICAL:
@@ -457,9 +464,13 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
 
         loss = policy_loss + self.critic_coeff * v_loss - total_entropy_bonus
 
-        diff = returns - v_ests.squeeze()
-        ev = 1 - diff.var() / (returns.var() + 1e-8)
-        self.log("train/value_explained_var", ev, prog_bar=False)
+        # Compute explained variance for logging
+        target_values = batch.get("returns") if self.mode == "reinforce" else batch.get("td_target")
+
+        if target_values is not None:
+            diff = target_values - v_ests.squeeze()
+            ev = 1 - diff.var() / (target_values.var() + 1e-8)
+            self.log("train/value_explained_var", ev, prog_bar=False)
 
         # Log separate entropy metrics for each head
         self.log("train/entropy_roll", rolling_entropy_mean, prog_bar=False)
@@ -478,21 +489,28 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         self.log("train/avg_reward", avg_reward, prog_bar=True)
         self.log("train/total_loss", loss, prog_bar=True)
 
+        # Log custom counters
+        self.log("counters/examples_seen", float(self.examples_seen), prog_bar=False)
+        self.log("counters/env_steps_seen", float(self.env_steps_seen), prog_bar=False)
+
         # ===== DIAGNOSTIC METRICS =====
         # Advantage stats: adv_mean ~0 (by construction), adv_std nonzero (signal strength)
         # Red flag: adv_std → 0 = tiny gradients; roll vs score std differs >10x = phase imbalance
         adv_stats = compute_advantage_stats(advantages, phases_flat)
         self.log_dict({f"train/{k}": v for k, v in adv_stats.items()}, prog_bar=False)
 
-        # Return std: high early (stochastic), stabilizes; collapsing to tiny values = degenerate policy
-        ret_stats = compute_return_stats(episode_returns)
-        self.log_dict({f"train/{k}": v for k, v in ret_stats.items()}, prog_bar=False)
+        # Return std: only for REINFORCE mode
+        returns = batch.get("returns")
+        if self.mode == "reinforce" and returns is not None:
+            ret_stats = compute_return_stats(returns)
+            self.log_dict({f"train/{k}": v for k, v in ret_stats.items()}, prog_bar=False)
 
         # Critic EV: Good = 0.3-0.7, rising. Red flags: stuck at 0 (not learning), <0 (harmful), wild swings (unstable)
-        critic_ev = compute_critic_explained_variance(returns, v_ests)
-        self.log("train/critic_ev", critic_ev, prog_bar=False)
-        if hasattr(self, "_epoch_metrics"):
-            self._epoch_metrics["critic_ev"].append(float(critic_ev.item()))
+        if target_values is not None:
+            critic_ev = compute_critic_explained_variance(target_values, v_ests)
+            self.log("train/critic_ev", critic_ev, prog_bar=False)
+            if hasattr(self, "_epoch_metrics"):
+                self._epoch_metrics["critic_ev"].append(float(critic_ev.item()))
 
         # Entropy: roll ~2.0-2.4 early → ~1.0 later; score moderate, gradual decline
         # Red flags: roll <1.2 early = premature collapse; score near-zero = deterministic too soon
@@ -634,7 +652,8 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         }
 
     def on_train_epoch_start(self) -> None:
-        """Update gamma linearly from gamma_min to gamma_max over training."""
+        """Update gamma and refresh rollout buffer at the start of each epoch."""
+        # Update gamma linearly from gamma_min to gamma_max over training
         if self.max_epochs > 1:
             # Linear interpolation from gamma_min to gamma_max
             progress = self.current_epoch / (self.max_epochs - 1)
@@ -644,6 +663,28 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
 
         self.return_calculator.gamma = current_gamma
         self.log("train/gamma", current_gamma, prog_bar=False)
+
+        # Refresh rollout buffer for this epoch (skip on first epoch since already initialized)
+        if self.current_epoch > 0 and self.collector is not None:
+            from yahtzee_agent.rollout_collector import postprocess_rollout
+
+            buffer = self.collector.collect()
+            postprocess_rollout(
+                buffer, self.algorithm, self.return_calculator.gamma, self.policy_net
+            )
+
+            # Update dataset buffer
+            train_dataloader = self.trainer.train_dataloader
+            if train_dataloader is not None:
+                dataset = train_dataloader.dataset
+                if hasattr(dataset, "buffer"):
+                    dataset.buffer = buffer
+
+            # Clear KL divergence caches since buffer refreshed
+            if hasattr(self, "_prev_roll_p"):
+                delattr(self, "_prev_roll_p")
+            if hasattr(self, "_prev_score_p"):
+                delattr(self, "_prev_score_p")
 
         # Reset epoch-level trackers for custom visualizations
         if not hasattr(self, "_epoch_metrics"):
@@ -659,7 +700,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
                 self._epoch_metrics[key].clear()
 
     def on_train_epoch_end(self) -> None:
-        """Log epoch-level summary statistics and custom visualizations."""
+        """Log epoch-level summary statistics."""
         # Create custom metrics for health monitoring
         if hasattr(self, "_epoch_metrics") and len(self._epoch_metrics.get("critic_ev", [])) > 0:
             # Compute epoch averages

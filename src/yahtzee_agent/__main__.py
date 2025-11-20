@@ -12,6 +12,7 @@ from utilities.initialize import ConfigParam, finish, initialize
 from utilities.return_calculators import MonteCarloReturnCalculator
 from yahtzee_agent import test_episode
 from yahtzee_agent.features import FEATURE_REGISTRY, create_features
+from yahtzee_agent.rollout_collector import RolloutCollector, postprocess_rollout
 from yahtzee_agent.self_play_dataset import SelfPlayDataset
 from yahtzee_agent.trainer import YahtzeeAgentTrainer
 
@@ -63,6 +64,14 @@ def main() -> None:  # noqa: PLR0915
     # Define configuration schema
     config_params = [
         ConfigParam("mode", str, "train", "Mode to run (train or test)", choices=["train", "test"]),
+        ConfigParam(
+            "algorithm",
+            str,
+            "reinforce",
+            "RL algorithm to use",
+            choices=["reinforce", "td0"],
+            display_name="Algorithm",
+        ),
         ConfigParam(
             "game_scenario",
             str,
@@ -237,6 +246,7 @@ def main() -> None:  # noqa: PLR0915
 
     # Extract config values for easy access
     mode = config["mode"]
+    algorithm = config["algorithm"]
     game_scenario = config["game_scenario"]
     epochs = config["epochs"]
     total_train_games = config["total_train_games"]
@@ -278,12 +288,10 @@ def main() -> None:  # noqa: PLR0915
     if game_scenario == "single_turn":
         num_steps_per_episode = 3  # One turn: roll, roll, score
         stagger_environments = True  # Distribute envs across turns 0-12 to avoid temporal bias
-        batch_size_multiplier = TURNS_PER_GAME  # Each game contributes 13 single-turn episodes
         log.info("Game scenario: single_turn (3 steps per episode, staggered environments)")
     else:  # full_game
         num_steps_per_episode = 39  # Full game: 13 turns * 3 steps per turn
         stagger_environments = False  # All games start from turn 0
-        batch_size_multiplier = 1  # Each game is one full episode
         log.info("Game scenario: full_game (39 steps per episode, no staggering)")
 
     # Calculate games_per_epoch from total_train_games and epochs
@@ -300,14 +308,14 @@ def main() -> None:  # noqa: PLR0915
         raise BatchSizeTooLargeError(games_per_batch, games_per_epoch)
 
     # Calculate derived training metrics
-    # batch_size is the number of parallel environments
-    # In single_turn: games_per_batch * 13 (one env per turn per game)
-    # In full_game: games_per_batch (one env per game)
-    batch_size = games_per_batch * batch_size_multiplier
     updates_per_epoch = games_per_epoch // games_per_batch
     total_updates = updates_per_epoch * epochs
     games_per_epoch_actual = games_per_epoch  # Since we validate exact division
     total_games_actual = games_per_epoch * epochs
+
+    # Rollout buffer collects all games for the epoch (refreshed at epoch start)
+    timesteps_per_epoch = games_per_epoch * num_steps_per_episode
+    timesteps_per_training_batch = games_per_batch * num_steps_per_episode
 
     # Log training configuration table
     config_table = [
@@ -315,12 +323,18 @@ def main() -> None:  # noqa: PLR0915
         "SINGLE TURN" if game_scenario == "single_turn" else "FULL GAME",
         "=" * 50,
         "TRAINING INFORMATION",
-        f"Total Games:       {total_games_actual:,}",
-        f"Total Epochs:      {epochs:,}",
-        f"Total Updates:     {total_updates:,}",
-        f"Updates / Epoch:   {updates_per_epoch:,}",
-        f"Games / Update:    {games_per_batch:,}",
-        f"Games / Epoch:     {games_per_epoch_actual:,}",
+        f"Total Games:             {total_games_actual:,}",
+        f"Total Epochs:            {epochs:,}",
+        f"Total Updates:           {total_updates:,}",
+        f"Updates / Epoch:         {updates_per_epoch:,}",
+        f"Games / Update:          {games_per_batch:,}",
+        f"Games / Epoch:           {games_per_epoch_actual:,}",
+        "",
+        "ROLLOUT BATCHING",
+        f"Games per Epoch:         {games_per_epoch:,}",
+        f"Timesteps per Epoch:     {timesteps_per_epoch:,}",
+        f"Training Batch (steps):  {timesteps_per_training_batch:,}",
+        f"Batches per Epoch:       {updates_per_epoch:,}",
         "=" * 50,
     ]
 
@@ -357,11 +371,13 @@ def main() -> None:  # noqa: PLR0915
             features=phi_features,
             rolling_action_representation=rolling_action_representation,
             he_kaiming_initialization=he_kaiming_initialization,
+            mode=algorithm,
         )
 
         # Save hyperparameters explicitly
         model.save_hyperparameters(
             {
+                "algorithm": algorithm,
                 "hidden_size": hidden_size,
                 "learning_rate": learning_rate,
                 "num_hidden": num_hidden,
@@ -425,21 +441,30 @@ def main() -> None:  # noqa: PLR0915
             gradient_clip_algorithm="norm",  # L2 norm clipping
         )
 
-        # Create self-play dataset that collects episodes using the policy
-        # Dataset handles batching internally with parallel environments
-        # batch_size = number of parallel environments (games_per_batch * multiplier)
-        # num_steps_per_episode = 3 for single_turn, 39 for full_game
-        train_dataset = SelfPlayDataset(
+        # Create rollout collector for parallel episode generation
+        # Buffer collects all games needed for one epoch
+        collector = RolloutCollector(
             policy_net=model.policy_net,
-            return_calculator=return_calculator,
-            size=updates_per_epoch,  # Number of batches per epoch
-            batch_size=batch_size,  # Number of parallel environments
+            batch_size=games_per_epoch,  # Number of parallel environments (one epoch's worth)
             num_steps_per_episode=num_steps_per_episode,
             stagger_environments=stagger_environments,
         )
-        # DataLoader batch_size=1 with passthrough collate since dataset already returns full batches
+
+        # Collect initial buffer for first epoch
+        buffer = collector.collect()
+        postprocess_rollout(buffer, algorithm, return_calculator.gamma, model.policy_net)
+
+        # Create dataset from buffer
+        train_dataset = SelfPlayDataset(buffer=buffer, mode=algorithm)
+
+        # Store collector reference in model for epoch-level buffer refresh (as non-tracked attribute)
+        object.__setattr__(model, "collector", collector)
+
+        # DataLoader batches timesteps from buffer for gradient updates
+        # training_batch_size is in timesteps: games_per_batch * num_steps_per_episode
+        training_batch_size = games_per_batch * num_steps_per_episode
         train_dataloader = torch.utils.data.DataLoader(
-            train_dataset, batch_size=1, num_workers=0, collate_fn=lambda x: x[0]
+            train_dataset, batch_size=training_batch_size, shuffle=True, num_workers=0
         )
 
         # Create validation dataset (dummy since validation_step does its own game simulations)
