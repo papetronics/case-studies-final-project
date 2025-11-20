@@ -128,6 +128,9 @@ def initialize(  # noqa: C901, PLR0912
     return None, config, logger
 
 
-def finish(_: None) -> None:
+def finish(logger) -> None:
     """Finalize the training session."""
+    # Properly finalize wandb runs if using WandbLogger
+    if isinstance(logger, WandbLogger):
+        logger.experiment.finish()
     print("Training completed!")
