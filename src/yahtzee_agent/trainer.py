@@ -358,8 +358,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         # - "rewards": (BATCH_SIZE*39,) float32
         # - "next_states": (BATCH_SIZE*39, state_size) float32
         # - "phases": (BATCH_SIZE*39,) int
-        # - "v_baseline": (BATCH_SIZE*39,) float32
-        # - "next_v_baseline": (BATCH_SIZE*39,) float32
+        # - "next_v_baseline": (BATCH_SIZE*39,) float32 - for TD(0)
 
         # Dataset pre-flattens, so we just extract directly
         states_flat = batch["states"]
@@ -423,13 +422,15 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
                         # At terminal state, no bootstrap - just use the reward
                         returns[flat_idx] = rewards_flat[flat_idx]
                     else:
-                        # Non-terminal: r_t + gamma * V(s_{t+1})
-                        next_idx = flat_idx + 1
+                        # Non-terminal: r_t + gamma * V(s_{t+1}), next_v_baseline is already shifted
                         returns[flat_idx] = (
-                            rewards_flat[flat_idx] + gamma * next_v_baseline[next_idx].detach()
+                            rewards_flat[flat_idx] + gamma * next_v_baseline[flat_idx].detach()
                         )
 
-        # Calculate advantages
+        # Calculate advantages (same formula for both MC and TD)
+        # MC: advantage = G_t - V(s_t), where G_t is the true discounted return
+        # TD(0): advantage = [r_t + gamma*V(s_{t+1})] - V(s_t), which is the TD error
+        # In both cases: advantage = returns - V(s_t)
         advantages = returns - v_ests.detach().squeeze()
 
         # Normalize advantages
