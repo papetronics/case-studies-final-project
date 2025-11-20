@@ -114,6 +114,7 @@ def initialize(  # noqa: C901, PLR0912
             log_model=True,
             id=run_id,
             resume="allow",
+            config=config,
         )
     else:
         log_dir = config.get("log_dir", "./logs")
