@@ -1,3 +1,5 @@
+import json
+import os
 from enum import Enum
 from typing import Any, cast
 
@@ -31,6 +33,13 @@ from .model import (
     select_action,
 )
 from .self_play_dataset import EpisodeBatch
+
+# Load DP baseline once at module level
+_DP_BASELINE_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "dp_ideal_baseline.json"
+)
+with open(_DP_BASELINE_PATH) as f:
+    _DP_BASELINE = torch.tensor(json.load(f), dtype=torch.float32)[:, 0]  # Extract means only
 
 
 class Algorithm(Enum):
@@ -104,26 +113,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
     def run_batched_validation_games(  # noqa: C901, PLR0912, PLR0915
         self, num_games: int, run_deterministic: bool = True, run_stochastic: bool = False
     ) -> tuple[list[float], list[float], dict[str, Any], dict[str, Any]]:
-        """Run multiple Yahtzee games in parallel with both deterministic and stochastic action selection.
-
-        Runs num_games with deterministic actions and num_games with stochastic actions
-        simultaneously, using 2*num_games environments total.
-
-        Parameters
-        ----------
-        num_games : int
-            Number of parallel games to run for each mode (deterministic and stochastic)
-        run_deterministic : bool, optional
-            Whether to run deterministic evaluation (default: True)
-        run_stochastic : bool, optional
-            Whether to run stochastic evaluation (default: False)
-
-        Returns
-        -------
-        tuple[list[float], list[float], dict[str, Any], dict[str, Any]]
-            (deterministic_scores, stochastic_scores, det_metrics, stoch_metrics)
-            - Lists of total scores for each game and dicts of additional metrics
-        """
+        """Run multiple Yahtzee games in parallel with both deterministic and stochastic action selection."""
         # Calculate number of environments needed based on which modes are enabled
         num_det = num_games if run_deterministic else 0
         num_stoch = num_games if run_stochastic else 0
@@ -239,8 +229,10 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
             if scorecards_tensor.shape[0] == 0:
                 return {}
 
-            # A) Mean score for each category
+            # A) % of DP baseline for each category
             category_means = scorecards_tensor.mean(dim=0)
+            # First 13 entries of _DP_BASELINE are the category means
+            category_pct_of_dp = (category_means / _DP_BASELINE[:13]) * 100
 
             # B) % of games with a Yahtzee (category 11, score = 50)
             has_yahtzee = (scorecards_tensor[:, 11] == YAHTZEE_SCORE).float()
@@ -252,7 +244,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
             pct_bonus = float(has_bonus_mask.mean() * 100)
 
             metrics = {
-                "category_means": category_means,
+                "category_pct_of_dp": category_pct_of_dp,
                 "pct_yahtzee": pct_yahtzee,
                 "pct_bonus": pct_bonus,
             }
@@ -298,8 +290,8 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
             if det_metrics:
                 for idx, label in enumerate(category_labels):
                     self.log(
-                        f"val/scorecard/{label}_mean",
-                        float(det_metrics["category_means"][idx]),
+                        f"val/scorecard/{label}_pct_of_dp",
+                        float(det_metrics["category_pct_of_dp"][idx]),
                         prog_bar=False,
                     )
 
@@ -318,8 +310,8 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
             if stoch_metrics:
                 for idx, label in enumerate(category_labels):
                     self.log(
-                        f"val/scorecard_stoch/{label}_mean",
-                        float(stoch_metrics["category_means"][idx]),
+                        f"val/scorecard_stoch/{label}_pct_of_dp",
+                        float(stoch_metrics["category_pct_of_dp"][idx]),
                         prog_bar=False,
                     )
                 self.log("val/pct_yahtzee_stoch", stoch_metrics["pct_yahtzee"], prog_bar=False)
