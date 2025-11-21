@@ -4,7 +4,6 @@ import gymnasium as gym
 import torch
 
 from environments.full_yahtzee_env import Action, Observation, YahtzeeEnv
-from utilities.return_calculators import ReturnCalculator
 from yahtzee_agent.features import PhiFeature
 
 from .model import convert_rolling_action_to_hold_mask, get_input_dimensions, phi, sample_action
@@ -32,52 +31,43 @@ class EpisodeBatch(TypedDict):
     rewards: torch.Tensor  # (BATCH_SIZE*num_steps,) float32
     next_states: torch.Tensor  # (BATCH_SIZE*num_steps, state_size) float32
     phases: torch.Tensor  # (BATCH_SIZE*num_steps,) int (0=rolling, 1=scoring)
+    v_baseline: torch.Tensor  # (BATCH_SIZE*num_steps,) float32 - value estimates for current states
+    next_v_baseline: (
+        torch.Tensor
+    )  # (BATCH_SIZE*num_steps,) float32 - value estimates for next states
 
 
 class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
     """
     A dataset that collects episodes by playing against itself using the current policy.
 
-    This dataset generates episodes on-the-fly by interacting with the Yahtzee environment
-    using the current policy network. Each __getitem__ call collects a full batch of episodes
-    in parallel with batched forward passes for GPU efficiency.
+    Each __getitem__ call collects a full batch of episodes in parallel with batched
+    forward passes for GPU efficiency.
 
-    Supports two modes:
-    - single_turn: 3-step episodes (roll, roll, score) with staggered environments
-    - full_game: 39-step episodes (13 turns * 3 steps) starting from turn 0
+    Modes:
+      - single_turn: num_steps_per_episode = 3   (roll, roll, score)
+      - full_game:   num_steps_per_episode = 39  (13 turns * 3 steps)
 
-    Returns a dict of pre-flattened tensors with shapes (BATCH_SIZE*num_steps, ...):
-      - "states": (BATCH_SIZE*num_steps, state_size) - State tensor for each step
-      - "rolling_actions": Bernoulli: (BATCH_SIZE*num_steps, 5), Categorical: (BATCH_SIZE*num_steps,)
-      - "scoring_actions": (BATCH_SIZE*num_steps,) - Category to score (0-12)
-      - "rewards": (BATCH_SIZE*num_steps,) - Immediate rewards
-      - "next_states": (BATCH_SIZE*num_steps, state_size) - Next state tensors
-      - "phases": (BATCH_SIZE*num_steps,) - Phase indicator (0=rolling, 1=scoring)
+    Returned batch (flattened over [batch_size, num_steps_per_episode]):
+      - "states":          (B*num_steps, state_size)
+      - "rolling_actions": Bernoulli: (B*num_steps, 5), Categorical: (B*num_steps,)
+      - "scoring_actions": (B*num_steps,)
+      - "rewards":         (B*num_steps,)
+      - "next_states":     (B*num_steps, state_size)
+      - "phases":          (B*num_steps,)
+      - "v_baseline":      (B*num_steps,)        = V(s_t)
+      - "next_v_baseline": (B*num_steps,)        = V(s_{t+1}) for t < T-1, 0 at last step
     """
 
     def __init__(
         self,
         policy_net: "YahtzeeAgent",
-        return_calculator: ReturnCalculator,
         size: int,
         batch_size: int,
         num_steps_per_episode: int,
         stagger_environments: bool = False,
     ) -> None:
-        """
-        Initialize the self-play dataset.
-
-        Args:
-            policy_net: The policy network to use for collecting episodes
-            return_calculator: The return calculator to compute returns for each episode
-            size: The number of batches in the dataset (batches per epoch)
-            batch_size: The number of parallel episodes to collect per batch
-            num_steps_per_episode: Number of steps per episode (3 for single_turn, 39 for full_game)
-            stagger_environments: If True, stagger each environment to a different turn
-                (0-12) to avoid temporal bias. Set to False when running full games.
-        """
         self.policy_net: YahtzeeAgent = policy_net
-        self.return_calculator = return_calculator
         self.size = size
         self.batch_size = batch_size
         self.num_steps_per_episode = num_steps_per_episode
@@ -91,7 +81,6 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
 
             if self.stagger_environments:
                 # Advance environment to turn (env_idx % 13) using random actions
-                # Run until terminated, which naturally happens after 13 turns
                 target_turn = env_idx % 13
                 turn_count = 0
 
@@ -99,22 +88,18 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
                     unwrapped: YahtzeeEnv = cast("YahtzeeEnv", env.unwrapped)
                     obs = unwrapped.observe()
 
-                    # Sample action based on current phase
                     if obs["phase"] == 0:  # Rolling phase
                         sampled = env.action_space.sample()
                         action: Action = {"hold_mask": sampled["hold_mask"].astype(bool)}
                     else:  # Scoring phase
-                        # Sample from available categories
                         available_categories = [
                             i for i in range(13) if obs["score_sheet_available_mask"][i] == 1
                         ]
                         sampled = env.action_space.sample()
                         score_category = int(sampled["score_category"])
-                        # Ensure we pick a valid category
                         if score_category not in available_categories:
                             score_category = available_categories[0] if available_categories else 0
                         action = {"score_category": score_category}
-                        # Increment turn counter after scoring action
                         turn_count += 1
 
                     _, _, terminated, truncated, _ = env.step(action)
@@ -125,29 +110,15 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
             self.envs.append(env)
 
     def __len__(self) -> int:
-        """Return the size of the dataset."""
+        """Return the number of batches per epoch."""
         return self.size
 
-    def __getitem__(self, idx: int) -> EpisodeBatch:
-        """
-        Collect and return a batch of episodes in parallel with batched forward passes.
+    def __getitem__(self, idx: int) -> EpisodeBatch:  # noqa: PLR0912, PLR0915
+        """Collect a batch of self-play episodes using the current policy network."""
+        # idx is unused: each call collects a fresh batch of self-play trajectories
 
-        Args:
-            idx: Index (not used, but required by Dataset interface)
-
-        Returns
-        -------
-        EpisodeBatch
-            A dict containing pre-flattened batch episode data with keys:
-            - "states": (BATCH_SIZE*num_steps, state_size) float32
-            - "rolling_actions": (BATCH_SIZE*num_steps, 5) int
-            - "scoring_actions": (BATCH_SIZE*num_steps,) int
-            - "rewards": (BATCH_SIZE*num_steps,) float32
-            - "next_states": (BATCH_SIZE*num_steps, state_size) float32
-            - "phases": (BATCH_SIZE*num_steps,) int
-        """
         # Get current observations from all environments
-        observations = []
+        observations: list[Observation] = []
         for env in self.envs:
             unwrapped: YahtzeeEnv = cast("YahtzeeEnv", env.unwrapped)
             observations.append(unwrapped.observe())
@@ -157,12 +128,11 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
         features = cast("list[PhiFeature]", self.policy_net.features)
         state_size = get_input_dimensions(features)
 
-        # Pre-allocate tensors for all episodes (BATCH_SIZE, num_steps, ...)
+        # Pre-allocate tensors: (B, T, ...)
         states = torch.zeros(
             self.batch_size, num_steps, state_size, dtype=torch.float32, device=device
         )
 
-        # Allocate rolling_actions based on representation mode
         rolling_action_representation = self.policy_net.rolling_action_representation
         if rolling_action_representation.value == "bernoulli":
             rolling_actions = torch.zeros(
@@ -179,79 +149,93 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
             self.batch_size, num_steps, state_size, dtype=torch.float32, device=device
         )
         phases = torch.zeros(self.batch_size, num_steps, dtype=torch.long, device=device)
+        v_baseline = torch.zeros(self.batch_size, num_steps, dtype=torch.float32, device=device)
 
-        with torch.no_grad():  # No gradients needed during data collection
+        # ---- Rollout collection ----
+        with torch.no_grad():
             for step_idx in range(num_steps):
-                # Batch convert all observations to state tensors
+                # Batch encode all current observations
                 state_tensors = torch.stack(
-                    [phi(obs, self.policy_net.features, device) for obs in observations]
-                )  # (BATCH_SIZE, state_size)
+                    [phi(obs, features, device) for obs in observations]
+                )  # (B, state_size)
 
                 states[:, step_idx, :] = state_tensors
 
-                # Single batched forward pass for all environments
-                rolling_probs, scoring_probs, _ = self.policy_net.forward(state_tensors)
+                # Single batched forward pass for all envs: π_roll, π_score, V(s_t)
+                rolling_probs, scoring_probs, v_ests = self.policy_net.forward(state_tensors)
+                v_baseline[:, step_idx] = v_ests.squeeze(-1)
 
-                # Sample actions for all environments
+                # Sample actions
                 actions, _, _ = sample_action(
                     rolling_probs,
                     scoring_probs,
-                    torch.zeros(self.batch_size, device=device),
+                    v_ests,
                     rolling_action_representation,
                 )
                 rolling_action_tensor, scoring_action_tensors = actions
 
-                # Store actions based on representation mode
+                # Store actions by representation
                 if rolling_action_representation.value == "bernoulli":
                     rolling_actions[:, step_idx, :] = rolling_action_tensor.long()
-                else:  # CATEGORICAL
+                else:
                     rolling_actions[:, step_idx] = rolling_action_tensor.long()
                 scoring_actions[:, step_idx] = scoring_action_tensors.long()
 
-                # Step each environment and collect results
+                # Step each environment
                 for env_idx, (env, obs) in enumerate(zip(self.envs, observations, strict=True)):
                     phase = obs["phase"]
                     phases[env_idx, step_idx] = phase
 
-                    # Convert action based on phase
-                    action: Action
                     if phase == 0:
-                        action = {
+                        action: Action = {
                             "hold_mask": convert_rolling_action_to_hold_mask(
                                 rolling_action_tensor[env_idx], rolling_action_representation
                             )
                         }
                     else:
-                        score_category: int = int(scoring_action_tensors[env_idx].cpu().item())
+                        score_category = int(scoring_action_tensors[env_idx].item())
                         action = {"score_category": score_category}
 
-                    # Step environment
                     next_obs, reward, terminated, truncated, _ = env.step(action)
                     rewards[env_idx, step_idx] = float(reward)
 
-                    # Get next state tensor
-                    next_state_tensor = phi(next_obs, self.policy_net.features, device)
+                    # Encode next state
+                    next_state_tensor = phi(next_obs, features, device)
                     next_states[env_idx, step_idx, :] = next_state_tensor
 
-                    # Update observation for next step
                     if terminated or truncated:
                         next_obs, _ = env.reset()
                     observations[env_idx] = next_obs
 
-        # After collecting episodes, environments may need to be reset
-        # (full_game: naturally terminates after 13 turns; single_turn: after 1 turn)
+        # ---- Build next_v_baseline via time-shift (no second forward) ----
+        # v_baseline[e, t] = V(s_t)
+        # We want next_v_baseline[e, t] = V(s_{t+1}) for TD(0) bootstrapping.
+        # For the last step (t = T-1), this value is unused; we set it to 0.
+        next_v_baseline = torch.zeros_like(v_baseline)
+        if num_steps > 1:
+            next_v_baseline[:, :-1] = v_baseline[:, 1:]  # shift along time within each env
 
-        # Flatten batch and time dimensions: (BATCH_SIZE, num_steps, ...) -> (BATCH_SIZE*num_steps, ...)
+        # ---- Flatten all (B, T, ...) -> (B*T, ...) ----
+        states_flat = states.view(-1, state_size)
+        next_states_flat = next_states.view(-1, state_size)
+        v_baseline_flat = v_baseline.view(-1)
+        next_v_baseline_flat = next_v_baseline.view(-1)
+        phases_flat = phases.view(-1)
+        rewards_flat = rewards.view(-1)
+
         if rolling_action_representation.value == "bernoulli":
             rolling_actions_flat = rolling_actions.view(-1, 5)
-        else:  # CATEGORICAL
+        else:
             rolling_actions_flat = rolling_actions.view(-1)
 
-        return {
-            "states": states.view(-1, state_size),
+        batch: EpisodeBatch = {
+            "states": states_flat,
             "rolling_actions": rolling_actions_flat,
             "scoring_actions": scoring_actions.view(-1),
-            "rewards": rewards.view(-1),
-            "next_states": next_states.view(-1, state_size),
-            "phases": phases.view(-1),
+            "rewards": rewards_flat,
+            "next_states": next_states_flat,
+            "phases": phases_flat,
+            "v_baseline": v_baseline_flat,
+            "next_v_baseline": next_v_baseline_flat,
         }
+        return batch

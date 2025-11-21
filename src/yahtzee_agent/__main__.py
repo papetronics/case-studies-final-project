@@ -10,11 +10,10 @@ from tabulate import tabulate
 
 from utilities.dummy_dataset import DummyDataset
 from utilities.initialize import ConfigParam, initialize
-from utilities.return_calculators import MonteCarloReturnCalculator
 from yahtzee_agent import test_episode
 from yahtzee_agent.features import FEATURE_REGISTRY, create_features
 from yahtzee_agent.self_play_dataset import SelfPlayDataset
-from yahtzee_agent.trainer import YahtzeeAgentTrainer
+from yahtzee_agent.trainer import Algorithm, YahtzeeAgentTrainer
 
 log = logging.getLogger(__name__)
 
@@ -226,6 +225,14 @@ def main() -> None:  # noqa: PLR0915
             choices=["bernoulli", "categorical"],
             display_name="Rolling action representation",
         ),
+        ConfigParam(
+            "algorithm",
+            str,
+            "reinforce",
+            "Training algorithm: 'reinforce' (REINFORCE with Monte Carlo returns) or 'a2c' (Advantage Actor-Critic with TD(0) bootstrapping)",
+            choices=["reinforce", "a2c"],
+            display_name="Algorithm",
+        ),
     ]
 
     # Initialize project with configuration
@@ -260,6 +267,9 @@ def main() -> None:  # noqa: PLR0915
     entropy_anneal_period = config["entropy_anneal_period"]
     critic_coeff = config["critic_coeff"]
     rolling_action_representation = config["rolling_action_representation"]
+    algorithm = config["algorithm"]
+
+    torch.set_float32_matmul_precision("medium")
 
     # Parse phi features from comma-separated string
     if phi_features_str and phi_features_str.strip():
@@ -334,13 +344,18 @@ def main() -> None:  # noqa: PLR0915
         # Test mode
         test_episode.main(checkpoint_path=checkpoint_path)
     else:
-        # Create return calculator and model
-        return_calculator = MonteCarloReturnCalculator()
+        if algorithm == "a2c":
+            algorithm = Algorithm.A2C
+            log.info("Using A2C (Advantage Actor-Critic) with TD(0) bootstrapping")
+        else:  # reinforce
+            algorithm = Algorithm.REINFORCE
+            log.info("Using REINFORCE with Monte Carlo returns")
+
         he_kaiming_initialization = config.get("he_kaiming_initialization", False)
         model = YahtzeeAgentTrainer(
             hidden_size=hidden_size,
             learning_rate=learning_rate,
-            return_calculator=return_calculator,
+            algorithm=algorithm,
             num_hidden=num_hidden,
             dropout_rate=dropout_rate,
             activation_function=activation_function,
@@ -386,6 +401,7 @@ def main() -> None:  # noqa: PLR0915
                 "game_scenario": game_scenario,
                 "phi_features": phi_features_str,
                 "rolling_action_representation": rolling_action_representation,
+                "algorithm": algorithm,
             }
         )
 
@@ -433,7 +449,6 @@ def main() -> None:  # noqa: PLR0915
         # num_steps_per_episode = 3 for single_turn, 39 for full_game
         train_dataset = SelfPlayDataset(
             policy_net=model.policy_net,
-            return_calculator=return_calculator,
             size=updates_per_epoch,  # Number of batches per epoch
             batch_size=batch_size,  # Number of parallel environments
             num_steps_per_episode=num_steps_per_episode,

@@ -2,7 +2,7 @@
 set -e
 
 # Load config from JSON and build arguments
-CONFIG_FILE="wandb/full_game.json"
+CONFIG_FILE="wandb/full_game_reinforce.json"
 
 # Parse JSON and build argument list
 ARGS=()

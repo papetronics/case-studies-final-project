@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import Any, cast
 
 import gymnasium as gym
@@ -17,7 +18,6 @@ from utilities.diagnostics import (
     compute_return_stats,
     compute_rolling_mask_diversity,
 )
-from utilities.return_calculators import MonteCarloReturnCalculator, ReturnCalculator
 from yahtzee_agent.features import PhiFeature
 
 from .model import (
@@ -29,6 +29,13 @@ from .model import (
     select_action,
 )
 from .self_play_dataset import EpisodeBatch
+
+
+class Algorithm(Enum):
+    """Training algorithm."""
+
+    REINFORCE = "reinforce"  # Monte Carlo policy gradient (REINFORCE)
+    A2C = "a2c"  # Advantage Actor-Critic (A2C) with TD(0)
 
 
 class YahtzeeAgentTrainer(lightning.LightningModule):
@@ -74,7 +81,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         features: list[PhiFeature],
         rolling_action_representation: str,
         he_kaiming_initialization: bool,
-        return_calculator: ReturnCalculator | None = None,
+        algorithm: Algorithm,
     ):
         super().__init__()
 
@@ -93,6 +100,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
             he_kaiming_initialization=he_kaiming_initialization,
         )
 
+        self.algorithm = algorithm
         self.learning_rate: float = learning_rate
         self.max_epochs: int = epochs
         self.min_lr_ratio: float = min_lr_ratio
@@ -106,9 +114,6 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         self.entropy_anneal_period: float = entropy_anneal_period
         self.critic_coeff: float = critic_coeff
         self.num_steps_per_episode: int = num_steps_per_episode
-
-        self.return_calculator: ReturnCalculator = return_calculator or MonteCarloReturnCalculator()
-        self.return_calculator.gamma = self.gamma_min
 
         self.validation_envs: list[gym.Env[Observation, Action]] = []  # Created on demand
 
@@ -305,6 +310,11 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
             self.log("test/mean_total_score_stoch", stoch_mean, prog_bar=False)
             self.log("test/std_total_score_stoch", stoch_std, prog_bar=False)
 
+    def get_gamma(self) -> float:
+        """Get current gamma (discount factor) value."""
+        progress = self.current_epoch / (self.max_epochs - 1)
+        return self.gamma_min + progress * (self.gamma_max - self.gamma_min)
+
     def get_entropy_coefs(self) -> tuple[float, float]:
         """Get current entropy coefficients for rolling and scoring heads.
 
@@ -358,13 +368,14 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         # - "rewards": (BATCH_SIZE*39,) float32
         # - "next_states": (BATCH_SIZE*39, state_size) float32
         # - "phases": (BATCH_SIZE*39,) int
+        # - "next_v_baseline": (BATCH_SIZE*39,) float32 - for TD(0)
 
         # Dataset pre-flattens, so we just extract directly
         states_flat = batch["states"]
         rolling_actions_flat = batch["rolling_actions"]
         scoring_actions_flat = batch["scoring_actions"]
         rewards_flat = batch["rewards"]
-        # next_states = batch["next_states"]  # Not used yet
+        next_v_baseline = batch["next_v_baseline"]
         phases_flat = batch["phases"]
 
         # Calculate num_episodes and steps_per_episode from flattened shape
@@ -398,19 +409,30 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
             phases_flat == 0, rolling_log_probs, scoring_log_probs
         )  # (BATCH_SIZE * 39,)
 
-        # Calculate returns using Monte Carlo (backward pass through episodes)
-        # Each episode gets its own MC return calculation over steps_per_episode
-        gamma = self.return_calculator.gamma
-        returns = torch.zeros_like(rewards_flat)
+        # Calculate targets based on algorithm type
+        gamma = self.get_gamma()
 
-        for episode_idx in range(num_episodes):
-            g = 0.0
-            for t in reversed(range(steps_per_episode)):
-                flat_idx = episode_idx * steps_per_episode + t
-                g = rewards_flat[flat_idx] + gamma * g
-                returns[flat_idx] = g
+        # Calculate returns without gradients, since they are just targets for the critic / multipliers for the actor loss
+        with torch.no_grad():
+            returns = torch.zeros_like(rewards_flat)
+            if self.algorithm == Algorithm.REINFORCE:
+                # REINFORCE: backward pass through episodes calculating cumulative discounted returns
+                for episode_idx in range(num_episodes):
+                    g: torch.Tensor = torch.tensor(0.0, device=rewards_flat.device)
+                    for t in reversed(range(steps_per_episode)):
+                        flat_idx = episode_idx * steps_per_episode + t
+                        g = rewards_flat[flat_idx] + gamma * g
+                        returns[flat_idx] = g
+            else:  # A2C
+                # A2C: one-step bootstrapping using r_t + gamma * V(s_{t+1}) (TD(0))
+                # For terminal states (last step of episode), target is just the reward
+                # For non-terminal states, target is r_t + gamma * V(s_{t+1})
+                returns = rewards_flat + gamma * next_v_baseline.detach()
 
-        # Calculate advantages
+        # Calculate advantages (same formula for both REINFORCE and A2C)
+        # REINFORCE: advantage = G_t - V(s_t), where G_t is the true discounted return
+        # A2C: advantage = [r_t + gamma*V(s_{t+1})] - V(s_t), which is the TD error
+        # In both cases: advantage = returns - V(s_t)
         advantages = returns - v_ests.detach().squeeze()
 
         # Normalize advantages
@@ -419,9 +441,9 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         # Calculate policy loss
         policy_loss = -(log_probs * normalized_advantages).mean()
 
-        # Calculate reward per episode
-        episode_returns = returns.view(num_episodes, steps_per_episode)[:, 0]
-        avg_reward = episode_returns.mean()
+        # Calculate average reward per episode (sum of all step rewards)
+        episode_rewards = rewards_flat.view(num_episodes, steps_per_episode).sum(dim=1)
+        avg_reward = episode_rewards.mean()
 
         # Calculate Huber loss
         # v_loss = torch.nn.functional.smooth_l1_loss(v_ests.squeeze(), returns)
@@ -485,7 +507,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         self.log_dict({f"train/{k}": v for k, v in adv_stats.items()}, prog_bar=False)
 
         # Return std: high early (stochastic), stabilizes; collapsing to tiny values = degenerate policy
-        ret_stats = compute_return_stats(episode_returns)
+        ret_stats = compute_return_stats(episode_rewards)
         self.log_dict({f"train/{k}": v for k, v in ret_stats.items()}, prog_bar=False)
 
         # Critic EV: Good = 0.3-0.7, rising. Red flags: stuck at 0 (not learning), <0 (harmful), wild swings (unstable)
@@ -634,15 +656,9 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         }
 
     def on_train_epoch_start(self) -> None:
-        """Update gamma linearly from gamma_min to gamma_max over training."""
-        if self.max_epochs > 1:
-            # Linear interpolation from gamma_min to gamma_max
-            progress = self.current_epoch / (self.max_epochs - 1)
-            current_gamma = self.gamma_min + progress * (self.gamma_max - self.gamma_min)
-        else:
-            current_gamma = self.gamma_max
-
-        self.return_calculator.gamma = current_gamma
+        """Initialize epoch-level trackers and log current gamma."""
+        # Log current gamma value
+        current_gamma = self.get_gamma()
         self.log("train/gamma", current_gamma, prog_bar=False)
 
         # Reset epoch-level trackers for custom visualizations
