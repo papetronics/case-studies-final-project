@@ -17,6 +17,7 @@ from utilities.diagnostics import (
     compute_phase_balance,
     compute_return_stats,
     compute_rolling_mask_diversity,
+    compute_training_health_score,
 )
 from yahtzee_agent.features import PhiFeature
 
@@ -39,25 +40,7 @@ class Algorithm(Enum):
 
 
 class YahtzeeAgentTrainer(lightning.LightningModule):
-    """PyTorch Lightning trainer for single-turn Yahtzee score maximization using REINFORCE.
-
-    DIAGNOSTIC QUICK REFERENCE:
-    ✅ Healthy training:
-       - train/avg_reward: steadily rising
-       - train/critic_ev: 0.3-0.7 and trending up
-       - train/entropy_roll: 1.0-2.4 (gradual decline from high)
-       - train/kl_roll, train/kl_score: 0.002-0.02 (nonzero movement)
-       - train/score_top1: <0.7 (not collapsed)
-       - diagnostics/training_health: >0.4
-
-    🚨 Red flags:
-       - Plateauing: avg_reward flat + KL ≈ 0 = policy frozen
-       - Collapse: entropy_roll <1.2 early OR score_top1 >0.7 = deterministic too soon
-       - Bad critic: critic_ev stuck at 0 or negative = not learning
-       - Phase imbalance: adv_roll_std ≪ adv_score_std (>10x diff) = one phase dwarfed
-
-    See DIAGNOSTICS.md for full details.
-    """
+    """PyTorch Lightning trainer for Yahtzee agents using policy gradient methods (REINFORCE/A2C)."""
 
     def __init__(  # noqa: PLR0913
         self,
@@ -273,43 +256,6 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         # Return a dict for PyTorch Lightning compatibility (use deterministic for loss)
         return {"val_loss": -det_mean}  # Negative because higher scores are better
 
-    def run_sweep_test_evaluation(
-        self, run_deterministic: bool = True, run_stochastic: bool = False
-    ) -> None:
-        """Run comprehensive test evaluation for hyperparameter sweeps.
-
-        Runs 10000 games with deterministic and/or stochastic action selection.
-        Logs test/mean_total_score_det, test/mean_total_score_stoch and their stds.
-        This is called at the end of training.
-
-        Parameters
-        ----------
-        run_deterministic : bool, optional
-            Whether to run deterministic evaluation (default: True)
-        run_stochastic : bool, optional
-            Whether to run stochastic evaluation (default: False)
-        """
-        num_test_games = 10000
-
-        # Run all games in parallel with batched forward passes
-        det_scores, stoch_scores = self.run_batched_validation_games(
-            num_test_games, run_deterministic=run_deterministic, run_stochastic=run_stochastic
-        )
-
-        # Log deterministic results if available
-        if det_scores:
-            det_mean = float(np.mean(det_scores))
-            det_std = float(np.std(det_scores))
-            self.log("test/mean_total_score_det", det_mean, prog_bar=True)
-            self.log("test/std_total_score_det", det_std, prog_bar=False)
-
-        # Log stochastic results if available
-        if stoch_scores:
-            stoch_mean = float(np.mean(stoch_scores))
-            stoch_std = float(np.std(stoch_scores))
-            self.log("test/mean_total_score_stoch", stoch_mean, prog_bar=False)
-            self.log("test/std_total_score_stoch", stoch_std, prog_bar=False)
-
     def get_gamma(self) -> float:
         """Get current gamma (discount factor) value."""
         progress = self.current_epoch / (self.max_epochs - 1)
@@ -359,7 +305,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
 
         return rolling_coef, scoring_coef
 
-    def training_step(self, batch: EpisodeBatch, batch_idx: int) -> torch.Tensor:  # noqa: ARG002, C901, PLR0912, PLR0915
+    def training_step(self, batch: EpisodeBatch, batch_idx: int) -> torch.Tensor:  # noqa: ARG002
         """Perform a training step using REINFORCE algorithm with vectorized operations."""
         # batch is an EpisodeBatch dict with pre-flattened tensors:
         # - "states": (BATCH_SIZE*39, state_size) float32
@@ -388,7 +334,88 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         # Forward pass through current policy to get probabilities and value estimates
         rolling_probs, scoring_probs, v_ests = self.policy_net.forward(states_flat)
 
-        # Recompute log probabilities from stored actions
+        normalized_advantage = self.get_advantage(
+            num_episodes, steps_per_episode, rewards_flat, next_v_baseline, v_ests, phases_flat
+        )
+
+        policy_loss, entropy_loss = self.get_policy_loss(
+            rolling_probs,
+            rolling_actions_flat,
+            scoring_probs,
+            scoring_actions_flat,
+            phases_flat,
+            normalized_advantage,
+        )
+
+        loss: torch.Tensor = (
+            policy_loss
+            + self.critic_coeff * self.get_value_loss(v_ests, rewards_flat)
+            + entropy_loss
+        )
+
+        self.log("train/total_loss", loss, prog_bar=True)
+        self.log("lr", self.trainer.optimizers[0].param_groups[0]["lr"], prog_bar=False)
+        self.log("train/frac_roll_steps", compute_phase_balance(phases_flat), prog_bar=False)
+        self.log_kl_diagnostics(scoring_probs, rolling_probs, phases_flat)
+
+        return loss
+
+    def get_advantage(
+        self,
+        num_episodes: int,
+        steps_per_episode: int,
+        rewards_flat: torch.Tensor,
+        next_v_baseline: torch.Tensor,
+        v_ests: torch.Tensor,
+        phases_flat: torch.Tensor,
+    ) -> torch.Tensor:
+        """Calculate advantages using either REINFORCE or A2C method."""
+        gamma = self.get_gamma()
+
+        with torch.no_grad():
+            returns = torch.zeros_like(rewards_flat)
+            if self.algorithm == Algorithm.REINFORCE:
+                # REINFORCE: backward pass through episodes calculating cumulative discounted returns
+                for episode_idx in range(num_episodes):
+                    g: torch.Tensor = torch.tensor(0.0, device=rewards_flat.device)
+                    for t in reversed(range(steps_per_episode)):
+                        flat_idx = episode_idx * steps_per_episode + t
+                        g = rewards_flat[flat_idx] + gamma * g
+                        returns[flat_idx] = g
+            else:  # A2C
+                # A2C: one-step bootstrapping using r_t + gamma * V(s_{t+1}) (TD(0))
+                returns = rewards_flat + gamma * next_v_baseline.detach()
+
+        advantages = returns - v_ests.detach().squeeze()
+
+        normalized_advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+
+        ## =========================================================================================
+        ## Diagnostics
+        episode_rewards = rewards_flat.view(num_episodes, steps_per_episode).sum(dim=1)
+
+        avg_reward = episode_rewards.mean()
+        self.log("train/avg_reward", avg_reward, prog_bar=True)
+
+        ret_stats = compute_return_stats(episode_rewards)
+        self.log_dict({f"train/{k}": v for k, v in ret_stats.items()}, prog_bar=False)
+
+        adv_stats = compute_advantage_stats(advantages, phases_flat)
+        self.log_dict({f"train/{k}": v for k, v in adv_stats.items()}, prog_bar=False)
+        ## =========================================================================================
+
+        return normalized_advantages
+
+    def get_policy_loss(
+        self,
+        rolling_probs: torch.Tensor,
+        rolling_actions_flat: torch.Tensor,
+        scoring_probs: torch.Tensor,
+        scoring_actions_flat: torch.Tensor,
+        phases_flat: torch.Tensor,
+        normalized_advantages: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Calculate policy loss using log probabilities and advantages."""
         rolling_dist: torch.distributions.Distribution
         if self.rolling_action_representation == RollingActionRepresentation.CATEGORICAL:
             rolling_dist = torch.distributions.Categorical(rolling_probs)
@@ -409,49 +436,60 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
             phases_flat == 0, rolling_log_probs, scoring_log_probs
         )  # (BATCH_SIZE * 39,)
 
-        # Calculate targets based on algorithm type
-        gamma = self.get_gamma()
+        policy_loss: torch.Tensor = -(log_probs * normalized_advantages).mean()
 
-        # Calculate returns without gradients, since they are just targets for the critic / multipliers for the actor loss
-        with torch.no_grad():
-            returns = torch.zeros_like(rewards_flat)
-            if self.algorithm == Algorithm.REINFORCE:
-                # REINFORCE: backward pass through episodes calculating cumulative discounted returns
-                for episode_idx in range(num_episodes):
-                    g: torch.Tensor = torch.tensor(0.0, device=rewards_flat.device)
-                    for t in reversed(range(steps_per_episode)):
-                        flat_idx = episode_idx * steps_per_episode + t
-                        g = rewards_flat[flat_idx] + gamma * g
-                        returns[flat_idx] = g
-            else:  # A2C
-                # A2C: one-step bootstrapping using r_t + gamma * V(s_{t+1}) (TD(0))
-                # For terminal states (last step of episode), target is just the reward
-                # For non-terminal states, target is r_t + gamma * V(s_{t+1})
-                returns = rewards_flat + gamma * next_v_baseline.detach()
+        ## =========================================================================================
+        ## Diagnostics
+        entropy_stats = compute_entropy_stats(rolling_probs, scoring_probs, phases_flat)
+        if hasattr(self, "_epoch_metrics"):
+            self._epoch_metrics["entropy_roll"].append(float(entropy_stats["entropy_roll"].item()))
+            self._epoch_metrics["entropy_score"].append(
+                float(entropy_stats["entropy_score"].item())
+            )
+        concentration_stats = compute_action_concentration(
+            scoring_probs,
+            rolling_probs,
+            phases_flat,
+            self.rolling_action_representation == RollingActionRepresentation.BERNOULLI,
+        )
+        mask_diversity = compute_rolling_mask_diversity(rolling_actions_flat, phases_flat)
 
-        # Calculate advantages (same formula for both REINFORCE and A2C)
-        # REINFORCE: advantage = G_t - V(s_t), where G_t is the true discounted return
-        # A2C: advantage = [r_t + gamma*V(s_{t+1})] - V(s_t), which is the TD error
-        # In both cases: advantage = returns - V(s_t)
-        advantages = returns - v_ests.detach().squeeze()
+        self.log("train/policy_loss", policy_loss, prog_bar=True)
+        self.log_dict({f"train/{k}": v for k, v in entropy_stats.items()}, prog_bar=False)
+        self.log_dict({f"train/{k}": v for k, v in concentration_stats.items()}, prog_bar=False)
+        if mask_diversity is not None:
+            self.log("train/roll_mask_diversity", mask_diversity, prog_bar=False)
+        ## =========================================================================================
 
-        # Normalize advantages
-        normalized_advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+        return policy_loss, self.get_entropy_loss(phases_flat, rolling_dist, scoring_dist)
 
-        # Calculate policy loss
-        policy_loss = -(log_probs * normalized_advantages).mean()
-
-        # Calculate average reward per episode (sum of all step rewards)
-        episode_rewards = rewards_flat.view(num_episodes, steps_per_episode).sum(dim=1)
-        avg_reward = episode_rewards.mean()
-
+    def get_value_loss(self, v_ests: torch.Tensor, returns: torch.Tensor) -> torch.Tensor:
+        """Calculate value (critic) loss and log explained variance."""
         # Calculate Huber loss
         # v_loss = torch.nn.functional.smooth_l1_loss(v_ests.squeeze(), returns)
 
         # Use MSE loss for critic
         v_loss = torch.nn.functional.mse_loss(v_ests.squeeze(), returns)
 
-        ## Entropy
+        ## =========================================================================================
+        ## Diagnostics
+        self.log("train/v_loss", v_loss, prog_bar=False)
+
+        critic_ev = compute_critic_explained_variance(returns, v_ests)
+        self.log("train/critic_ev", critic_ev, prog_bar=False)
+        if hasattr(self, "_epoch_metrics"):
+            self._epoch_metrics["critic_ev"].append(float(critic_ev.item()))
+        ## =========================================================================================
+
+        return v_loss
+
+    def get_entropy_loss(
+        self,
+        phases_flat: torch.Tensor,
+        rolling_dist: torch.distributions.Distribution,
+        scoring_dist: torch.distributions.Distribution,
+    ) -> torch.Tensor:
+        """Calculate and log the entropy bonus."""
         if self.rolling_action_representation == RollingActionRepresentation.CATEGORICAL:
             rolling_entropy = rolling_dist.entropy()  # (BATCH_SIZE*39,)
         else:  # BERNOULLI
@@ -469,21 +507,14 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
             scoring_entropy[scoring_mask].mean() if scoring_mask.any() else torch.tensor(0.0)
         )
 
-        # Get current entropy coefficients for both heads
         rolling_coef, scoring_coef = self.get_entropy_coefs()
 
-        # Compute separate entropy bonuses
         rolling_entropy_bonus = rolling_coef * rolling_entropy_mean
         scoring_entropy_bonus = scoring_coef * scoring_entropy_mean
         total_entropy_bonus = rolling_entropy_bonus + scoring_entropy_bonus
 
-        loss = policy_loss + self.critic_coeff * v_loss - total_entropy_bonus
-
-        diff = returns - v_ests.squeeze()
-        ev = 1 - diff.var() / (returns.var() + 1e-8)
-        self.log("train/value_explained_var", ev, prog_bar=False)
-
-        # Log separate entropy metrics for each head
+        ## =========================================================================================
+        ## Diagnostics
         self.log("train/entropy_roll", rolling_entropy_mean, prog_bar=False)
         self.log("train/entropy_score", scoring_entropy_mean, prog_bar=False)
         self.log("train/entropy_bonus_roll", rolling_entropy_bonus, prog_bar=False)
@@ -491,53 +522,16 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         self.log("train/entropy_bonus_total", total_entropy_bonus, prog_bar=False)
         self.log("train/entropy_coef_roll", rolling_coef, prog_bar=False)
         self.log("train/entropy_coef_score", scoring_coef, prog_bar=False)
-        self.log("train/policy_loss", policy_loss, prog_bar=True)
-        self.log("train/v_loss", v_loss, prog_bar=False)
+        ## =========================================================================================
 
-        current_lr = self.trainer.optimizers[0].param_groups[0]["lr"]
-        self.log("lr", current_lr, prog_bar=False)
+        return -total_entropy_bonus
 
-        self.log("train/avg_reward", avg_reward, prog_bar=True)
-        self.log("train/total_loss", loss, prog_bar=True)
-
-        # ===== DIAGNOSTIC METRICS =====
-        # Advantage stats: adv_mean ~0 (by construction), adv_std nonzero (signal strength)
-        # Red flag: adv_std → 0 = tiny gradients; roll vs score std differs >10x = phase imbalance
-        adv_stats = compute_advantage_stats(advantages, phases_flat)
-        self.log_dict({f"train/{k}": v for k, v in adv_stats.items()}, prog_bar=False)
-
-        # Return std: high early (stochastic), stabilizes; collapsing to tiny values = degenerate policy
-        ret_stats = compute_return_stats(episode_rewards)
-        self.log_dict({f"train/{k}": v for k, v in ret_stats.items()}, prog_bar=False)
-
-        # Critic EV: Good = 0.3-0.7, rising. Red flags: stuck at 0 (not learning), <0 (harmful), wild swings (unstable)
-        critic_ev = compute_critic_explained_variance(returns, v_ests)
-        self.log("train/critic_ev", critic_ev, prog_bar=False)
-        if hasattr(self, "_epoch_metrics"):
-            self._epoch_metrics["critic_ev"].append(float(critic_ev.item()))
-
-        # Entropy: roll ~2.0-2.4 early → ~1.0 later; score moderate, gradual decline
-        # Red flags: roll <1.2 early = premature collapse; score near-zero = deterministic too soon
-        entropy_stats = compute_entropy_stats(rolling_probs, scoring_probs, phases_flat)
-        self.log_dict({f"train/{k}": v for k, v in entropy_stats.items()}, prog_bar=False)
-        if hasattr(self, "_epoch_metrics"):
-            self._epoch_metrics["entropy_roll"].append(float(entropy_stats["entropy_roll"].item()))
-            self._epoch_metrics["entropy_score"].append(
-                float(entropy_stats["entropy_score"].item())
-            )
-
-        # Concentration: top1 starts ~0.2-0.4, climbs slowly; top3 >0.6 early
-        # Red flag: top1 >0.7 in first 10-20% of training = over-confident, collapsed
-        concentration_stats = compute_action_concentration(scoring_probs)
-        self.log_dict({f"train/{k}": v for k, v in concentration_stats.items()}, prog_bar=False)
-
-        # Mask diversity: high and steady; monotonic decline = converging to "always keep X" rut
-        mask_diversity = compute_rolling_mask_diversity(rolling_actions_flat, phases_flat)
-        if mask_diversity is not None:
-            self.log("train/roll_mask_diversity", mask_diversity, prog_bar=False)
-
-        # KL divergence: Good = 0.002-0.02 (policy moving). Red flags: ≈0 = frozen; sudden spikes = too hot
-        # Initialize caches if needed
+    def log_kl_diagnostics(
+        self, scoring_probs: torch.Tensor, rolling_probs: torch.Tensor, phases_flat: torch.Tensor
+    ) -> None:
+        """Log various diagnostic metrics."""
+        ## =========================================================================================
+        ## Diagnostics
         with torch.no_grad():
             if not hasattr(self, "_prev_roll_p"):
                 self._prev_roll_p = rolling_probs.detach()
@@ -554,12 +548,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
             self.log("train/kl_score", kl_stats["kl_score"], prog_bar=False)
             if hasattr(self, "_epoch_metrics"):
                 self._epoch_metrics["kl_score"].append(float(kl_stats["kl_score"].item()))
-
-        # Phase balance: should be ~0.67 (2 rolls + 1 score per turn); extreme drift = bad logic
-        phase_balance = compute_phase_balance(phases_flat)
-        self.log("train/frac_roll_steps", phase_balance, prog_bar=False)
-
-        return loss
+        ## =========================================================================================
 
     def configure_gradient_clipping(
         self,
@@ -683,20 +672,9 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
             entropy_roll_mean = float(np.mean(self._epoch_metrics["entropy_roll"]))
             entropy_score_mean = float(np.mean(self._epoch_metrics["entropy_score"]))
 
-            # Health score: combination of critic quality and entropy
-            # Healthy: critic_ev 0.3-0.7, entropy_roll ~1.0-2.4, entropy_score moderate
-            # Score ranges 0-1; good training should be >0.4
-            critic_component = (
-                max(0, min(critic_ev_mean / 0.7, 1.0)) * 0.5
-            )  # Cap at 0.7, scale to 0-0.5
-            roll_ent_component = (
-                max(0, min(entropy_roll_mean / 2.4, 1.0)) * 0.25
-            )  # Cap at 2.4, scale to 0-0.25
-            score_ent_component = (
-                max(0, min(entropy_score_mean / 1.5, 1.0)) * 0.25
-            )  # Cap at 1.5, scale to 0-0.25
-            health_score = critic_component + roll_ent_component + score_ent_component
-
+            health_score = compute_training_health_score(
+                critic_ev_mean, entropy_roll_mean, entropy_score_mean
+            )
             self.log("diagnostics/training_health", health_score, prog_bar=False)
             self.log("diagnostics/critic_ev_epoch", critic_ev_mean, prog_bar=False)
             self.log("diagnostics/entropy_roll_epoch", entropy_roll_mean, prog_bar=False)
@@ -747,6 +725,8 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
             # Concentration (high top1/top3 = policy collapse)
             logger.define_metric("train/score_top1", summary="mean,max")
             logger.define_metric("train/score_top3", summary="mean,max")
+            logger.define_metric("train/roll_top1", summary="mean,max")
+            logger.define_metric("train/roll_top3", summary="mean,max")
 
             # Diversity (should stay high)
             logger.define_metric("train/roll_mask_diversity", summary="min,mean")
@@ -757,9 +737,6 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
 
     def on_train_end(self) -> None:
         """Close validation environments at the end of training."""
-        # Run comprehensive test evaluation at the end of training
-        self.run_sweep_test_evaluation(run_deterministic=True, run_stochastic=False)
-
         for env in self.validation_envs:
             env.close()
         self.validation_envs.clear()
