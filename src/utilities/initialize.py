@@ -13,8 +13,6 @@ from pytorch_lightning.loggers import (
 )
 from tabulate import tabulate
 
-import wandb
-
 
 @dataclass
 class ConfigParam:
@@ -40,6 +38,8 @@ def initialize(
     logger_name: str | None = None,
 ) -> tuple[dict[str, Any], Any]:
     """Initialize the project with configuration management, wandb logger setup, and system info."""
+    torch.set_float32_matmul_precision("medium")
+
     run_id = os.getenv("WANDB_RUN_ID")
 
     logger: lightning_logger.Logger
@@ -77,7 +77,9 @@ def initialize(
 
 
 def get_hyperparameters(
-    config_params: list[ConfigParam], description: str, wandb_run: wandb.Run | None
+    config_params: list[ConfigParam],
+    description: str,
+    wandb_run,  # noqa: ANN001
 ) -> dict[str, Any]:
     """Extract hyperparameters from W&B and CLI."""
     param_names = [param.name for param in config_params]
@@ -124,14 +126,13 @@ def get_hyperparameters(
 
 def print_hyperparameters(config: dict[str, Any], config_params: list[ConfigParam]) -> None:
     """Display parsed hyperparameters in a compact table."""
-    print("\n=== Hyperparameters ===")
     rows: list[list[str]] = []
     for param in config_params:
         display_name = param.get_display_name()
         value = config[param.name]
         rows.append([display_name, str(value)])
     if rows:
-        print(tabulate(rows, headers=["Parameter", "Value"], tablefmt="github"))
+        print(tabulate(rows, headers=["Hyperparameter", "Value"], tablefmt="github"))
 
 
 def print_cuda_info() -> None:
@@ -150,4 +151,4 @@ def print_cuda_info() -> None:
             rows.append([f"GPU {index} name", gpu_name])
     else:
         rows.append(["GPU status", "No GPU detected"])
-    print(tabulate(rows, headers=["Property", "Value"], tablefmt="github"))
+    print(tabulate(rows, tablefmt="github"))

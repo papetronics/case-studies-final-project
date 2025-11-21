@@ -2,7 +2,7 @@
     "args": [],
     "entry_point": [],
     "run_config": {
-        "game_scenario": "single_turn",
+        "game_scenario": "full_game",
         "epochs": 500,
         "total_train_games": 1000000,
         "games_per_batch": 20,
