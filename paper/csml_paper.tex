@@ -71,23 +71,47 @@ Concretely, we ask: \begin{enumerate*}[label=(\roman*)]
 <600-800 words> % 930 words so far
 
 \subsection{Policy Gradient Methods and Variance Reduction}
-Policy-gradient methods are a family of algorithms which directly optimize a parameterized policy $\pi_{\theta}$ to follow an estimate of the performance gradient \cite{sutton-2000-policy-gradient}.
-A simple formulation of this is the REINFORCE algorithm \cite{williams-1992-reinforce}, which uses Monte-Carlo returns $G_{t}^{MC}$ on finite, episodic tasks; however, while unbiased, it suffers from high variance.
-Actor-critic methods \cite{konda-1999-actorcritic, mnih-2016-a3c} address this by learning a seperate value function, the critic $V_{\phi}$, which serves a variance reducing baseline.
-A recent and popular algorithm, proximal policy optimization (PPO) \cite{schulman-2017-ppo}, utilizes a clipped objective $L^{CLIP}(\theta)$
-and explicit Kullback-Leibler (KL) divergence control to dramatically reduce variance and ensure stable updates.
+\subsubsection{Return Estimation}
+Note that in this paper, we will follow notation from \citet{sutton-2018-reinforcement-book} and the policy gradient theorem \cite{sutton-2000-policy-gradient}.
 
-In long episodic games, the choice of return calculation affects sample efficiency, bias, and variance. Monte-Carlo (MC) returns $G_{t}^{MC}$ use a summation over the full series of rewards until the end of the episode.
+In long episodic games, the choice of return calculation affects sample efficiency, bias, and variance.
+Monte-Carlo (MC) returns $G_{t}^{MC}$ use a summation over the full series of rewards until the end of the episode.
 This approach is unbiased but has high variance.
-Temporal Difference returns calculate the TD-error term $\delta_t$ using a bootstrapped estimate for the value of the next state \cite{sutton-1988-temporal-differences}, which is biased but has lower variance.
-n-step returns $G_{t}^{TD(n)}$ \cite{sutton-2018-reinforcement-book} interpolate between MC and single-step TD returns, allowing us to define a time horizon $n$ over which to sum rewards before bootstrapping, this lets us manually control the bias-variance tradeoff.
-This is improved by the $TD(\lambda)$ algorithm \cite{sutton-2018-reinforcement-book}, which uses an exponentially weighted average of n-step returns, effectively blending multiple time horizons.
-Actor-Critic and PPO can use any of these return estimation methods, including the generalized advantage estimate (GAE) \cite{schulman-2016-gae}, which is a special formulation of $TD(\lambda)$.
+In contrast, Temporal Difference methods use a "bootstrapped" estimate of future rewards to reduce variance.
+Essentially, they only consider received rewards $R$ in a specific time window, and use an estimate from the value function $V(S_{t+1})$ for future rewards beyond that window; this is called the TD estimate \cite{sutton-2018-reinforcement-book}.
 
+This time window can also be adjusted, depending on the task.
+For example, n-step returns $G_{t}^{TD(n)}$  interpolate between MC and single-step TD returns, allowing us to define a time horizon $n$ over which to sum rewards before bootstrapping.
+This lets us manually control the bias-variance tradeoff.
+A related method is $TD(\lambda)$, which uses an exponentially weighted average of n-step returns, effectively blending multiple time horizons into a single estimate controlled by $\lambda$ \cite{sutton-2018-reinforcement-book}.
+
+While TD estimates are biased (since they rely on future value estimates to be accurate), they have much lower variance than full-episode returns.
+In TD(0), the value function effectively learns using a single timestep; this is a much simpler problem than estimating the entire sequence of rewards.
+This often makes TD methods more sample efficient than REINFORCE, and provides the benefit of being able to learn online rather than waiting until the end of an episode.
+
+Pure TD methods can be viewed as a form of approximate dynamic programming, making them a natural fit for domains where dynamic-programming solutions exist \cite{bertsekas1996neuro}.
+
+\subsubsection{Policy Gradient Methods}
+Policy-gradient methods are a family of algorithms which directly optimize a parameterized policy $\pi_{\theta}$ to follow an estimate of the performance gradient.
+A simple formulation of this is the REINFORCE algorithm \cite{williams-1992-reinforce}, which uses Monte-Carlo returns $G_{t}^{MC}$ on finite, episodic tasks; however, while unbiased, it suffers from high variance.
+One trick for reducing variance in REINFORCE is to subtract a baseline (often just an average return, but potentially a learned estimate) from an episode's MC return.
+This yields an advantage estimate that reduces variance without changing its expectation \cite{weaver2013optimal, greensmith-2004-variance-reduction}.
+
+Actor-critic methods \cite{konda-1999-actorcritic} such as Advantage Actor-Critic (A2C) and Asynchronous Advantage Actor-Critic (A3C) \cite{mnih-2016-a3c} typically use a TD-style return estimate to update the policy.
+These methods learn a separate value function: the critic $V_{\phi}$.
+This critic is used directly in the TD return estimate as the bootstrap value estimate for a state.
+For these methods, we can define the TD error $\delta_t$ as the difference between the TD estimate and the value estimate for the current state $V(S_t)$.
+This $\delta_t$ error is then used as the advantage estimate for a normal policy gradient update \cite{konda-1999-actorcritic}.
+
+Another widely used algorithm, proximal policy optimization (PPO), utilizes a clipped objective $L^{CLIP}(\theta)$
+and explicit Kullback-Leibler (KL) divergence control to dramatically reduce variance and ensure stable updates \cite{schulman-2017-ppo}.
+PPO uses the Generalized Advantage Estimate (GAE), which is closely related to $TD(\lambda)$, applying a $\lambda$-weighted mixture at the level of advantages \cite{schulman-2016-gae}.
+
+\subsubsection{Other Variance Reduction Techniques}
 Aside from return estimation, there is a host of other variance reduction techniques which can be employed for policy gradient methods.
-Subtracting a learned baseline from REINFORCE yields an advantage estimate that reduces variance without changing its expectation \cite{weaver2013optimal, greensmith-2004-variance-reduction}.
-Normalizing advantages across a batch improves gradient conditioning and is common practice.
-Entropy regularization prevents early collapse to suboptimal policies by encouraging exploration via the addition of an explicit entropy bonus term in the loss function \cite{williams-peng-1991-function-optimization}.
+
+Normalizing advantages across a batch improves gradient conditioning and is common practice \cite{schulman2015trpo}.
+Entropy regularization prevents early collapse to suboptimal policies by encouraging exploration via the addition of an explicit entropy bonus term in the loss function \cite{williams-peng-1991-function-optimization, mnih-2016-a3c, schulman-2017-ppo}.
 Gradient clipping is frequently used alongside these techniques to stop rare, but large, gradient updates from destabilizing training \cite{pascanu-2013-rnn-clipping}.
 While high variance is unavoidable in deep reinforcement learning, poor performance can often be linked to numerical instability rather than inherent flaws in algorithmic design \cite{bjorck-2022-high-variance};
 simple tweaks like normalizing features before activations can dramatically improve stability.
@@ -144,29 +168,35 @@ Each category has specific scoring rules, and each can only be used once per gam
 The space of all possible dice configurations is:
 $$\mathcal{D} \in \{1, 2, 3, 4, 5, 6\}^5$$
 and the current state of the dice is represented as:
-$$\mathbf{d} \in \mathcal{D}$$
+\begin{equation}
+  \mathbf{d} \in \mathcal{D}
+\end{equation}
 
 In addition, we can represent the score card as a vector of length 13, where each element corresponds to a scoring category:
-
-$$\mathbf{c} = (c_1, c_2, \ldots, c_{13}) \text{ where } c_i \in \mathcal{D}_i \cup \{\varnothing\}$$
-
-and $\varnothing$ indicates an unused category.
+\begin{equation}
+  \mathbf{c} = (c_1, c_2, \ldots, c_{13}) \text{ where } c_i \in \mathcal{D}_i \cup \{\varnothing\}
+\end{equation}
+where $\varnothing$ indicates an unused category.
 
 Let us also define a dice face counting function which we can use to simplify score calculations:
-\begin{align*}
+\begin{align}
   n_v(\mathbf{d})        & = \sum_{i=1}^{5} \mathbb{I}(d_i = v),
-  \quad v \in \{1,\dots,6\}                                                  \\
+  \quad v \in \{1,\dots,6\}                                                 \nonumber \\
   \mathbf{n}(\mathbf{d}) & = \big(n_1(\mathbf{d}),\dots,n_6(\mathbf{d})\big)
-\end{align*}
+\end{align}
 
 Let the potential score for each category be defined as follows (where detailed scoring rules can be found in Appendix~\ref{app:scoring}):
-\begin{align*}
-  \mathbf{f}(\mathbf{d}) & =
-  \bigl(f_1(\mathbf{d}), f_2(\mathbf{d}), \ldots, f_{13}(\mathbf{d})\bigr)
-\end{align*}
+\begin{equation}
+  \begin{aligned}
+    \mathbf{f}(\mathbf{d}) & =
+    \bigl(f_1(\mathbf{d}), f_2(\mathbf{d}), \ldots, f_{13}(\mathbf{d})\bigr)
+  \end{aligned}
+\end{equation}
 
 The current turn number can be represented as:
-$$t \in \{1, 2, \ldots, 13\}, \quad t = \sum_{i=1}^{13} \mathbb{I}(c_i \neq \varnothing)$$
+\begin{equation}
+  t \in \{1, 2, \ldots, 13\}, \quad t = \sum_{i=1}^{13} \mathbb{I}(c_i \neq \varnothing)
+\end{equation}
 
 A single turn is composed of an initial dice roll, two optional re-rolls, and a final scoring decision.
 Let $r = 0$, with $r \in \{0,1,2\}$ which is the number of rolls taken so far.
@@ -176,7 +206,9 @@ $$
 $$
 
 The player must decide which dice to keep and which to re-roll. Let the player define a keep vector:
-$$\mathbf{k} \in \{0,1\}^5$$
+\begin{equation}
+  \mathbf{k} \in \{0,1\}^5
+\end{equation}
 where $\mathbf{k}_i = 1$ indicates that die $i$ is kept, otherwise it is re-rolled.
 
 We can then define the transition of the dice state after a re-roll as:
@@ -189,15 +221,17 @@ We can then define the transition of the dice state after a re-roll as:
 
 
 When $r=2$, the player must choose a scoring category to apply their current dice to. Define a scoring choice mask as a one-hot vector:
-$$\mathbf{s} \in \{0,1\}^{13}, \quad \|\mathbf{s}\|_1 = 1$$
+\begin{equation}
+  \mathbf{s} \in \{0,1\}^{13}, \quad \|\mathbf{s}\|_1 = 1
+\end{equation}
 
 For the purposes of calculating the final (or current) score, any field that has not been scored yet can be counted as zero.
 We can define a mask vector for this:
 
-\begin{align*}
-   & \mathbf{u}(\mathbf{c}) \in \{0,1\}^{13}                                                                     \\
+\begin{align}
+   & \mathbf{u}(\mathbf{c}) \in \{0,1\}^{13}                                                                  \nonumber \\
    & \mathbf{u}(\mathbf{c})_i = \mathbb{I}\bigl(c_i \neq \varnothing\bigr), \quad \forall i = \{ 1, \ldots 13 \}
-\end{align*}
+\end{align}
 
 
 If a player achieves a total score of 63 or more in the upper section (categories 1-6), they receive a bonus of 35 points:
@@ -209,7 +243,9 @@ $$
 $$
 
 The player's score can thus be calculated as:
-$$\mathrm{score}(\mathbf{c}) = B(\mathbf{c}) + \big\langle \mathbf{u}(\mathbf{c}), \mathbf{c} \big\rangle$$
+\begin{equation}
+  \mathrm{score}(\mathbf{c}) = B(\mathbf{c}) + \big\langle \mathbf{u}(\mathbf{c}), \mathbf{c} \big\rangle
+\end{equation}
 
 \subsection{MDP Formulation}
 We model \textit{Yahtzee} as a Markov Decision Process $(\mathcal S,\mathcal A,P,R,\gamma)$ \citep{Puterman1994MDP}.
@@ -237,7 +273,7 @@ This is a useful subproblem to study, as it isolates the decision-making process
 allowing us to analyze the network architecture and training regime in a low-variance setting.
 
 \subsection{Full-Game Optimization Task}
-In the full-game optimization task, 13-turn episodes are played to completion.
+In the full-game optimization task, 13-turn episodes (totalling 39 individual steps) are played to completion.
 The objective again is to maximize the total score at the end of the game.
 This task is more challenging due to the longer horizon, increased variance, and the requirement for
 the network to learn explicit long-term strategies, such as planning for the upper bonus.
@@ -249,7 +285,7 @@ The design of $\mathbf{\phi}(\mathbf{s}) \rightarrow \mathbf{x}$ is one of the m
 
 Formally, we define the state representation function as
 \begin{equation}
-  \mathbf{x} = \mathbf{\phi}(\mathbf{s}),
+  \mathbf{x} = \mathbf{\phi}(\mathbf{s})
 \end{equation}
 where $\mathbf{s}$ is the raw MDP state (e.g., dice configuration, scorecard, roll index, turn index), and $\mathbf{x}$ is the feature vector or tensor provided as input to the model. The choice of $\mathbf{\phi}$ determines how information from the environment is encoded for learning and inference.
 As such, several different representations were tested to evaluate their impact on learning efficiency and final performance.
@@ -339,16 +375,34 @@ In the scoring action head, we use 13 outputs with softmax activations for the c
 
 For the value head, we use a single linear output, constrained with ELU activation to clamp negative value estimates \cite{clevert2016elu}, since negative rewards are not possible in \textit{Yahtzee}.
 
-\subsubsection{Weight Initialization}
-<KAIMING OR XAVIER?>
-
 \subsubsection{Optimization \& Schedules}
 We utilize the Adam optimizer \cite{kingma2014adam} with maximum learning rate between $1\times 10^{-4}$ and $5\times 10^{-4}$.
 To improve training stability, we utilize a warmup schedule over the first 5\% of training \cite{kalra-2024-warmup},
 plateau for 70\% of training, and then linearly decay over the final 25\% of training steps \cite{defazio2023optimal, lyle2024normalization}.
-We also inject an entropy bonus into the loss function to encourage exploration \cite{williams-peng-1991-function-optimization}, these held
+
+\subsection{Entropy}
+To encourage exploration, we also add an entropy bonus to the loss function  \cite{williams-peng-1991-function-optimization}. These are held
 constant at the start of training then linearly decayed to a final value near the end of training. Different entropy bonuses were used for rolling and scoring actions,
 as rolling actions had a tendency to collapse early in training.
+Exploration is particularly important for Yahtzee, there are many stable suboptimal policies (e.g., exclusively going for the upper bonus, always going for Yahtzees, etc).
+Once the model has figured out how to play the game, it quickly converges and won't explore other strategies as they often trade off short-term rewards for long-term gains.
+
+We can define the entropy bonus as:
+\begin{align}
+  \mathcal{L}_{\mathrm{entropy}}(\theta)
+  = &
+  \underbrace{
+    \overbrace{\beta_{\mathrm{roll}}}^{\text{weight}}
+    \,
+    \mathcal{H}\big[\pi_{\theta,\mathrm{roll}}(\cdot \mid s_t)\big]
+  }_{\text{rolling action entropy}} \nonumber \\[4pt]
+    & +
+  \underbrace{
+    \overbrace{\beta_{\mathrm{score}}}^{\text{weight}}
+    \,
+    \mathcal{H}\big[\pi_{\theta,\mathrm{score}}(\cdot \mid s_t)\big]
+  }_{\text{scoring action entropy}}
+\end{align}
 
 \subsubsection{Training Metrics}
 To better understand training dynamics, we log several metrics during training.
@@ -362,44 +416,37 @@ We also monitor standard training metrics such as average reward and loss values
 
 \subsection{Reinforcement Learning Algorithms}
 \subsubsection{REINFORCE}
-We first implement the REINFORCE algorithm \cite{williams-1992-reinforce} with baseline for single-turn optimization,
-then attempt to extend it to full-game optimization. Here, the baseline is the output of the value head, $V_{\phi}(\mathbf{s})$.
-The loss function is defined as:
+We first implement the REINFORCE algorithm \cite{williams-1992-reinforce} with baseline for single-turn optimization, then attempt to extend it to full-game optimization.
+The baseline is the output of the value head, $V_{\phi}(\mathbf{s})$. Thus, the loss function is:
+
 \begin{align*}
   \mathcal{L}(\theta,\phi)
   = &
   \underbrace{
   \overbrace{- \log \big(\pi_\theta(a_t \mid s_t)\big)}^{\text{negative log likelihood}} \,
   \overbrace{\big(\hat{R}_t - V_\phi(s_t)\big)}^{\text{advantage }}
-  }_{\text{policy loss}}   \\
+  }_{\text{policy loss}}                 \\
     & +
   \underbrace{
   \overbrace{\lambda_V}^{\text{weight}}
   \|
   V_\phi(s_t) - \hat{R}_t\big
   \|_2
-  }_{\text{value loss}}    \\
-    & -
-  \underbrace{
-  \overbrace{\beta}^{\text{weight}}
-  \mathcal{H}\big[\pi_\theta(\cdot \mid s_t)\big]
-  }_{\text{entropy bonus}} \\
+  }_{\text{value loss}}                  \\
+    & +
+  \mathcal{L}_{\mathrm{entropy}(\theta)} \\
 \end{align*}
 
+\subsubsection{Advantage Actor-Critic (A2C)}
 
-
-\subsubsection{TD}
-Temporal Difference differs from REINFORCE by calculating the TD error, which is the difference between the estimated value of the
-current state and the discounted value of the next state plus rewards earned \cite{sutton-1988-temporal-differences}.
-By doing so, TD methods reduce variance at the cost of introducing some bias. TD also has the benefit of being an online method;
-we can learn from every step rather than waiting until the end of an episode, which greatly improves sample efficiency.
+Second, we utilize an episodic, one-step TD(0) Advantage Actor-Critic (A2C) method. Its loss is:
 
 \begin{align*}
   \delta_t
   = &
   \overbrace{r_t}^{\text{reward}}
   +
-  \overbrace{\gamma V_\phi(s_{t+1})}^{\text{discounted future}}
+  \overbrace{\gamma V_\phi(s_{t+1})}^{\text{bootstrap}}
   -
   \overbrace{V_\phi(s_t)}^{\text{current estimate}}
   \\[8pt]
@@ -409,7 +456,7 @@ we can learn from every step rather than waiting until the end of an episode, wh
   \overbrace{- \log \big(\pi_\theta(a_t \mid s_t)\big)}^{\text{negative log likelihood}}
   \,
   \overbrace{\delta_t}^{\text{TD-error}}
-  }_{\text{policy loss}}   \\[4pt]
+  }_{\text{policy loss}}                 \\[4pt]
     & +
   \underbrace{
   \overbrace{\lambda_V}^{\text{weight}}
@@ -417,23 +464,14 @@ we can learn from every step rather than waiting until the end of an episode, wh
   \big\|
   \delta_t
   \big\|_2^2
-  }_{\text{value loss}}    \\[4pt]
-    & -
-  \underbrace{
-  \overbrace{\beta}^{\text{weight}}
-  \,
-  \mathcal{H}\big[\pi_\theta(\cdot \mid s_t)\big]
-  }_{\text{entropy bonus}} \\
+  }_{\text{value loss}}                  \\[4pt]
+    & +
+  \mathcal{L}_{\mathrm{entropy}(\theta)} \\
 \end{align*}
-
-In TD(0), the value function effectively learns using a single timestep; this is a much simpler problem than estimating the entire sequence of rewards.
-Pure TD methods can be considered a form of estimated DP, which makes them potentially well suited for \textit{Yahtzee}, for which a DP solution is known to exist.
-
-Other forms of TD returns, such as n-step TD and TD($\lambda$) can be used by replacing $\delta_t$ with the appropriate return estimate.
 
 \subsubsection{PPO}
 PPO improves on TD by utilizing a "surrogate" objective which clips large policy updates, improving training stability.
-This allows for substantially larger batch sizes and learning rates \cite{schulman-2017-ppo}.
+This allows for substantially larger batch sizes and learning rates \cite{schulman-2017-ppo}. The loss we use is:
 
 \begin{align*}
   r_t(\theta)
@@ -442,7 +480,7 @@ This allows for substantially larger batch sizes and learning rates \cite{schulm
   \overbrace{\pi_\theta(a_t \mid s_t)}^{\text{current policy}}
   }{
   \underbrace{\pi_{\theta_{\text{old}}}(a_t \mid s_t)}_{\text{behavior policy}}
-  }                      \\[8pt]
+  }                                      \\[8pt]
   \mathcal{L}(\theta,\phi)
   = &
   \underbrace{
@@ -452,19 +490,16 @@ This allows for substantially larger batch sizes and learning rates \cite{schulm
        & \operatorname{clip}\big(r_t(\theta), 1 - \epsilon, 1 + \epsilon\big)\,\hat{A}_t
     \end{aligned}
     \bigg\}
-  }_{\text{policy loss}} \\[6pt]
+  }_{\text{policy loss}}                 \\[6pt]
     & +
   \underbrace{
   \overbrace{\lambda_V}^{\text{weight}}
   \big\|
   V_\phi(s_t) - \hat{R}_t
   \big\|_2^2
-  }_{\text{value loss}}  \\[4pt]
-    & -
-  \underbrace{
-  \overbrace{\beta}^{\text{weight}}
-  \mathcal{H}\big[\pi_\theta(\cdot \mid s_t)\big]
-  }_{\text{entropy bonus}}
+  }_{\text{value loss}}                  \\[4pt]
+    & +
+  \mathcal{L}_{\mathrm{entropy}(\theta)} \\
 \end{align*}
 
 \subsubsection{Training Regimes}
@@ -485,11 +520,6 @@ Likewise, we compute category statistics to analyze strategic preferences of dif
 
 \section{Results}
 
-\subsection{Generalization of Single-Turn Agent to Full Game}
-<200-400 words>
-<Talk about the single-turn agent's performance when directly applied to full-game Yahtzee without further training.>
-<Tradeoff with full-game performance, etc.>
-
 \subsection{Single-Turn Results}
 <600-700 words>
 \subsubsection{Baseline Model Performance}
@@ -503,7 +533,7 @@ However, we suspected target leakage (selecting parameters and architectures bas
 
 \begin{table}[H]
   \centering
-  \caption{Category statistics for the optimal strategy}
+  \caption{Category statistics for single-turn agent}
   \label{tab:category-stats}
   \begin{tabular}{lcc}
     \hline
@@ -636,27 +666,25 @@ We expect that there is a Pareto frontier between these two objectives, and that
   \label{fig:pareto-frontier}
 \end{figure}
 
-
-
-\subsubsection{Summary}
-<Talk about the biggest levers>
-
 \subsection{Full-Game Results}
 <600-700 words>
+For the full-game model, we added several additional features to the state representation: $\phi_{\mathrm{progress}}(t)$ and $\phi_{\mathrm{potential}}(\mathbf{d}, \mathbf{c})$
+while reusing the same underlying neural network architecture as the single-turn model. These additions were necessary to provide the model with sufficient context to make long-term strategic decisions.
+While the $\phi_{\mathrm{progress}}(t)$ feature could be inferred from the scorecard, the model struggled to do so reliably.
+We intentionally omitted the $\phi_{\mathrm{potential}}(\mathbf{d}, \mathbf{c})$ feature in single turn, as we wanted to ensure the model was capable of learning to reason about category potential on its own,
+but found it to be necessary, especially with REINFORCE.
+
 \subsubsection{REINFORCE}
-<Talk about reusing the single-turn config and how it doesn't perform well>
-<Talk about tuning it for full-game and how that helps>
-<Graph showing single turn vs full game REINFORCE performance>
+REINFORCE proved challenging to optimize to high performance levels given our fixed training budget of 1 million full-game episodes (39 million steps).
+It was highly sensitive to hyperparameters such as the critic coefficient, the entropy bonus, and batch size.
+We also found that REINFORCE simply required more training data to converge at a reliable performance level across seeds; our implementation was trained on 1,000,000 games.
+However, after optimization we were able to achieve reasonable performance, scoring a mean of <X> points on average over 10,000 full games.
 
 \subsubsection{TD($\lambda$)}
 <Talk about how it performs better than REINFORCE>
 
 \subsubsection{PPO}
-<Talk about how it performs best>
-
-\subsubsection{Transfer Learning}
-<Show results for transfer learning directly>
-<Show results for transfer learning with LoRA>
+PPO proved to be the most effective algorithm for full-game optimization, achieving a mean score of <X> points over 10,000 full games.
 
 \subsubsection{Summary}
 <Summarize full-game results and key findings>
@@ -773,23 +801,45 @@ We expect that there is a Pareto frontier between these two objectives, and that
 
 \section{Conclusion and Future Work}
 <200-300 words>
-<Summarize key findings and suggest directions for future research.>
+
+Learning a robust policy for \textit{Yahtzee} using reinforcement learning presents several interesting challenges and insights.
+First, we showed that \textit{Yahtzee}'s combinatorial action space and sparse rewards make it suitable as a non-trivial benchmark environment.
+Our results back up theoretical results in the literature regarding training stability and sample efficiency of common RL algorithms.
+Likewise, our ablation studies highlight the importance of finding semantically meaningful state and action representations that align the model architecture with the underlying structure of the problem.
+Our analysis of learned policies showed that these algorithms often struggle to learn rare, yet high-reward strategies, especially if they require strong coherence over longer time horizons.
+
+Future research could be done to find architectures, samples, and learning methods that allow the model to better approximate optimal play.
+For example, curriculum learning approaches, where the agent is gradually exposed to more complex scenarios over time, could be used to help the model overcome some challenges outlined in this paper.
+
+We found that \textrm{Yahtzee} is trivially broken into several a heirarchy of interesting sub-problems.
+It was fairly expensive to train a full-game agent from scratch, but training a single-turn agent was much more efficient.
+Transfer learning could be explored further to see if knowledge from single-turn optimization could be effectively transferred to full-game, multiplayer Yahtzee, or other variants of the game.
+Additionally, \textrm{Yahtzee} could also be considered as a candidate environment for research into hierarchical reinforcement learning (HRL) methods.
+
+Perhaps most interestingly, we showed that an architecture that is, in theory, applicable to the multiplayer setting can be effectively trained to play Solitaire \textit{Yahtzee} at a high level.
+This opens the door to future research into adversarial formulations of the game, which are intractable using analytic methods.
+Our agent tries only to achieve the best game score, but in a multiplayer setting, it would need to reason about opponents' strategies and scorecards and adapt accordingly to maximize its chances of winning.
+Likewise, the use of self-attention and other permutation-invariant architectures could be applicable to many games or scenarios involving multiple agents in a shared environment.
 
 \bibliography{1_introduction,2_related_work,3_methods,4_single_turn_results,5_full_game_experiments,6_discussion,7_appendix}
 \bibliographystyle{acl_natbib}
 
 \appendix
 
+\section{Compute Costs}
+Experiments were collected using a mix of a local RTX 3090 and AWS-hosted Tesla T4 GPUs.
+The total cost of cloud compute was approximately \textbf{\$130}.
+Over \textbf{312} training runs were logged in Weights \& Biases, totaling approximately \textbf{566.59 GPU hours}.
+The estimated carbon footprint of the compute used is approximately \textbf{A kg CO$_2$e}, based on the methodology from \citet{lacoste-2019-carbontracker}.
+
 \section{AI Usage}
 
 This paper utilized artificial intelligence tools in the following ways:
-
 \begin{itemize}
-  \item \textbf{GitHub Copilot (Claude Sonnet 4.5)} was used for typesetting assistance with LaTeX/KaTeX and for autocomplete suggestions during coding.
-  \item \textbf{ChatGPT (GPT-5)} was used for brainstorming ideas for reinforcement learning applications in games, guidance in hyperparameter tuning, helping to outline the structure of the paper, and suggesting relevant related work.
+  \item \textbf{GitHub Copilot (Claude Sonnet 4.5)} was used for typesetting assistance with LaTeX/KaTeX, IDE autocomplete suggestions during coding, and to occassionally perform straightforward refactorings, CUDA performance optimizations, and debugging.
+  \item \textbf{ChatGPT (GPT-5.1)} was used for brainstorming ideas for reinforcement learning applications in games, guidance in hyperparameter tuning, helping to outline the structure of this paper, assistance in discovering relevant research and citations, and for writing tone and quality feedback.
 \end{itemize}
-
-All other content, including research methodology, analysis, results interpretation, and conclusions, represents original work by the author. The AI tools were used only for initial ideation and to assist research, not for generating substantive content or analysis.
+All other content, including research methodology, analysis, results interpretation, and conclusions, represents original work by the author. The AI tools were not used to generate substantive content or analysis in this document.
 
 \section{Yahtzee Scoring Rules}
 \label{app:scoring}
