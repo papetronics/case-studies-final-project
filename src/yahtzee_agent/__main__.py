@@ -233,7 +233,6 @@ def main() -> None:  # noqa: PLR0915
         config_params=config_params,
         scenario_name="yahtzee_agent",
         description="Yahtzee Agent using Reinforcement Learning",
-        logger_name="rl-training",
     )
 
     # Extract config values for easy access

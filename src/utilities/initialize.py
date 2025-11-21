@@ -31,11 +31,7 @@ class ConfigParam:
 
 
 def initialize(
-    scenario_name: str,
-    config_params: list[ConfigParam],
-    description: str,
-    wandb_project_prefix: str = "yahtzee",
-    logger_name: str | None = None,
+    scenario_name: str, config_params: list[ConfigParam], description: str
 ) -> tuple[dict[str, Any], Any]:
     """Initialize the project with configuration management, wandb logger setup, and system info."""
     torch.set_float32_matmul_precision("medium")
@@ -47,8 +43,6 @@ def initialize(
     if run_id is not None:
         print(f"✅ Detected W&B launch agent context. (run_id={run_id})")
         logger = WandbLogger(
-            project=f"{wandb_project_prefix}-{scenario_name}",
-            name=logger_name or f"{scenario_name}-training",
             log_model=True,
             id=run_id,
             resume="allow",
@@ -64,9 +58,7 @@ def initialize(
         print("⚡ No W&B job context — using TensorBoardLogger.")
         log_dir = config.get("log_dir", "./logs")
         os.makedirs(log_dir, exist_ok=True)
-        logger = TensorBoardLogger(
-            log_dir, name=f"{wandb_project_prefix}-reinforce-{scenario_name}"
-        )
+        logger = TensorBoardLogger(log_dir, name=f"{scenario_name}")
 
     # Log system information
 
