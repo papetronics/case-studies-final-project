@@ -36,6 +36,7 @@ class Algorithm(Enum):
 
     REINFORCE = "reinforce"  # Monte Carlo policy gradient (REINFORCE)
     A2C = "a2c"  # Advantage Actor-Critic (A2C) with TD(0)
+    PPO = "ppo"  # Proximal Policy Optimization (PPO) with clipped surrogate objective
 
 
 class YahtzeeAgentTrainer(lightning.LightningModule):
@@ -82,6 +83,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         rolling_action_representation: str,
         he_kaiming_initialization: bool,
         algorithm: Algorithm,
+        clip_epsilon: float,
     ):
         super().__init__()
 
@@ -114,6 +116,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         self.entropy_anneal_period: float = entropy_anneal_period
         self.critic_coeff: float = critic_coeff
         self.num_steps_per_episode: int = num_steps_per_episode
+        self.clip_epsilon: float = clip_epsilon
 
         self.validation_envs: list[gym.Env[Observation, Action]] = []  # Created on demand
 
@@ -360,7 +363,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         return rolling_coef, scoring_coef
 
     def training_step(self, batch: EpisodeBatch, batch_idx: int) -> torch.Tensor:  # noqa: ARG002, C901, PLR0912, PLR0915
-        """Perform a training step using REINFORCE algorithm with vectorized operations."""
+        """Perform a training step using REINFORCE, A2C, or PPO algorithm with vectorized operations."""
         # batch is an EpisodeBatch dict with pre-flattened tensors:
         # - "states": (BATCH_SIZE*39, state_size) float32
         # - "rolling_actions": (BATCH_SIZE*39, 5) int
@@ -369,6 +372,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         # - "next_states": (BATCH_SIZE*39, state_size) float32
         # - "phases": (BATCH_SIZE*39,) int
         # - "next_v_baseline": (BATCH_SIZE*39,) float32 - for TD(0)
+        # - "old_log_probs": (BATCH_SIZE*39,) float32 - for PPO
 
         # Dataset pre-flattens, so we just extract directly
         states_flat = batch["states"]
@@ -377,6 +381,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         rewards_flat = batch["rewards"]
         next_v_baseline = batch["next_v_baseline"]
         phases_flat = batch["phases"]
+        old_log_probs = batch["old_log_probs"]
 
         # Calculate num_episodes and steps_per_episode from flattened shape
         # single_turn: 338 episodes x 3 steps = 1014 total
@@ -423,23 +428,48 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
                         flat_idx = episode_idx * steps_per_episode + t
                         g = rewards_flat[flat_idx] + gamma * g
                         returns[flat_idx] = g
-            else:  # A2C
-                # A2C: one-step bootstrapping using r_t + gamma * V(s_{t+1}) (TD(0))
+            else:  # A2C or PPO
+                # A2C/PPO: one-step bootstrapping using r_t + gamma * V(s_{t+1}) (TD(0))
                 # For terminal states (last step of episode), target is just the reward
                 # For non-terminal states, target is r_t + gamma * V(s_{t+1})
                 returns = rewards_flat + gamma * next_v_baseline.detach()
 
-        # Calculate advantages (same formula for both REINFORCE and A2C)
+        # Calculate advantages (same formula for REINFORCE, A2C, and PPO)
         # REINFORCE: advantage = G_t - V(s_t), where G_t is the true discounted return
-        # A2C: advantage = [r_t + gamma*V(s_{t+1})] - V(s_t), which is the TD error
+        # A2C/PPO: advantage = [r_t + gamma*V(s_{t+1})] - V(s_t), which is the TD error
         # In both cases: advantage = returns - V(s_t)
         advantages = returns - v_ests.detach().squeeze()
 
         # Normalize advantages
         normalized_advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
-        # Calculate policy loss
-        policy_loss = -(log_probs * normalized_advantages).mean()
+        # Calculate policy loss based on algorithm
+        if self.algorithm == Algorithm.PPO:
+            # PPO: clipped surrogate objective
+            # ratio = π_new(a|s) / π_old(a|s) = exp(log π_new - log π_old)
+            ratio = torch.exp(log_probs - old_log_probs)
+
+            # Clipped objective: L^CLIP = E[min(ratio * A, clip(ratio, 1-ε, 1+ε) * A)]
+            clipped_ratio = torch.clamp(ratio, 1.0 - self.clip_epsilon, 1.0 + self.clip_epsilon)
+            policy_loss_unclipped = ratio * normalized_advantages
+            policy_loss_clipped = clipped_ratio * normalized_advantages
+            policy_loss = -torch.min(policy_loss_unclipped, policy_loss_clipped).mean()
+
+            # Log PPO-specific metrics
+            with torch.no_grad():
+                # Fraction of steps where clipping was active
+                clip_fraction = (
+                    ((ratio < 1.0 - self.clip_epsilon) | (ratio > 1.0 + self.clip_epsilon))
+                    .float()
+                    .mean()
+                )
+                self.log("train/ppo_clip_fraction", clip_fraction, prog_bar=False)
+                # Average ratio (should stay near 1.0)
+                self.log("train/ppo_ratio_mean", ratio.mean(), prog_bar=False)
+                self.log("train/ppo_ratio_std", ratio.std(), prog_bar=False)
+        else:
+            # REINFORCE or A2C: standard policy gradient
+            policy_loss = -(log_probs * normalized_advantages).mean()
 
         # Calculate average reward per episode (sum of all step rewards)
         episode_rewards = rewards_flat.view(num_episodes, steps_per_episode).sum(dim=1)

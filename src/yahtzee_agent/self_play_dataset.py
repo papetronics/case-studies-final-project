@@ -35,6 +35,9 @@ class EpisodeBatch(TypedDict):
     next_v_baseline: (
         torch.Tensor
     )  # (BATCH_SIZE*num_steps,) float32 - value estimates for next states
+    old_log_probs: (
+        torch.Tensor
+    )  # (BATCH_SIZE*num_steps,) float32 - log probabilities from behavior policy
 
 
 class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
@@ -113,7 +116,7 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
         """Return the number of batches per epoch."""
         return self.size
 
-    def __getitem__(self, idx: int) -> EpisodeBatch:  # noqa: PLR0912, PLR0915
+    def __getitem__(self, idx: int) -> EpisodeBatch:  # noqa: C901, PLR0912, PLR0915
         """Collect a batch of self-play episodes using the current policy network."""
         # idx is unused: each call collects a fresh batch of self-play trajectories
 
@@ -150,6 +153,7 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
         )
         phases = torch.zeros(self.batch_size, num_steps, dtype=torch.long, device=device)
         v_baseline = torch.zeros(self.batch_size, num_steps, dtype=torch.float32, device=device)
+        old_log_probs = torch.zeros(self.batch_size, num_steps, dtype=torch.float32, device=device)
 
         # ---- Rollout collection ----
         with torch.no_grad():
@@ -165,7 +169,7 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
                 rolling_probs, scoring_probs, v_ests = self.policy_net.forward(state_tensors)
                 v_baseline[:, step_idx] = v_ests.squeeze(-1)
 
-                # Sample actions
+                # Sample actions and compute log probabilities for PPO
                 actions, _, _ = sample_action(
                     rolling_probs,
                     scoring_probs,
@@ -174,12 +178,34 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
                 )
                 rolling_action_tensor, scoring_action_tensors = actions
 
+                # Compute log probabilities for the sampled actions (for PPO)
+                rolling_dist: torch.distributions.Distribution
+                if rolling_action_representation.value == "bernoulli":
+                    rolling_dist = torch.distributions.Bernoulli(rolling_probs)
+                    rolling_log_probs_step = rolling_dist.log_prob(
+                        rolling_action_tensor.float()
+                    ).sum(dim=1)
+                else:  # CATEGORICAL
+                    rolling_dist = torch.distributions.Categorical(rolling_probs)
+                    rolling_log_probs_step = rolling_dist.log_prob(rolling_action_tensor.float())
+
+                scoring_dist = torch.distributions.Categorical(scoring_probs)
+                scoring_log_probs_step = scoring_dist.log_prob(scoring_action_tensors)
+
                 # Store actions by representation
                 if rolling_action_representation.value == "bernoulli":
                     rolling_actions[:, step_idx, :] = rolling_action_tensor.long()
                 else:
                     rolling_actions[:, step_idx] = rolling_action_tensor.long()
                 scoring_actions[:, step_idx] = scoring_action_tensors.long()
+
+                # Store old log probs based on phase
+                for env_idx, obs in enumerate(observations):
+                    phase = obs["phase"]
+                    if phase == 0:
+                        old_log_probs[env_idx, step_idx] = rolling_log_probs_step[env_idx]
+                    else:
+                        old_log_probs[env_idx, step_idx] = scoring_log_probs_step[env_idx]
 
                 # Step each environment
                 for env_idx, (env, obs) in enumerate(zip(self.envs, observations, strict=True)):
@@ -222,6 +248,7 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
         next_v_baseline_flat = next_v_baseline.view(-1)
         phases_flat = phases.view(-1)
         rewards_flat = rewards.view(-1)
+        old_log_probs_flat = old_log_probs.view(-1)
 
         if rolling_action_representation.value == "bernoulli":
             rolling_actions_flat = rolling_actions.view(-1, 5)
@@ -237,5 +264,6 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
             "phases": phases_flat,
             "v_baseline": v_baseline_flat,
             "next_v_baseline": next_v_baseline_flat,
+            "old_log_probs": old_log_probs_flat,
         }
         return batch

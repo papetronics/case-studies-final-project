@@ -58,7 +58,7 @@ class MissingPhiFeaturesError(InvalidTrainingConfigurationError):
         super().__init__(f"phi_features must be specified. Available features: {features_str}")
 
 
-def main() -> None:  # noqa: PLR0915
+def main() -> None:  # noqa: PLR0912, PLR0915
     """Run training or testing for single-turn Yahtzee score maximization."""
     # Define configuration schema
     config_params = [
@@ -229,9 +229,16 @@ def main() -> None:  # noqa: PLR0915
             "algorithm",
             str,
             "reinforce",
-            "Training algorithm: 'reinforce' (REINFORCE with Monte Carlo returns) or 'a2c' (Advantage Actor-Critic with TD(0) bootstrapping)",
-            choices=["reinforce", "a2c"],
+            "Training algorithm: 'reinforce' (REINFORCE with Monte Carlo returns), 'a2c' (Advantage Actor-Critic with TD(0) bootstrapping), or 'ppo' (Proximal Policy Optimization)",
+            choices=["reinforce", "a2c", "ppo"],
             display_name="Algorithm",
+        ),
+        ConfigParam(
+            "clip_epsilon",
+            float,
+            0.2,
+            "PPO clipping parameter (epsilon) for clipped surrogate objective",
+            display_name="Clip epsilon",
         ),
     ]
 
@@ -268,6 +275,7 @@ def main() -> None:  # noqa: PLR0915
     critic_coeff = config["critic_coeff"]
     rolling_action_representation = config["rolling_action_representation"]
     algorithm = config["algorithm"]
+    clip_epsilon = config["clip_epsilon"]
 
     torch.set_float32_matmul_precision("medium")
 
@@ -347,6 +355,9 @@ def main() -> None:  # noqa: PLR0915
         if algorithm == "a2c":
             algorithm = Algorithm.A2C
             log.info("Using A2C (Advantage Actor-Critic) with TD(0) bootstrapping")
+        elif algorithm == "ppo":
+            algorithm = Algorithm.PPO
+            log.info("Using PPO (Proximal Policy Optimization) with clipped surrogate objective")
         else:  # reinforce
             algorithm = Algorithm.REINFORCE
             log.info("Using REINFORCE with Monte Carlo returns")
@@ -374,6 +385,7 @@ def main() -> None:  # noqa: PLR0915
             features=phi_features,
             rolling_action_representation=rolling_action_representation,
             he_kaiming_initialization=he_kaiming_initialization,
+            clip_epsilon=clip_epsilon,
         )
 
         # Save hyperparameters explicitly
@@ -402,6 +414,7 @@ def main() -> None:  # noqa: PLR0915
                 "phi_features": phi_features_str,
                 "rolling_action_representation": rolling_action_representation,
                 "algorithm": algorithm,
+                "clip_epsilon": clip_epsilon,
             }
         )
 
