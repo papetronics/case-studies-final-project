@@ -397,7 +397,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         # Forward pass through current policy to get probabilities and value estimates
         rolling_probs, scoring_probs, v_ests = self.policy_net.forward(states_flat)
 
-        normalized_advantage = self.get_advantage(
+        normalized_advantage, returns = self.get_advantage(
             num_episodes, steps_per_episode, rewards_flat, next_v_baseline, v_ests, phases_flat
         )
 
@@ -411,9 +411,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         )
 
         loss: torch.Tensor = (
-            policy_loss
-            + self.critic_coeff * self.get_value_loss(v_ests, rewards_flat)
-            + entropy_loss
+            policy_loss + self.critic_coeff * self.get_value_loss(v_ests, returns) + entropy_loss
         )
 
         self.log("train/total_loss", loss, prog_bar=True)
@@ -431,8 +429,15 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         next_v_baseline: torch.Tensor,
         v_ests: torch.Tensor,
         phases_flat: torch.Tensor,
-    ) -> torch.Tensor:
-        """Calculate advantages using either REINFORCE or A2C method."""
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Calculate advantages using either REINFORCE or A2C method.
+
+        Returns
+        -------
+        tuple[torch.Tensor, torch.Tensor]
+            (normalized_advantages, returns) - normalized advantages for policy gradient
+            and discounted returns for critic loss
+        """
         gamma = self.get_gamma()
 
         with torch.no_grad():
@@ -467,7 +472,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         self.log_dict({f"train/{k}": v for k, v in adv_stats.items()}, prog_bar=False)
         ## =========================================================================================
 
-        return normalized_advantages
+        return normalized_advantages, returns
 
     def get_policy_loss(
         self,
