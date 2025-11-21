@@ -19,6 +19,7 @@ from utilities.diagnostics import (
     compute_rolling_mask_diversity,
     compute_training_health_score,
 )
+from utilities.scoring_helper import MINIMUM_UPPER_SCORE_FOR_BONUS, YAHTZEE_SCORE
 from yahtzee_agent.features import PhiFeature
 
 from .model import (
@@ -100,9 +101,9 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
 
         self.validation_envs: list[gym.Env[Observation, Action]] = []  # Created on demand
 
-    def run_batched_validation_games(  # noqa: C901, PLR0912
+    def run_batched_validation_games(  # noqa: C901, PLR0912, PLR0915
         self, num_games: int, run_deterministic: bool = True, run_stochastic: bool = False
-    ) -> tuple[list[float], list[float]]:
+    ) -> tuple[list[float], list[float], dict[str, Any], dict[str, Any]]:
         """Run multiple Yahtzee games in parallel with both deterministic and stochastic action selection.
 
         Runs num_games with deterministic actions and num_games with stochastic actions
@@ -119,8 +120,9 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
 
         Returns
         -------
-        tuple[list[float], list[float]]
-            (deterministic_scores, stochastic_scores) - Lists of total scores for each game
+        tuple[list[float], list[float], dict[str, Any], dict[str, Any]]
+            (deterministic_scores, stochastic_scores, det_metrics, stoch_metrics)
+            - Lists of total scores for each game and dicts of additional metrics
         """
         # Calculate number of environments needed based on which modes are enabled
         num_det = num_games if run_deterministic else 0
@@ -129,7 +131,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
 
         # Early return if neither mode is enabled
         if total_envs_needed == 0:
-            return [], []
+            return [], [], {}, {}
 
         # Create environments if needed
         if len(self.validation_envs) < total_envs_needed:
@@ -146,6 +148,9 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         # First num_det are deterministic, next num_stoch are stochastic
         active_indices = list(range(total_envs_needed))
         total_scores = [0.0] * total_envs_needed
+
+        # Track scorecard metrics for each game - shape (total_envs_needed, 13)
+        scorecards = torch.zeros((total_envs_needed, 13), dtype=torch.float32)
 
         # Run all games until completion
         with torch.no_grad():
@@ -214,6 +219,8 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
                     total_scores[game_idx] += float(reward)
 
                     if terminated or truncated:
+                        # Game ended - save final scorecard
+                        scorecards[game_idx] = torch.from_numpy(next_obs["score_sheet"]).float()
                         newly_inactive.append(game_idx)
                     else:
                         observations[game_idx] = next_obs
@@ -226,16 +233,60 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         deterministic_scores = total_scores[:num_det]
         stochastic_scores = total_scores[num_det:]
 
-        return deterministic_scores, stochastic_scores
+        # Compute metrics from scorecards
+        def calculate_scorecard_statistics(scorecards_tensor: torch.Tensor) -> dict[str, Any]:
+            """Compute scorecard metrics from a tensor of scorecards."""
+            if scorecards_tensor.shape[0] == 0:
+                return {}
+
+            # A) Mean score for each category
+            category_means = scorecards_tensor.mean(dim=0)
+
+            # B) % of games with a Yahtzee (category 11, score = 50)
+            has_yahtzee = (scorecards_tensor[:, 11] == YAHTZEE_SCORE).float()
+            pct_yahtzee = float(has_yahtzee.mean() * 100)
+
+            # C) % of games with bonus (upper section sum >= 63)
+            upper_section_sum = scorecards_tensor[:, 0:6].sum(dim=1)
+            has_bonus_mask = (upper_section_sum >= MINIMUM_UPPER_SCORE_FOR_BONUS).float()
+            pct_bonus = float(has_bonus_mask.mean() * 100)
+
+            metrics = {
+                "category_means": category_means,
+                "pct_yahtzee": pct_yahtzee,
+                "pct_bonus": pct_bonus,
+            }
+            return metrics
+
+        det_metrics = calculate_scorecard_statistics(scorecards[:num_det])
+        stoch_metrics = calculate_scorecard_statistics(scorecards[num_det:])
+
+        return deterministic_scores, stochastic_scores, det_metrics, stoch_metrics
 
     def validation_step(self, batch: torch.Tensor, batch_idx: int) -> dict[str, float]:  # noqa: ARG002
         """Run validation using batched parallel games."""
         num_validation_games = 1000
 
         # Run all games in parallel with batched forward passes (only deterministic by default)
-        det_scores, stoch_scores = self.run_batched_validation_games(
+        det_scores, stoch_scores, det_metrics, stoch_metrics = self.run_batched_validation_games(
             num_validation_games, run_deterministic=True, run_stochastic=False
         )
+
+        category_labels = [
+            "ones",
+            "twos",
+            "threes",
+            "fours",
+            "fives",
+            "sixes",
+            "3ok",
+            "4ok",
+            "fh",
+            "ss",
+            "ls",
+            "yahtzee",
+            "chance",
+        ]
 
         # Log deterministic results if available
         if det_scores:
@@ -243,6 +294,17 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
             det_std = float(np.std(det_scores))
             self.log("val/mean_total_score_det", det_mean, prog_bar=True)
             self.log("val/std_total_score_det", det_std, prog_bar=False)
+
+            if det_metrics:
+                for idx, label in enumerate(category_labels):
+                    self.log(
+                        f"val/scorecard/{label}_mean",
+                        float(det_metrics["category_means"][idx]),
+                        prog_bar=False,
+                    )
+
+                self.log("val/pct_yahtzee", det_metrics["pct_yahtzee"], prog_bar=False)
+                self.log("val/pct_bonus", det_metrics["pct_bonus"], prog_bar=False)
         else:
             det_mean = 0.0
 
@@ -253,7 +315,16 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
             self.log("val/mean_total_score_stoch", stoch_mean, prog_bar=False)
             self.log("val/std_total_score_stoch", stoch_std, prog_bar=False)
 
-        # Return a dict for PyTorch Lightning compatibility (use deterministic for loss)
+            if stoch_metrics:
+                for idx, label in enumerate(category_labels):
+                    self.log(
+                        f"val/scorecard_stoch/{label}_mean",
+                        float(stoch_metrics["category_means"][idx]),
+                        prog_bar=False,
+                    )
+                self.log("val/pct_yahtzee_stoch", stoch_metrics["pct_yahtzee"], prog_bar=False)
+                self.log("val/pct_bonus_stoch", stoch_metrics["pct_bonus"], prog_bar=False)
+
         return {"val_loss": -det_mean}  # Negative because higher scores are better
 
     def get_gamma(self) -> float:
