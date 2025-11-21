@@ -6,9 +6,10 @@ import secrets
 import pytorch_lightning as lightning
 import torch
 from pytorch_lightning.callbacks import ModelCheckpoint
+from tabulate import tabulate
 
 from utilities.dummy_dataset import DummyDataset
-from utilities.initialize import ConfigParam, finish, initialize
+from utilities.initialize import ConfigParam, initialize
 from utilities.return_calculators import MonteCarloReturnCalculator
 from yahtzee_agent import test_episode
 from yahtzee_agent.features import FEATURE_REGISTRY, create_features
@@ -228,11 +229,10 @@ def main() -> None:  # noqa: PLR0915
     ]
 
     # Initialize project with configuration
-    wandb_run, config, logger = initialize(
-        scenario_name="single_turn_score_maximizer",
+    config, logger = initialize(
         config_params=config_params,
-        description="Yahtzee Single Turn Score Maximizer RL",
-        logger_name="rl-training",
+        scenario_name="yahtzee_agent",
+        description="Yahtzee Agent using Reinforcement Learning",
     )
 
     # Extract config values for easy access
@@ -310,22 +310,24 @@ def main() -> None:  # noqa: PLR0915
     total_games_actual = games_per_epoch * epochs
 
     # Log training configuration table
+    scenario_name = "SINGLE TURN" if game_scenario == "single_turn" else "FULL GAME"
+    print(f"\n{'=' * 50}")
+    print(f"{scenario_name:^50}")
+    print(f"{'=' * 50}")
+    print("\nTRAINING INFORMATION")
+
     config_table = [
-        "=" * 50,
-        "SINGLE TURN" if game_scenario == "single_turn" else "FULL GAME",
-        "=" * 50,
-        "TRAINING INFORMATION",
-        f"Total Games:       {total_games_actual:,}",
-        f"Total Epochs:      {epochs:,}",
-        f"Total Updates:     {total_updates:,}",
-        f"Updates / Epoch:   {updates_per_epoch:,}",
-        f"Games / Update:    {games_per_batch:,}",
-        f"Games / Epoch:     {games_per_epoch_actual:,}",
-        "=" * 50,
+        ["Total Games", f"{total_games_actual:,}"],
+        ["Total Epochs", f"{epochs:,}"],
+        ["Total Updates", f"{total_updates:,}"],
+        ["Updates / Epoch", f"{updates_per_epoch:,}"],
+        ["Games / Update", f"{games_per_batch:,}"],
+        ["Games / Epoch", f"{games_per_epoch_actual:,}"],
     ]
 
-    for line in config_table:
-        print(line)
+    table_str = tabulate(config_table, headers=["Metric", "Value"], tablefmt="github")
+    print(table_str)
+    for line in table_str.split("\n"):
         log.info(line)
 
     if mode == "test":
@@ -458,8 +460,6 @@ def main() -> None:  # noqa: PLR0915
         test_episode.main(model=model.policy_net, interactive=False)
 
     print("Process completed!")
-
-    finish(wandb_run)
 
 
 if __name__ == "__main__":
