@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import Any, cast
 
 import gymnasium as gym
@@ -17,7 +18,6 @@ from utilities.diagnostics import (
     compute_return_stats,
     compute_rolling_mask_diversity,
 )
-from utilities.return_calculators import MonteCarloReturnCalculator, ReturnCalculator
 from yahtzee_agent.features import PhiFeature
 
 from .model import (
@@ -29,6 +29,13 @@ from .model import (
     select_action,
 )
 from .self_play_dataset import EpisodeBatch
+
+
+class Algorithm(Enum):
+    """Training algorithm."""
+
+    REINFORCE = "reinforce"  # Monte Carlo policy gradient (REINFORCE)
+    A2C = "a2c"  # Advantage Actor-Critic (A2C) with TD(0)
 
 
 class YahtzeeAgentTrainer(lightning.LightningModule):
@@ -74,7 +81,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         features: list[PhiFeature],
         rolling_action_representation: str,
         he_kaiming_initialization: bool,
-        return_calculator: ReturnCalculator | None = None,
+        algorithm: Algorithm,
     ):
         super().__init__()
 
@@ -93,6 +100,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
             he_kaiming_initialization=he_kaiming_initialization,
         )
 
+        self.algorithm = algorithm
         self.learning_rate: float = learning_rate
         self.max_epochs: int = epochs
         self.min_lr_ratio: float = min_lr_ratio
@@ -106,9 +114,6 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         self.entropy_anneal_period: float = entropy_anneal_period
         self.critic_coeff: float = critic_coeff
         self.num_steps_per_episode: int = num_steps_per_episode
-
-        self.return_calculator: ReturnCalculator = return_calculator or MonteCarloReturnCalculator()
-        self.return_calculator.gamma = self.gamma_min
 
         self.validation_envs: list[gym.Env[Observation, Action]] = []  # Created on demand
 
@@ -305,6 +310,11 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
             self.log("test/mean_total_score_stoch", stoch_mean, prog_bar=False)
             self.log("test/std_total_score_stoch", stoch_std, prog_bar=False)
 
+    def get_gamma(self) -> float:
+        """Get current gamma (discount factor) value."""
+        progress = self.current_epoch / (self.max_epochs - 1)
+        return self.gamma_min + progress * (self.gamma_max - self.gamma_min)
+
     def get_entropy_coefs(self) -> tuple[float, float]:
         """Get current entropy coefficients for rolling and scoring heads.
 
@@ -400,36 +410,39 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         )  # (BATCH_SIZE * 39,)
 
         # Calculate targets based on algorithm type
-        gamma = self.return_calculator.gamma
-        returns = torch.zeros_like(rewards_flat)
+        gamma = self.get_gamma()
 
-        if isinstance(self.return_calculator, MonteCarloReturnCalculator):
-            # Monte Carlo: backward pass through episodes calculating cumulative discounted returns
-            for episode_idx in range(num_episodes):
-                g = 0.0
-                for t in reversed(range(steps_per_episode)):
-                    flat_idx = episode_idx * steps_per_episode + t
-                    g = rewards_flat[flat_idx] + gamma * g
-                    returns[flat_idx] = g
-        else:  # TD(0)
-            # TD(0): one-step bootstrapping using r_t + gamma * V(s_{t+1})
-            # For terminal states (last step of episode), target is just the reward
-            # For non-terminal states, target is r_t + gamma * V(s_{t+1})
-            for episode_idx in range(num_episodes):
-                for t in range(steps_per_episode):
-                    flat_idx = episode_idx * steps_per_episode + t
-                    if t == steps_per_episode - 1:  # Terminal step
-                        # At terminal state, no bootstrap - just use the reward
-                        returns[flat_idx] = rewards_flat[flat_idx]
-                    else:
-                        # Non-terminal: r_t + gamma * V(s_{t+1}), next_v_baseline is already shifted
-                        returns[flat_idx] = (
-                            rewards_flat[flat_idx] + gamma * next_v_baseline[flat_idx].detach()
-                        )
+        # Calculate returns without gradients, since they are just targets for the critic / multipliers for the actor loss
+        with torch.no_grad():
+            returns = torch.zeros_like(rewards_flat)
 
-        # Calculate advantages (same formula for both MC and TD)
-        # MC: advantage = G_t - V(s_t), where G_t is the true discounted return
-        # TD(0): advantage = [r_t + gamma*V(s_{t+1})] - V(s_t), which is the TD error
+            if self.algorithm == Algorithm.REINFORCE:
+                # REINFORCE: backward pass through episodes calculating cumulative discounted returns
+                for episode_idx in range(num_episodes):
+                    g: torch.Tensor = torch.tensor(0.0, device=rewards_flat.device)
+                    for t in reversed(range(steps_per_episode)):
+                        flat_idx = episode_idx * steps_per_episode + t
+                        g = rewards_flat[flat_idx] + gamma * g
+                        returns[flat_idx] = g
+            else:  # A2C
+                # A2C: one-step bootstrapping using r_t + gamma * V(s_{t+1}) (TD(0))
+                # For terminal states (last step of episode), target is just the reward
+                # For non-terminal states, target is r_t + gamma * V(s_{t+1})
+                for episode_idx in range(num_episodes):
+                    for t in range(steps_per_episode):
+                        flat_idx = episode_idx * steps_per_episode + t
+                        if t == steps_per_episode - 1:  # Terminal step
+                            # At terminal state, no bootstrap - just use the reward
+                            returns[flat_idx] = rewards_flat[flat_idx]
+                        else:
+                            # Non-terminal: r_t + gamma * V(s_{t+1}), next_v_baseline is already detached
+                            returns[flat_idx] = (
+                                rewards_flat[flat_idx] + gamma * next_v_baseline[flat_idx]
+                            )
+
+        # Calculate advantages (same formula for both REINFORCE and A2C)
+        # REINFORCE: advantage = G_t - V(s_t), where G_t is the true discounted return
+        # A2C: advantage = [r_t + gamma*V(s_{t+1})] - V(s_t), which is the TD error
         # In both cases: advantage = returns - V(s_t)
         advantages = returns - v_ests.detach().squeeze()
 
@@ -654,15 +667,9 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         }
 
     def on_train_epoch_start(self) -> None:
-        """Update gamma linearly from gamma_min to gamma_max over training."""
-        if self.max_epochs > 1:
-            # Linear interpolation from gamma_min to gamma_max
-            progress = self.current_epoch / (self.max_epochs - 1)
-            current_gamma = self.gamma_min + progress * (self.gamma_max - self.gamma_min)
-        else:
-            current_gamma = self.gamma_max
-
-        self.return_calculator.gamma = current_gamma
+        """Initialize epoch-level trackers and log current gamma."""
+        # Log current gamma value
+        current_gamma = self.get_gamma()
         self.log("train/gamma", current_gamma, prog_bar=False)
 
         # Reset epoch-level trackers for custom visualizations

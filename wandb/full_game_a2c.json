@@ -3,7 +3,7 @@
     "entry_point": [],
     "run_config": {
         "game_scenario": "full_game",
-        "algorithm": "td0",
+        "algorithm": "a2c",
         "epochs": 500,
         "total_train_games": 250000,
         "games_per_batch": 20,

@@ -3,6 +3,7 @@
     "entry_point": [],
     "run_config": {
         "game_scenario": "single_turn",
+        "algorithm": "reinforce",
         "epochs": 500,
         "total_train_games": 260000,
         "games_per_batch": 26,

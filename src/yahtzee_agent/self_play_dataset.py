@@ -4,7 +4,6 @@ import gymnasium as gym
 import torch
 
 from environments.full_yahtzee_env import Action, Observation, YahtzeeEnv
-from utilities.return_calculators import ReturnCalculator
 from yahtzee_agent.features import PhiFeature
 
 from .model import convert_rolling_action_to_hold_mask, get_input_dimensions, phi, sample_action
@@ -63,14 +62,12 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
     def __init__(
         self,
         policy_net: "YahtzeeAgent",
-        return_calculator: ReturnCalculator,
         size: int,
         batch_size: int,
         num_steps_per_episode: int,
         stagger_environments: bool = False,
     ) -> None:
         self.policy_net: YahtzeeAgent = policy_net
-        self.return_calculator = return_calculator
         self.size = size
         self.batch_size = batch_size
         self.num_steps_per_episode = num_steps_per_episode
