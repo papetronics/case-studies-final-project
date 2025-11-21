@@ -415,7 +415,6 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         # Calculate returns without gradients, since they are just targets for the critic / multipliers for the actor loss
         with torch.no_grad():
             returns = torch.zeros_like(rewards_flat)
-
             if self.algorithm == Algorithm.REINFORCE:
                 # REINFORCE: backward pass through episodes calculating cumulative discounted returns
                 for episode_idx in range(num_episodes):
@@ -428,17 +427,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
                 # A2C: one-step bootstrapping using r_t + gamma * V(s_{t+1}) (TD(0))
                 # For terminal states (last step of episode), target is just the reward
                 # For non-terminal states, target is r_t + gamma * V(s_{t+1})
-                for episode_idx in range(num_episodes):
-                    for t in range(steps_per_episode):
-                        flat_idx = episode_idx * steps_per_episode + t
-                        if t == steps_per_episode - 1:  # Terminal step
-                            # At terminal state, no bootstrap - just use the reward
-                            returns[flat_idx] = rewards_flat[flat_idx]
-                        else:
-                            # Non-terminal: r_t + gamma * V(s_{t+1}), next_v_baseline is already detached
-                            returns[flat_idx] = (
-                                rewards_flat[flat_idx] + gamma * next_v_baseline[flat_idx]
-                            )
+                returns = rewards_flat + gamma * next_v_baseline.detach()
 
         # Calculate advantages (same formula for both REINFORCE and A2C)
         # REINFORCE: advantage = G_t - V(s_t), where G_t is the true discounted return
