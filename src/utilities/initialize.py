@@ -1,11 +1,19 @@
 import argparse
 import os
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 import torch
-from pytorch_lightning.loggers import TensorBoardLogger, WandbLogger
-from pytorch_lightning.loggers import logger as lightning_logger
+from pytorch_lightning.loggers import (
+    TensorBoardLogger,
+    WandbLogger,
+)
+from pytorch_lightning.loggers import (
+    logger as lightning_logger,
+)
+from tabulate import tabulate
+
+import wandb
 
 
 @dataclass
@@ -24,47 +32,53 @@ class ConfigParam:
         return self.display_name or self.name.replace("_", " ").replace("-", " ").title()
 
 
-def initialize(  # noqa: C901, PLR0912
+def initialize(
     scenario_name: str,
     config_params: list[ConfigParam],
-    description: str | None = None,
+    description: str,
     wandb_project_prefix: str = "yahtzee",
     logger_name: str | None = None,
-) -> tuple[None, dict[str, Any], Any]:
-    """
-    Initialize the project with configuration management, wandb logger setup, and system info.
-
-    Args:
-        scenario_name: Name of the scenario (for logging)
-        config_params: List of ConfigParam objects defining the configuration schema
-        description: Description for the argument parser
-        wandb_project_prefix: Prefix for wandb project name (default: "yahtzee")
-        logger_name: Name for the logger (default: based on scenario)
-
-    Returns
-    -------
-        tuple: (None, config_dict, logger)
-    """
+) -> tuple[dict[str, Any], Any]:
+    """Initialize the project with configuration management, wandb logger setup, and system info."""
     run_id = os.getenv("WANDB_RUN_ID") or None
     use_wandb = run_id is not None
 
+    logger: lightning_logger.Logger
+
     if use_wandb:
         print(f"✅ Detected W&B launch agent context. (run_id={run_id})")
-    else:
+        logger = WandbLogger(
+            project=f"{wandb_project_prefix}-{scenario_name}",
+            name=logger_name or f"{scenario_name}-training",
+            log_model=True,
+            id=run_id,
+            resume="allow",
+        )
+
+    config = get_hyperparameters(
+        config_params, description, cast("WandbLogger", logger).experiment if use_wandb else None
+    )
+
+    if not use_wandb:
         print("⚡ No W&B job context — using TensorBoardLogger.")
+        log_dir = config.get("log_dir", "./logs")
+        os.makedirs(log_dir, exist_ok=True)
+        logger = TensorBoardLogger(
+            log_dir, name=f"{wandb_project_prefix}-reinforce-{scenario_name}"
+        )
 
     # Log system information
-    print("\n=== System Info ===")
-    print("CUDA available:", torch.cuda.is_available())
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Using device: {device}")
-    if torch.cuda.is_available():
-        print("GPU count:", torch.cuda.device_count())
-        print("GPU name:", torch.cuda.get_device_name(0))
-    else:
-        print("No GPU detected!")
 
-    # Add log_dir parameter if not already present
+    print_cuda_info()
+    print_hyperparameters(config, config_params)
+
+    return config, logger
+
+
+def get_hyperparameters(
+    config_params: list[ConfigParam], description: str, wandb_run: wandb.Run | None
+) -> dict[str, Any]:
+    """Extract hyperparameters from W&B and CLI."""
     param_names = [param.name for param in config_params]
     if "log_dir" not in param_names:
         config_params = config_params + [  # noqa: RUF005
@@ -73,7 +87,7 @@ def initialize(  # noqa: C901, PLR0912
             )
         ]
 
-    parser = argparse.ArgumentParser(description=description or f"Yahtzee {scenario_name}")
+    parser = argparse.ArgumentParser(description=description)
 
     for param in config_params:
         arg_name = f"--{param.name.replace('_', '-')}"
@@ -95,38 +109,44 @@ def initialize(  # noqa: C901, PLR0912
     args = parser.parse_args()
 
     config = {}
-    for param in config_params:
-        config[param.name] = getattr(args, param.name.replace("-", "_"))
 
+    for param in config_params:
+        if wandb_run is not None:
+            config[param.name] = wandb_run.config.get(
+                param.name, getattr(args, param.name.replace("-", "_"))
+            )
+        else:
+            config[param.name] = getattr(args, param.name.replace("-", "_"))
+
+    return config
+
+
+def print_hyperparameters(config: dict[str, Any], config_params: list[ConfigParam]) -> None:
+    """Display parsed hyperparameters in a compact table."""
     print("\n=== Hyperparameters ===")
-    print(f"Scenario: {scenario_name}")
+    rows: list[list[str]] = []
     for param in config_params:
         display_name = param.get_display_name()
         value = config[param.name]
-        print(f"{display_name}: {value}")
+        rows.append([display_name, str(value)])
+    if rows:
+        print(tabulate(rows, headers=["Parameter", "Value"], tablefmt="github"))
 
-    # Set up logger
-    logger: lightning_logger.Logger
-    if use_wandb:
-        logger = WandbLogger(
-            project=f"{wandb_project_prefix}-{scenario_name}",
-            name=logger_name or f"{scenario_name}-training",
-            log_model=True,
-            id=run_id,
-            resume="allow",
-        )
+
+def print_cuda_info() -> None:
+    """Summarize CUDA availability and detected GPU devices."""
+    cuda_available = torch.cuda.is_available()
+    device = torch.device("cuda" if cuda_available else "cpu")
+    rows: list[list[str]] = [
+        ["CUDA available", str(cuda_available)],
+        ["Using device", str(device)],
+    ]
+    if cuda_available:
+        gpu_count = torch.cuda.device_count()
+        rows.append(["GPU count", str(gpu_count)])
+        for index in range(gpu_count):
+            gpu_name = torch.cuda.get_device_name(index)
+            rows.append([f"GPU {index} name", gpu_name])
     else:
-        log_dir = config.get("log_dir", "./logs")
-        os.makedirs(log_dir, exist_ok=True)
-        logger = TensorBoardLogger(
-            log_dir, name=f"{wandb_project_prefix}-reinforce-{scenario_name}"
-        )
-
-    print(f"\n=== Starting {scenario_name} ===")
-
-    return None, config, logger
-
-
-def finish(_: None) -> None:
-    """Finalize the training session."""
-    print("Training completed!")
+        rows.append(["GPU status", "No GPU detected"])
+    print(tabulate(rows, headers=["Property", "Value"], tablefmt="github"))

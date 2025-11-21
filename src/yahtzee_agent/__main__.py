@@ -8,7 +8,7 @@ import torch
 from pytorch_lightning.callbacks import ModelCheckpoint
 
 from utilities.dummy_dataset import DummyDataset
-from utilities.initialize import ConfigParam, finish, initialize
+from utilities.initialize import ConfigParam, initialize
 from utilities.return_calculators import MonteCarloReturnCalculator
 from yahtzee_agent import test_episode
 from yahtzee_agent.features import FEATURE_REGISTRY, create_features
@@ -228,10 +228,10 @@ def main() -> None:  # noqa: PLR0915
     ]
 
     # Initialize project with configuration
-    wandb_run, config, logger = initialize(
-        scenario_name="single_turn_score_maximizer",
+    config, logger = initialize(
         config_params=config_params,
-        description="Yahtzee Single Turn Score Maximizer RL",
+        scenario_name="yahtzee_agent",
+        description="Yahtzee Agent using Reinforcement Learning",
         logger_name="rl-training",
     )
 
@@ -458,8 +458,6 @@ def main() -> None:  # noqa: PLR0915
         test_episode.main(model=model.policy_net, interactive=False)
 
     print("Process completed!")
-
-    finish(wandb_run)
 
 
 if __name__ == "__main__":
