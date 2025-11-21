@@ -430,14 +430,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         v_ests: torch.Tensor,
         phases_flat: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Calculate advantages using either REINFORCE or A2C method.
-
-        Returns
-        -------
-        tuple[torch.Tensor, torch.Tensor]
-            (normalized_advantages, returns) - normalized advantages for policy gradient
-            and discounted returns for critic loss
-        """
+        """Calculate advantages using either REINFORCE or A2C method."""
         gamma = self.get_gamma()
 
         with torch.no_grad():
