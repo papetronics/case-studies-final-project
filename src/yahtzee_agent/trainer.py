@@ -415,17 +415,8 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
             # TD(0): one-step bootstrapping using r_t + gamma * V(s_{t+1})
             # For terminal states (last step of episode), target is just the reward
             # For non-terminal states, target is r_t + gamma * V(s_{t+1})
-            for episode_idx in range(num_episodes):
-                for t in range(steps_per_episode):
-                    flat_idx = episode_idx * steps_per_episode + t
-                    if t == steps_per_episode - 1:  # Terminal step
-                        # At terminal state, no bootstrap - just use the reward
-                        returns[flat_idx] = rewards_flat[flat_idx]
-                    else:
-                        # Non-terminal: r_t + gamma * V(s_{t+1}), next_v_baseline is already shifted
-                        returns[flat_idx] = (
-                            rewards_flat[flat_idx] + gamma * next_v_baseline[flat_idx].detach()
-                        )
+            # Vectorized TD(0): r_t + gamma * V(s_{t+1}), with next_v_baseline already 0 for terminal steps
+            returns = rewards_flat + gamma * next_v_baseline.detach()
 
         # Calculate advantages (same formula for both MC and TD)
         # MC: advantage = G_t - V(s_t), where G_t is the true discounted return
