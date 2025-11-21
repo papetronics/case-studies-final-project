@@ -6,22 +6,7 @@ import torch
 def mean_std_per_mask(
     values: torch.Tensor, mask: torch.Tensor, prefix: str
 ) -> dict[str, torch.Tensor]:
-    """Compute mean and std for values within a mask.
-
-    Parameters
-    ----------
-    values : torch.Tensor
-        Tensor of values to compute statistics on
-    mask : torch.Tensor
-        Boolean mask to select subset of values
-    prefix : str
-        Prefix for dictionary keys (e.g., "adv_roll" -> "adv_roll_mean", "adv_roll_std")
-
-    Returns
-    -------
-    dict[str, torch.Tensor]
-        Dictionary with "{prefix}_mean" and "{prefix}_std" keys
-    """
+    """Compute mean and std for values within a mask."""
     masked_values = values[mask]
     return {
         f"{prefix}_mean": masked_values.mean(),
@@ -30,41 +15,13 @@ def mean_std_per_mask(
 
 
 def bernoulli_entropy(probs: torch.Tensor) -> torch.Tensor:
-    """Compute Bernoulli entropy: -p*log(p) - (1-p)*log(1-p).
-
-    Uses torch.xlogy for numerical stability (handles p=0 case).
-
-    Parameters
-    ----------
-    probs : torch.Tensor
-        Bernoulli probabilities in [0, 1]
-
-    Returns
-    -------
-    torch.Tensor
-        Entropy values (same shape as input)
-    """
+    """Compute Bernoulli entropy: -p*log(p) - (1-p)*log(1-p)."""
     p = probs.clamp(1e-6, 1 - 1e-6)
     return -torch.xlogy(p, p) - torch.xlogy(1 - p, 1 - p)
 
 
 def bernoulli_kl(p: torch.Tensor, q: torch.Tensor) -> torch.Tensor:
-    """Compute KL divergence for Bernoulli: KL(p||q) = p*log(p/q) + (1-p)*log((1-p)/(1-q)).
-
-    Uses torch.xlogy for numerical stability.
-
-    Parameters
-    ----------
-    p : torch.Tensor
-        Current policy probabilities
-    q : torch.Tensor
-        Reference policy probabilities
-
-    Returns
-    -------
-    torch.Tensor
-        KL divergence values (same shape as input)
-    """
+    """Compute KL divergence for Bernoulli: KL(p||q) = p*log(p/q) + (1-p)*log((1-p)/(1-q))."""
     eps = 1e-6
     p_safe = p.clamp(eps, 1 - eps)
     q_safe = q.clamp(eps, 1 - eps)
@@ -78,17 +35,8 @@ def compute_advantage_stats(
 ) -> dict[str, torch.Tensor]:
     """Compute advantage statistics overall and per-phase.
 
-    Parameters
-    ----------
-    advantages : torch.Tensor
-        Advantage estimates for all steps
-    phases_flat : torch.Tensor
-        Phase indicators (0=rolling, non-zero=scoring)
-
-    Returns
-    -------
-    dict[str, torch.Tensor]
-        Dictionary with overall and per-phase mean/std statistics
+    Healthy: adv_mean ~0 (by construction), adv_std nonzero (signal strength).
+    Red flags: adv_std → 0 = tiny gradients; roll vs score std differs >10x = phase imbalance.
     """
     stats = {
         "adv_mean": advantages.mean(),
@@ -103,15 +51,8 @@ def compute_advantage_stats(
 def compute_return_stats(episode_returns: torch.Tensor) -> dict[str, torch.Tensor]:
     """Compute return statistics per-episode.
 
-    Parameters
-    ----------
-    episode_returns : torch.Tensor
-        Episode return values
-
-    Returns
-    -------
-    dict[str, torch.Tensor]
-        Dictionary with "ret_std" key
+    Healthy: high early (stochastic), stabilizes.
+    Red flags: collapsing to tiny values = degenerate policy.
     """
     return {"ret_std": episode_returns.std(unbiased=False)}
 
@@ -119,22 +60,8 @@ def compute_return_stats(episode_returns: torch.Tensor) -> dict[str, torch.Tenso
 def compute_critic_explained_variance(returns: torch.Tensor, v_ests: torch.Tensor) -> torch.Tensor:
     """Compute explained variance: EV = 1 - Var(G - V) / Var(G).
 
-    Measures how well the value function predicts actual returns.
-    - EV = 1.0: Perfect predictions
-    - EV = 0.0: As good as constant baseline (mean)
-    - EV < 0.0: Worse than mean (harmful critic)
-
-    Parameters
-    ----------
-    returns : torch.Tensor
-        Actual returns (targets)
-    v_ests : torch.Tensor
-        Value function estimates
-
-    Returns
-    -------
-    torch.Tensor
-        Scalar explained variance
+    Healthy: 0.3-0.7 and trending up.
+    Red flags: stuck at 0 (not learning), <0 (harmful), wild swings (unstable).
     """
     with torch.no_grad():
         residuals = returns - v_ests.squeeze()
@@ -146,19 +73,8 @@ def compute_entropy_stats(
 ) -> dict[str, torch.Tensor]:
     """Compute entropy for both action heads.
 
-    Parameters
-    ----------
-    rolling_probs : torch.Tensor
-        Bernoulli probabilities for rolling actions (batch_size, num_dice)
-    scoring_probs : torch.Tensor
-        Categorical probabilities for scoring actions (batch_size, num_categories)
-    phases_flat : torch.Tensor
-        Phase indicators (0=rolling, non-zero=scoring)
-
-    Returns
-    -------
-    dict[str, torch.Tensor]
-        Dictionary with "entropy_roll" and "entropy_score" keys
+    Healthy: roll ~2.0-2.4 early → ~1.0 later; score moderate, gradual decline.
+    Red flags: roll <1.2 early = premature collapse; score near-zero = deterministic too soon.
     """
     # Rolling head: Bernoulli entropy per-die, sum to get per-step
     roll_ent = bernoulli_entropy(rolling_probs).sum(dim=1)
@@ -172,23 +88,47 @@ def compute_entropy_stats(
     }
 
 
-def compute_action_concentration(scoring_probs: torch.Tensor) -> dict[str, torch.Tensor]:
+def compute_action_concentration(
+    scoring_probs: torch.Tensor,
+    rolling_probs: torch.Tensor,
+    phases_flat: torch.Tensor,
+    is_bernoulli: bool,
+) -> dict[str, torch.Tensor]:
     """Compute top-k probability mass (early collapse detector).
 
-    Parameters
-    ----------
-    scoring_probs : torch.Tensor
-        Categorical probabilities for scoring actions
-
-    Returns
-    -------
-    dict[str, torch.Tensor]
-        Dictionary with "score_top1" and "score_top3" keys
+    Healthy: top1 starts ~0.2-0.4, climbs slowly; top3 >0.6 early.
+    Red flags: top1 >0.7 in first 10-20% of training = over-confident, collapsed.
     """
-    return {
+    result = {
         "score_top1": scoring_probs.max(dim=1).values.mean(),
         "score_top3": scoring_probs.topk(3, dim=1).values.sum(dim=1).mean(),
     }
+
+    # Compute rolling concentration based on representation
+    roll_mask = phases_flat == 0
+    if roll_mask.any():
+        if is_bernoulli:
+            # For Bernoulli: each die is independent with prob p_i
+            # Top1: average of max(p_i, 1-p_i) across all dice (how confident per die)
+            # Top3: average of top-3 max(p_i, 1-p_i) (concentration in most confident dice)
+            roll_probs_masked = rolling_probs[roll_mask]  # (n_roll_steps, 5)
+            max_probs_per_die = torch.maximum(
+                roll_probs_masked, 1 - roll_probs_masked
+            )  # (n_roll_steps, 5)
+            result["roll_top1"] = max_probs_per_die.mean()  # Average confidence per die
+            result["roll_top3"] = max_probs_per_die.topk(
+                3, dim=1
+            ).values.mean()  # Average of top-3 most confident dice
+        else:
+            # For Categorical: standard top-1 and top-3 probability mass
+            roll_probs_masked = rolling_probs[roll_mask]  # (n_roll_steps, 32)
+            result["roll_top1"] = roll_probs_masked.max(dim=1).values.mean()
+            result["roll_top3"] = roll_probs_masked.topk(3, dim=1).values.sum(dim=1).mean()
+    else:
+        result["roll_top1"] = torch.tensor(0.0)
+        result["roll_top3"] = torch.tensor(0.0)
+
+    return result
 
 
 def compute_rolling_mask_diversity(
@@ -196,17 +136,8 @@ def compute_rolling_mask_diversity(
 ) -> torch.Tensor | None:
     """Compute diversity of rolling mask patterns.
 
-    Parameters
-    ----------
-    rolling_actions_flat : torch.Tensor
-        Rolling action masks
-    phases_flat : torch.Tensor
-        Phase indicators (0=rolling, non-zero=scoring)
-
-    Returns
-    -------
-    torch.Tensor | None
-        Fraction of unique patterns, or None if no rolling actions
+    Healthy: high and steady.
+    Red flags: monotonic decline = converging to "always keep X" rut.
     """
     if rolling_actions_flat.numel() == 0:
         return None
@@ -229,23 +160,8 @@ def compute_kl_divergence(
 ) -> tuple[dict[str, torch.Tensor | None], torch.Tensor, torch.Tensor]:
     """Compute KL divergence to previous policy for both heads.
 
-    Parameters
-    ----------
-    rolling_probs : torch.Tensor
-        Current rolling probabilities
-    scoring_probs : torch.Tensor
-        Current scoring probabilities
-    phases_flat : torch.Tensor
-        Phase indicators (0=rolling, non-zero=scoring)
-    prev_roll_p : torch.Tensor
-        Previous rolling probabilities
-    prev_score_p : torch.Tensor
-        Previous scoring probabilities
-
-    Returns
-    -------
-    tuple[dict[str, torch.Tensor | None], torch.Tensor, torch.Tensor]
-        KL stats dict, updated prev_roll_p, updated prev_score_p
+    Healthy: 0.002-0.02 (policy moving).
+    Red flags: ≈0 = frozen; sudden spikes = too hot.
     """
     # KL divergence for Bernoulli rolling actions (product distribution)
     kl_ber_per_die = bernoulli_kl(rolling_probs, prev_roll_p)
@@ -273,14 +189,21 @@ def compute_kl_divergence(
 def compute_phase_balance(phases_flat: torch.Tensor) -> torch.Tensor:
     """Compute fraction of rolling vs scoring steps.
 
-    Parameters
-    ----------
-    phases_flat : torch.Tensor
-        Phase indicators (0=rolling, non-zero=scoring)
-
-    Returns
-    -------
-    torch.Tensor
-        Fraction of rolling steps (should be ~0.67 for 2 rolls + 1 score)
+    Healthy: ~0.67 (2 rolls + 1 score per turn).
+    Red flags: extreme drift = bad logic.
     """
     return (phases_flat == 0).float().mean()
+
+
+def compute_training_health_score(
+    critic_ev_mean: float, entropy_roll_mean: float, entropy_score_mean: float
+) -> float:
+    """Compute overall training health score from critic and entropy metrics.
+
+    Healthy: >0.4 overall.
+    Components: critic_ev (0.3-0.7), entropy_roll (1.0-2.4), entropy_score (moderate).
+    """
+    critic_component = max(0, min(critic_ev_mean / 0.7, 1.0)) * 0.5
+    roll_ent_component = max(0, min(entropy_roll_mean / 2.4, 1.0)) * 0.25
+    score_ent_component = max(0, min(entropy_score_mean / 1.5, 1.0)) * 0.25
+    return critic_component + roll_ent_component + score_ent_component
