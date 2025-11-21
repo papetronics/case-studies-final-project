@@ -40,12 +40,11 @@ def initialize(
     logger_name: str | None = None,
 ) -> tuple[dict[str, Any], Any]:
     """Initialize the project with configuration management, wandb logger setup, and system info."""
-    run_id = os.getenv("WANDB_RUN_ID") or None
-    use_wandb = run_id is not None
+    run_id = os.getenv("WANDB_RUN_ID")
 
     logger: lightning_logger.Logger
 
-    if use_wandb:
+    if run_id is not None:
         print(f"✅ Detected W&B launch agent context. (run_id={run_id})")
         logger = WandbLogger(
             project=f"{wandb_project_prefix}-{scenario_name}",
@@ -56,10 +55,12 @@ def initialize(
         )
 
     config = get_hyperparameters(
-        config_params, description, cast("WandbLogger", logger).experiment if use_wandb else None
+        config_params,
+        description,
+        cast("WandbLogger", logger).experiment if run_id is not None else None,
     )
 
-    if not use_wandb:
+    if run_id is None:
         print("⚡ No W&B job context — using TensorBoardLogger.")
         log_dir = config.get("log_dir", "./logs")
         os.makedirs(log_dir, exist_ok=True)
