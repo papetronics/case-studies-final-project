@@ -78,7 +78,7 @@ class PotentialScoringOpportunitiesFeature(PhiFeature):
             has_scored_yahtzee,
         )
 
-        return np.concatenate([(score_values), [float(joker)]])
+        return np.concatenate([(score_values / 50.0), [float(joker)]])
 
 
 class GameProgressFeature(PhiFeature):
@@ -228,9 +228,9 @@ class PercentProgressTowardsBonusFeature(PhiFeature):
         return 1
 
     def compute(self, observation: Observation) -> NDArray[np.floating]:
-        """Compute percent progress towards bonus."""
+        """Upper points remaining."""
         total_upper_score = observation["score_sheet"][:6].sum()
-        percent_progress = min(1.0, total_upper_score / UPPER_SCORE_THRESHOLD)
+        percent_progress = 1.0 - min(1.0, total_upper_score / UPPER_SCORE_THRESHOLD)
         return np.array([percent_progress], dtype=np.float64)
 
 
@@ -249,7 +249,9 @@ class UpperSectionGolfScoresFeature(PhiFeature):
         """Compute normalized golf scores for upper section."""
         score_sheet = observation["score_sheet"]
         target_score = 3 * np.linspace(1, 6, 6)  # Target score is 3 times the die face value
-        golf_score: NDArray[np.floating] = (target_score - score_sheet[:6]).astype(np.float64)
+        golf_score: NDArray[np.floating] = ((score_sheet[:6] - target_score) / 30).astype(
+            np.float64
+        )
         return golf_score
 
 
