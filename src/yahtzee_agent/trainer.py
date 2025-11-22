@@ -320,9 +320,20 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         return {"val_loss": -det_mean}  # Negative because higher scores are better
 
     def get_gamma(self) -> float:
-        """Get current gamma (discount factor) value."""
-        progress = self.current_epoch / (self.max_epochs - 1)
-        return self.gamma_min + progress * (self.gamma_max - self.gamma_min)
+        """Get current gamma (discount factor) value.
+
+        Anneals from gamma_max to gamma_min over first 50% of training,
+        then holds at gamma_min for remaining 50%.
+        """
+        halfway_epoch = self.max_epochs / 2.0
+
+        if self.current_epoch < halfway_epoch:
+            # First half: anneal from max to min
+            progress = self.current_epoch / halfway_epoch
+            return self.gamma_max - progress * (self.gamma_max - self.gamma_min)
+        else:
+            # Second half: hold at min
+            return self.gamma_min
 
     def get_entropy_coefs(self) -> tuple[float, float]:
         """Get current entropy coefficients for rolling and scoring heads.
