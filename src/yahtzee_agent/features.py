@@ -234,6 +234,25 @@ class PercentProgressTowardsBonusFeature(PhiFeature):
         return np.array([percent_progress], dtype=np.float64)
 
 
+class UpperSectionGolfScoresFeature(PhiFeature):
+    """Unnormalized "golf" scores for upper section categories (1-6)."""
+
+    @property
+    def name(self) -> str:
+        return "upper_section_golf_scores"
+
+    @property
+    def size(self) -> int:
+        return 6
+
+    def compute(self, observation: Observation) -> NDArray[np.floating]:
+        """Compute normalized golf scores for upper section."""
+        score_sheet = observation["score_sheet"]
+        target_score = 3 * np.linspace(1, 6, 6)  # Target score is 3 times the die face value
+        golf_score: NDArray[np.floating] = (target_score - score_sheet[:6]).astype(np.float64)
+        return golf_score
+
+
 FEATURE_REGISTRY: dict[str, type[PhiFeature]] = {
     # Advanced features
     "potential_scoring_opportunities": PotentialScoringOpportunitiesFeature,
@@ -247,6 +266,7 @@ FEATURE_REGISTRY: dict[str, type[PhiFeature]] = {
     "available_categories": AvailableCategoriesFeature,
     # Bonus-related features
     "percent_progress_towards_bonus": PercentProgressTowardsBonusFeature,
+    "upper_section_golf_scores": UpperSectionGolfScoresFeature,
 }
 
 
