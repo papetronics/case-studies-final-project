@@ -23,7 +23,7 @@
         "entropy_anneal_period": 0.8,
         "critic_coeff": 0.005,
         "gradient_clip_val": 1.0,
-        "phi_features": "dice_onehot,dice_counts,rolls_used,phase,has_earned_yahtzee,available_categories,percent_progress_towards_bonus,potential_scoring_opportunities,game_progress",
+        "phi_features": "dice_onehot,dice_counts,rolls_used,phase,has_earned_yahtzee,available_categories,percent_progress_towards_bonus,potential_scoring_opportunities,game_progress,upper_section_golf_scores",
         "rolling_action_representation": "categorical"
     }
 }

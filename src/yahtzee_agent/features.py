@@ -78,7 +78,7 @@ class PotentialScoringOpportunitiesFeature(PhiFeature):
             has_scored_yahtzee,
         )
 
-        return np.concatenate([(score_values / NORMAL_SCORE_MAX), [float(joker)]])
+        return np.concatenate([(score_values), [float(joker)]])
 
 
 class GameProgressFeature(PhiFeature):
