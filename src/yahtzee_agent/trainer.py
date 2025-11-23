@@ -61,8 +61,9 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         activation_function: ActivationFunctionName,
         epochs: int,
         min_lr_ratio: float,
-        gamma_max: float,
-        gamma_min: float,
+        gamma_start: float,
+        gamma_end: float,
+        gamma_anneal_period: float,
         entropy_coeff_rolling_max: float,
         entropy_coeff_rolling_min: float,
         entropy_coeff_scoring_max: float,
@@ -97,8 +98,9 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         self.learning_rate: float = learning_rate
         self.max_epochs: int = epochs
         self.min_lr_ratio: float = min_lr_ratio
-        self.gamma_max: float = gamma_max
-        self.gamma_min: float = gamma_min
+        self.gamma_start: float = gamma_start
+        self.gamma_end: float = gamma_end
+        self.gamma_anneal_period: float = gamma_anneal_period
         self.entropy_coeff_rolling_max: float = entropy_coeff_rolling_max
         self.entropy_coeff_rolling_min: float = entropy_coeff_rolling_min
         self.entropy_coeff_scoring_max: float = entropy_coeff_scoring_max
@@ -320,9 +322,19 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         return {"val_loss": -det_mean}  # Negative because higher scores are better
 
     def get_gamma(self) -> float:
-        """Get current gamma (discount factor) value."""
-        progress = self.current_epoch / (self.max_epochs - 1)
-        return self.gamma_min + progress * (self.gamma_max - self.gamma_min)
+        """Get current gamma (discount factor) value.
+
+        Anneals from gamma_start to gamma_end over first gamma_anneal_period of training,
+        then holds at gamma_end for remaining training.
+        """
+        end_gamma_anneal_epoch = self.max_epochs * self.gamma_anneal_period
+
+        if self.current_epoch < end_gamma_anneal_epoch:
+            progress = self.current_epoch / end_gamma_anneal_epoch
+            return self.gamma_start - progress * (self.gamma_start - self.gamma_end)
+        else:
+            # Second half: hold at min
+            return self.gamma_end
 
     def get_entropy_coefs(self) -> tuple[float, float]:
         """Get current entropy coefficients for rolling and scoring heads.

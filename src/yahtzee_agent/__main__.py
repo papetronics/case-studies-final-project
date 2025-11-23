@@ -141,18 +141,25 @@ def main() -> None:  # noqa: PLR0915
             display_name="Min LR ratio",
         ),
         ConfigParam(
-            "gamma_max",
+            "gamma_end",
             float,
             1.0,
             "Discount factor for reward calculation (max, end)",
             display_name="Discount factor",
         ),
         ConfigParam(
-            "gamma_min",
+            "gamma_start",
             float,
             None,  # Will default based on game_scenario: 0.9 for single_turn, 1.0 for full_game
             "Discount factor for reward calculation (min, start)",
             display_name="Discount factor",
+        ),
+        ConfigParam(
+            "gamma_anneal_period",
+            float,
+            0.5,
+            "Fraction of training over which to anneal gamma from start to end",
+            display_name="Gamma anneal period",
         ),
         ConfigParam(
             "dropout_rate",
@@ -255,8 +262,9 @@ def main() -> None:  # noqa: PLR0915
     phi_features_str = config["phi_features"]
     activation_function = config["activation_function"]
     min_lr_ratio = config["min_lr_ratio"]
-    gamma_min = config["gamma_min"]
-    gamma_max = config["gamma_max"]
+    gamma_start = config["gamma_start"]
+    gamma_end = config["gamma_end"]
+    gamma_anneal_period = config["gamma_anneal_period"]
     dropout_rate = config["dropout_rate"]
     gradient_clip_val = config["gradient_clip_val"]
     entropy_coeff_rolling_max = config["entropy_coeff_rolling_max"]
@@ -279,10 +287,10 @@ def main() -> None:  # noqa: PLR0915
     else:
         raise MissingPhiFeaturesError(list(FEATURE_REGISTRY.keys()))
 
-    # Set gamma_min default based on game_scenario if not explicitly provided
-    if gamma_min is None:
-        gamma_min = 0.9 if game_scenario == "single_turn" else 1.0
-        log.info(f"Setting gamma_min={gamma_min} based on game_scenario={game_scenario}")
+    # Set gamma_start default based on game_scenario if not explicitly provided
+    if gamma_start is None:
+        gamma_start = 0.9 if game_scenario == "single_turn" else 1.0
+        log.info(f"Setting gamma_start={gamma_start} based on game_scenario={game_scenario}")
 
     # Calculate derived values based on game scenario
     if game_scenario == "single_turn":
@@ -361,8 +369,9 @@ def main() -> None:  # noqa: PLR0915
             activation_function=activation_function,
             epochs=epochs,
             min_lr_ratio=min_lr_ratio,
-            gamma_min=gamma_min,
-            gamma_max=gamma_max,
+            gamma_start=gamma_start,
+            gamma_end=gamma_end,
+            gamma_anneal_period=gamma_anneal_period,
             entropy_coeff_rolling_max=entropy_coeff_rolling_max,
             entropy_coeff_rolling_min=entropy_coeff_rolling_min,
             entropy_coeff_scoring_max=entropy_coeff_scoring_max,
@@ -386,8 +395,9 @@ def main() -> None:  # noqa: PLR0915
                 "activation_function": activation_function,
                 "epochs": epochs,
                 "min_lr_ratio": min_lr_ratio,
-                "gamma_max": gamma_max,
-                "gamma_min": gamma_min,
+                "gamma_end": gamma_end,
+                "gamma_start": gamma_start,
+                "gamma_anneal_period": gamma_anneal_period,
                 "total_train_games": total_train_games,
                 "games_per_batch": games_per_batch,
                 "gradient_clip_val": gradient_clip_val,
