@@ -382,6 +382,7 @@ and Swish activations \cite{ramachandran-2017-swish} to introduce stable non-lin
         linear/.style={layer, fill=orange!15, draw=orange!45},
         norm/.style={layer, fill=purple!12, draw=purple!40},
         activation/.style={layer, fill=blue!15, draw=blue!45},
+        dropout/.style={layer, fill=gray!8, draw=gray!50, dashed},
       ]
 
       % Input (outside the box)
@@ -389,82 +390,87 @@ and Swish activations \cite{ramachandran-2017-swish} to introduce stable non-lin
 
       % ===== TRUNK BLOCK 1 =====
       \node[linear, below=0.6cm of input] (trunk1_linear) {Linear};
-      \node[norm, below of=trunk1_linear] (trunk1_ln) {LayerNorm};
-      \node[activation, below of=trunk1_ln] (trunk1_swish) {Swish};
+      \node[activation, below of=trunk1_linear] (trunk1_swish) {Swish};
+      \node[norm, below of=trunk1_swish] (trunk1_ln) {LayerNorm};
+      \node[dropout, below of=trunk1_ln] (trunk1_dropout) {Dropout};
 
       % ===== TRUNK BLOCK 2 =====
-      \node[linear, below=0.8cm of trunk1_swish] (trunk2_linear) {Linear};
-      \node[norm, below of=trunk2_linear] (trunk2_ln) {LayerNorm};
-      \node[activation, below of=trunk2_ln] (trunk2_swish) {Swish};
+      \node[linear, below=0.8cm of trunk1_dropout] (trunk2_linear) {Linear};
+      \node[activation, below of=trunk2_linear] (trunk2_swish) {Swish};
+      \node[norm, below of=trunk2_swish] (trunk2_ln) {LayerNorm};
+      \node[dropout, below of=trunk2_ln] (trunk2_dropout) {Dropout};
 
       % ===== TRUNK BLOCK 3 =====
-      \node[linear, below=0.8cm of trunk2_swish] (trunk3_linear) {Linear};
-      \node[norm, below of=trunk3_linear] (trunk3_ln) {LayerNorm};
-      \node[activation, below of=trunk3_ln] (trunk3_swish) {Swish};
+      \node[linear, below=0.8cm of trunk2_dropout] (trunk3_linear) {Linear};
+      \node[activation, below of=trunk3_linear] (trunk3_swish) {Swish};
+      \node[norm, below of=trunk3_swish] (trunk3_ln) {LayerNorm};
+      \node[dropout, below of=trunk3_ln] (trunk3_dropout) {Dropout};
 
       % ===== ROLL HEAD =====
-      \node[linear, below left=1.0cm and 1.4cm of trunk3_swish] (roll_linear) {Linear};
-      \node[norm, below of=roll_linear] (roll_ln) {LayerNorm};
-      \node[activation, below of=roll_ln] (roll_swish) {Swish};
+      \node[linear, below left=1.0cm and 1.4cm of trunk3_dropout] (roll_linear) {Linear};
+      \node[activation, below of=roll_linear] (roll_swish) {Swish};
+      \node[norm, below of=roll_swish] (roll_ln) {LayerNorm};
+      \node[dropout, below of=roll_ln] (roll_dropout) {Dropout};
 
       % ===== SCORE HEAD =====
-      \node[linear, below=1.0cm of trunk3_swish] (score_linear) {Linear};
-      \node[norm, below of=score_linear] (score_ln) {LayerNorm};
-      \node[activation, below of=score_ln] (score_swish) {Swish};
+      \node[linear, below=1.0cm of trunk3_dropout] (score_linear) {Linear};
+      \node[activation, below of=score_linear] (score_swish) {Swish};
+      \node[norm, below of=score_swish] (score_ln) {LayerNorm};
+      \node[dropout, below of=score_ln] (score_dropout) {Dropout};
 
       % ===== VALUE HEAD =====
-      \node[linear, below right=1.0cm and 1.4cm of trunk3_swish] (value_linear) {Linear};
-      \node[norm, below of=value_linear] (value_ln) {LayerNorm};
-      \node[activation, below of=value_ln] (value_swish) {Swish};
+      \node[linear, below right=1.0cm and 1.4cm of trunk3_dropout] (value_linear) {Linear};
+      \node[activation, below of=value_linear] (value_swish) {Swish};
+      \node[norm, below of=value_swish] (value_ln) {LayerNorm};
 
       % ===== ROLL OUTPUT =====
-      \node[linear, below=0.6cm of roll_swish] (roll_out_linear) {Linear};
+      \node[linear, below=0.6cm of roll_dropout] (roll_out_linear) {Linear};
       \node[activation, below of=roll_out_linear] (roll_out_softmax) {Softmax};
       \node[below=0.4cm of roll_out_softmax] (roll_out) {$\underbrace{a_{\mathrm{roll}}}_{\text{Rolling Action}}$};
 
       % ===== SCORE OUTPUT =====
-      \node[linear, below=0.6cm of score_swish] (score_out_linear) {Linear};
+      \node[linear, below=0.6cm of score_dropout] (score_out_linear) {Linear};
       \node[activation, below of=score_out_linear] (score_out_softmax) {Softmax};
       \node[below=0.4cm of score_out_softmax] (score_out) {$\underbrace{a_{\mathrm{score}}}_{\text{Scoring Action}}$};
 
       % ===== VALUE OUTPUT =====
-      \node[linear, below=0.6cm of value_swish] (value_out_linear) {Linear};
+      \node[linear, below=0.6cm of value_ln] (value_out_linear) {Linear};
       \node[activation, below of=value_out_linear] (value_out_elu) {ELU};
       \node[below=0.4cm of value_out_elu] (value_out) {$\underbrace{\hat{V}(s)}_{\text{Value Est.}}$};
 
       % Surrounding boxes (drawn on background layer)
       \begin{scope}[on background layer]
         % Big trunk box (draw first, in background)
-        \node[draw=blue!50, very thick, rectangle, rounded corners=8pt, fit={(trunk1_linear) (trunk1_ln) (trunk1_swish) (trunk2_linear) (trunk2_ln) (trunk2_swish) (trunk3_linear) (trunk3_ln) (trunk3_swish)}, inner sep=0.35cm, fill=blue!5] (trunk_box) {};
+        \node[draw=blue!50, very thick, rectangle, rounded corners=8pt, fit={(trunk1_linear) (trunk1_swish) (trunk1_ln) (trunk1_dropout) (trunk2_linear) (trunk2_swish) (trunk2_ln) (trunk2_dropout) (trunk3_linear) (trunk3_swish) (trunk3_ln) (trunk3_dropout)}, inner sep=0.35cm, fill=blue!5] (trunk_box) {};
 
         % Roll head box (include output layers)
-        \node[draw=green!50, very thick, rectangle, rounded corners=8pt, fit={(roll_linear) (roll_ln) (roll_swish) (roll_out_linear) (roll_out_softmax)}, inner sep=0.35cm, fill=green!5] (roll_box) {};
+        \node[draw=green!50, very thick, rectangle, rounded corners=8pt, fit={(roll_linear) (roll_swish) (roll_ln) (roll_dropout) (roll_out_linear) (roll_out_softmax)}, inner sep=0.35cm, fill=green!5] (roll_box) {};
 
         % Score head box (include output layers)
-        \node[draw=purple!50, very thick, rectangle, rounded corners=8pt, fit={(score_linear) (score_ln) (score_swish) (score_out_linear) (score_out_softmax)}, inner sep=0.35cm, fill=purple!5] (score_box) {};
+        \node[draw=purple!50, very thick, rectangle, rounded corners=8pt, fit={(score_linear) (score_swish) (score_ln) (score_dropout) (score_out_linear) (score_out_softmax)}, inner sep=0.35cm, fill=purple!5] (score_box) {};
 
         % Value head box (include output layers)
-        \node[draw=orange!50, very thick, rectangle, rounded corners=8pt, fit={(value_linear) (value_ln) (value_swish) (value_out_linear) (value_out_elu)}, inner sep=0.35cm, fill=orange!5] (value_box) {};
+        \node[draw=orange!50, very thick, rectangle, rounded corners=8pt, fit={(value_linear) (value_swish) (value_ln) (value_out_linear) (value_out_elu)}, inner sep=0.35cm, fill=orange!5] (value_box) {};
       \end{scope}
 
       % Individual blocks with dashed grey outline (drawn on top)
       % Trunk Block 1
-      \node[draw=gray!50, dashed, rectangle, rounded corners=5pt, fit={(trunk1_linear) (trunk1_ln) (trunk1_swish)}, inner sep=0.25cm, fill=none] {};
+      \node[draw=gray!50, dashed, rectangle, rounded corners=5pt, fit={(trunk1_linear) (trunk1_swish) (trunk1_ln) (trunk1_dropout)}, inner sep=0.25cm, fill=none] {};
 
       % Trunk Block 2
-      \node[draw=gray!50, dashed, rectangle, rounded corners=5pt, fit={(trunk2_linear) (trunk2_ln) (trunk2_swish)}, inner sep=0.25cm, fill=none] {};
+      \node[draw=gray!50, dashed, rectangle, rounded corners=5pt, fit={(trunk2_linear) (trunk2_swish) (trunk2_ln) (trunk2_dropout)}, inner sep=0.25cm, fill=none] {};
 
       % Trunk Block 3
-      \node[draw=gray!50, dashed, rectangle, rounded corners=5pt, fit={(trunk3_linear) (trunk3_ln) (trunk3_swish)}, inner sep=0.25cm, fill=none] {};
+      \node[draw=gray!50, dashed, rectangle, rounded corners=5pt, fit={(trunk3_linear) (trunk3_swish) (trunk3_ln) (trunk3_dropout)}, inner sep=0.25cm, fill=none] {};
 
       % Roll Head inner block
-      \node[draw=gray!50, dashed, rectangle, rounded corners=5pt, fit={(roll_linear) (roll_ln) (roll_swish)}, inner sep=0.25cm, fill=none] {};
+      \node[draw=gray!50, dashed, rectangle, rounded corners=5pt, fit={(roll_linear) (roll_swish) (roll_ln) (roll_dropout)}, inner sep=0.25cm, fill=none] {};
 
       % Score Head inner block
-      \node[draw=gray!50, dashed, rectangle, rounded corners=5pt, fit={(score_linear) (score_ln) (score_swish)}, inner sep=0.25cm, fill=none] {};
+      \node[draw=gray!50, dashed, rectangle, rounded corners=5pt, fit={(score_linear) (score_swish) (score_ln) (score_dropout)}, inner sep=0.25cm, fill=none] {};
 
       % Value Head inner block
-      \node[draw=gray!50, dashed, rectangle, rounded corners=5pt, fit={(value_linear) (value_ln) (value_swish)}, inner sep=0.25cm, fill=none] {};
+      \node[draw=gray!50, dashed, rectangle, rounded corners=5pt, fit={(value_linear) (value_swish) (value_ln)}, inner sep=0.25cm, fill=none] {};
 
       % Labels for large boxes
       \node[left=0.05cm of trunk_box.west, rotate=90, anchor=south, font=\small\bfseries] {Trunk};
@@ -474,38 +480,43 @@ and Swish activations \cite{ramachandran-2017-swish} to introduce stable non-lin
 
       % Arrows - Trunk
       \draw[->, thick] (input) -- (trunk1_linear);
-      \draw[->, thick] (trunk1_linear) -- (trunk1_ln);
-      \draw[->, thick] (trunk1_ln) -- (trunk1_swish);
-      \draw[->, thick] (trunk1_swish) -- (trunk2_linear);
-      \draw[->, thick] (trunk2_linear) -- (trunk2_ln);
-      \draw[->, thick] (trunk2_ln) -- (trunk2_swish);
-      \draw[->, thick] (trunk2_swish) -- (trunk3_linear);
-      \draw[->, thick] (trunk3_linear) -- (trunk3_ln);
-      \draw[->, thick] (trunk3_ln) -- (trunk3_swish);
+      \draw[->, thick] (trunk1_linear) -- (trunk1_swish);
+      \draw[->, thick] (trunk1_swish) -- (trunk1_ln);
+      \draw[->, thick] (trunk1_ln) -- (trunk1_dropout);
+      \draw[->, thick] (trunk1_dropout) -- (trunk2_linear);
+      \draw[->, thick] (trunk2_linear) -- (trunk2_swish);
+      \draw[->, thick] (trunk2_swish) -- (trunk2_ln);
+      \draw[->, thick] (trunk2_ln) -- (trunk2_dropout);
+      \draw[->, thick] (trunk2_dropout) -- (trunk3_linear);
+      \draw[->, thick] (trunk3_linear) -- (trunk3_swish);
+      \draw[->, thick] (trunk3_swish) -- (trunk3_ln);
+      \draw[->, thick] (trunk3_ln) -- (trunk3_dropout);
 
       % Arrows - Split to heads
-      \draw[->, thick] (trunk3_swish) -- (roll_linear);
-      \draw[->, thick] (trunk3_swish) -- (score_linear);
-      \draw[->, thick] (trunk3_swish) -- (value_linear);
+      \draw[->, thick] (trunk3_dropout) -- (roll_linear);
+      \draw[->, thick] (trunk3_dropout) -- (score_linear);
+      \draw[->, thick] (trunk3_dropout) -- (value_linear);
 
       % Arrows - Roll head
-      \draw[->, thick] (roll_linear) -- (roll_ln);
-      \draw[->, thick] (roll_ln) -- (roll_swish);
-      \draw[->, thick] (roll_swish) -- (roll_out_linear);
+      \draw[->, thick] (roll_linear) -- (roll_swish);
+      \draw[->, thick] (roll_swish) -- (roll_ln);
+      \draw[->, thick] (roll_ln) -- (roll_dropout);
+      \draw[->, thick] (roll_dropout) -- (roll_out_linear);
       \draw[->, thick] (roll_out_linear) -- (roll_out_softmax);
       \draw[->, thick] (roll_out_softmax) -- (roll_out);
 
       % Arrows - Score head
-      \draw[->, thick] (score_linear) -- (score_ln);
-      \draw[->, thick] (score_ln) -- (score_swish);
-      \draw[->, thick] (score_swish) -- (score_out_linear);
+      \draw[->, thick] (score_linear) -- (score_swish);
+      \draw[->, thick] (score_swish) -- (score_ln);
+      \draw[->, thick] (score_ln) -- (score_dropout);
+      \draw[->, thick] (score_dropout) -- (score_out_linear);
       \draw[->, thick] (score_out_linear) -- (score_out_softmax);
       \draw[->, thick] (score_out_softmax) -- (score_out);
 
       % Arrows - Value head
-      \draw[->, thick] (value_linear) -- (value_ln);
-      \draw[->, thick] (value_ln) -- (value_swish);
-      \draw[->, thick] (value_swish) -- (value_out_linear);
+      \draw[->, thick] (value_linear) -- (value_swish);
+      \draw[->, thick] (value_swish) -- (value_ln);
+      \draw[->, thick] (value_ln) -- (value_out_linear);
       \draw[->, thick] (value_out_linear) -- (value_out_elu);
       \draw[->, thick] (value_out_elu) -- (value_out);
 
