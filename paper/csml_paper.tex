@@ -218,7 +218,7 @@ where $\mathbf{k}_i = 1$ indicates that die $i$ is kept, otherwise it is re-roll
 
 We can then define the transition of the dice state after a re-roll as:
 \begin{align*}
-  \mathbf{d}' & \sim U(\mathcal{D}),                          \\[2pt]
+  \mathbf{d}' & \sim U(\mathcal{D}),                          \\
   \mathbf{d}_{r+1}
               & = (\mathbf{1} - \mathbf{k}) \odot \mathbf{d}'
   + \mathbf{k} \odot \mathbf{d}
@@ -304,11 +304,11 @@ However, eliminating ordering information requires the model to either waste cap
 It also requires a different action representation, since actions can no longer correspond to specific dice indices. We attempted 5 different dice representations:
 
 \begin{align*}
-  \phi_{\mathrm{dice}}^{\mathrm{onehot}}(\mathbf{d})   & = \bigl[\mathrm{onehot}(d_1), \ldots, \mathrm{onehot}(d_5)\bigr]                                                  \\[4pt]
-  \phi_{\mathrm{dice}}^{\mathrm{bin}}(\mathbf{d})      & = \mathbf{n}(\mathbf{d})                                                                                          \\[4pt]
-  \phi_{\mathrm{dice}}^{\mathrm{combined}}(\mathbf{d}) & = \bigl[\phi_{\mathrm{dice}}^{\mathrm{onehot}}(\mathbf{d}), \phi_{\mathrm{dice}}^{\mathrm{bin}}(\mathbf{d})\bigr] \\[4pt]
-  \phi_{\mathrm{dice}}^{\mathrm{emb}}(\mathbf{d})      & = \bigl[\mathbf{E}[d_1], \ldots, \mathbf{E}[d_5]\bigr]                                                            \\[4pt]
-  \phi_{\mathrm{dice}}^{\mathrm{pos\_emb}}(\mathbf{d}) & = \bigl[\mathbf{E}[d_1], \ldots, \mathbf{E}[d_5]\bigr] + \mathbf{PE}
+   & \phi_{\mathrm{dice}}^{\mathrm{onehot}}(\mathbf{d})   &  & = \bigl[\mathrm{onehot}(d_1), \ldots, \mathrm{onehot}(d_5)\bigr]                                                  \\[4pt]
+   & \phi_{\mathrm{dice}}^{\mathrm{bin}}(\mathbf{d})      &  & = \mathbf{n}(\mathbf{d})                                                                                          \\[4pt]
+   & \phi_{\mathrm{dice}}^{\mathrm{combined}}(\mathbf{d}) &  & = \bigl[\phi_{\mathrm{dice}}^{\mathrm{onehot}}(\mathbf{d}), \phi_{\mathrm{dice}}^{\mathrm{bin}}(\mathbf{d})\bigr] \\[4pt]
+   & \phi_{\mathrm{dice}}^{\mathrm{emb}}(\mathbf{d})      &  & = \bigl[\mathbf{E}[d_1], \ldots, \mathbf{E}[d_5]\bigr]                                                            \\[4pt]
+   & \phi_{\mathrm{dice}}^{\mathrm{pos\_emb}}(\mathbf{d}) &  & = \bigl[\mathbf{E}[d_1], \ldots, \mathbf{E}[d_5]\bigr] + \mathbf{PE}
 \end{align*}
 where $\mathbf{E} \in \mathbb{R}^{6 \times d_{\mathrm{emb}}}$ is a learnable embedding matrix and $\mathbf{PE}$ is a sinusoidal positional encodings.
 
@@ -331,7 +331,7 @@ There are some key features that can be computed from the raw state, providing t
 
 We also defined a lock-in feature to indicate whether scoring in a given upper category would secure the upper bonus:
 \begin{align*}
-  \phi_{\mathrm{lockin}}(\mathbf{d}, \mathbf{c})   & \in \{0,1\}^{6},                                                                                      \\[4pt]
+  \phi_{\mathrm{lockin}}(\mathbf{d}, \mathbf{c})   & \in \{0,1\}^{6},                                                                                      \\
   \phi_{\mathrm{lockin},k}(\mathbf{d}, \mathbf{c}) & = \mathbb{I}\Bigl\{\sum_{i=1}^{6} \mathbf{u}(\mathbf{c})_i \cdot c_i + f_k(\mathbf{d}) \geq 63\Bigr\}
 \end{align*}
 
@@ -546,7 +546,7 @@ We can define the entropy bonus as:
     \overbrace{\beta_{\mathrm{roll}}}^{\text{weight}}
     \,
     \mathcal{H}\big[\pi_{\theta,\mathrm{roll}}(\cdot \mid s_t)\big]
-  }_{\text{rolling action entropy}} \nonumber \\[4pt]
+  }_{\text{rolling action entropy}} \nonumber \\
     & +
   \underbrace{
     \overbrace{\beta_{\mathrm{score}}}^{\text{weight}}
@@ -608,7 +608,7 @@ Second, we utilize an episodic, one-step TD(0) Advantage Actor-Critic (A2C) meth
   \overbrace{- \log \big(\pi_\theta(a_t \mid s_t)\big)}^{\text{negative log likelihood}}
   \,
   \overbrace{\delta_t}^{\text{TD-error}}
-  }_{\text{policy loss}}                 \nonumber \\[4pt]
+  }_{\text{policy loss}}                 \nonumber \\
     & +
   \underbrace{
   \overbrace{\lambda_V}^{\text{weight}}
@@ -616,7 +616,7 @@ Second, we utilize an episodic, one-step TD(0) Advantage Actor-Critic (A2C) meth
   \big\|
   \delta_t
   \big\|_2^2
-  }_{\text{value loss}}                  \nonumber \\[4pt]
+  }_{\text{value loss}}                  \nonumber \\
     & +
   \mathcal{L}_{\mathrm{entropy}(\theta)}
 \end{align}
@@ -644,14 +644,14 @@ This allows for substantially larger batch sizes and learning rates \cite{schulm
        & \operatorname{clip}\big(r_t(\theta), 1 - \epsilon, 1 + \epsilon\big)\,\hat{A}_t
     \end{aligned}
     \bigg\}
-  }_{\text{policy loss}}                 \nonumber \\[6pt]
+  }_{\text{policy loss}}                 \nonumber \\
     & +
   \underbrace{
   \overbrace{\lambda_V}^{\text{weight}}
   \big\|
   V_\phi(s_t) - \hat{R}_t
   \big\|_2^2
-  }_{\text{value loss}}                  \nonumber \\[4pt]
+  }_{\text{value loss}}                  \nonumber \\
     & +
   \mathcal{L}_{\mathrm{entropy}(\theta)}
 \end{align}
@@ -1001,37 +1001,37 @@ Next we define the indicator functions for each of the scoring categories:
 
 \begin{align*}
   \mathbb{I}_{3\mathrm{k}}(\mathbf{d})
-   & = \mathbb{I}\bigl\{ \max_{v} n_v(\mathbf{d}) \ge 3 \bigr\} \\[4pt]
+   & = \mathbb{I}\bigl\{ \max_{v} n_v(\mathbf{d}) \ge 3 \bigr\} \\
   \mathbb{I}_{4\mathrm{k}}(\mathbf{d})
-   & = \mathbb{I}\bigl\{ \max_{v} n_v(\mathbf{d}) \ge 4 \bigr\} \\[6pt]
+   & = \mathbb{I}\bigl\{ \max_{v} n_v(\mathbf{d}) \ge 4 \bigr\} \\
   \mathbb{I}_{\mathrm{full}}(\mathbf{d})
    & = \mathbb{I}\Bigl\{
   \exists i, j \in \{1, \mathellipsis, 6 \} \ \text{with} \ n_i(\mathbf{d}) = 3 \land n_j(\mathbf{d}) = 2
-  \Bigr\}                                                       \\[6pt]
+  \Bigr\}                                                       \\
   \mathbb{I}_{\mathrm{ss}}(\mathbf{d})
    & = \mathbb{I}\Bigl\{
   \exists k \in \{1,2,3\} \ \text{with}\
   \sum_{v=k}^{k+3} \mathbb{I}\{n_v(\mathbf{d}) > 0\} = 4
-  \Bigr\}                                                       \\[6pt]
+  \Bigr\}                                                       \\
   \mathbb{I}_{\mathrm{ls}}(\mathbf{d})
    & = \mathbb{I}\Bigl\{
   \exists k \in \{1,2\} \ \text{with}\
   \sum_{v=k}^{k+4} \mathbb{I}\{n_v(\mathbf{d}) > 0\} = 5
-  \Bigr\}                                                       \\[6pt]
+  \Bigr\}                                                       \\
   \mathbb{I}_{\mathrm{yahtzee}}(\mathbf{d})
    & = \mathbb{I}\bigl\{\max_v n_v(\mathbf{d}) = 5\bigr\}
 \end{align*}
 
 The potential score for each category can then be defined as:
 \begin{align*}
-  f_j(\mathbf{d})        & = j \cdot n_j(\mathbf{d}), \qquad j \in \{1,\dots,6\}                   \\[4pt]
-  f_7(\mathbf{d})        & = \mathbf{1}^\top \mathbf{d} \cdot \mathbb{I}_{3\mathrm{k}}(\mathbf{d}) \\[4pt]
-  f_8(\mathbf{d})        & = \mathbf{1}^\top \mathbf{d} \cdot \mathbb{I}_{4\mathrm{k}}(\mathbf{d}) \\[4pt]
-  f_9(\mathbf{d})        & = 25 \cdot \mathbb{I}_{\mathrm{full}}(\mathbf{d})                       \\[4pt]
-  f_{10}(\mathbf{d})     & = 30 \cdot \mathbb{I}_{\mathrm{ss}}(\mathbf{d})                         \\[4pt]
-  f_{11}(\mathbf{d})     & = 40 \cdot \mathbb{I}_{\mathrm{ls}}(\mathbf{d})                         \\[4pt]
-  f_{12}(\mathbf{d})     & = 50 \cdot \mathbb{I}_{\mathrm{yahtzee}}(\mathbf{d})                    \\[4pt]
-  f_{13}(\mathbf{d})     & = \mathbf{1}^\top \cdot \mathbf{d}                                      \\[4pt]
+  f_j(\mathbf{d})        & = j \cdot n_j(\mathbf{d}), \qquad j \in \{1,\dots,6\}                   \\
+  f_7(\mathbf{d})        & = \mathbf{1}^\top \mathbf{d} \cdot \mathbb{I}_{3\mathrm{k}}(\mathbf{d}) \\
+  f_8(\mathbf{d})        & = \mathbf{1}^\top \mathbf{d} \cdot \mathbb{I}_{4\mathrm{k}}(\mathbf{d}) \\
+  f_9(\mathbf{d})        & = 25 \cdot \mathbb{I}_{\mathrm{full}}(\mathbf{d})                       \\
+  f_{10}(\mathbf{d})     & = 30 \cdot \mathbb{I}_{\mathrm{ss}}(\mathbf{d})                         \\
+  f_{11}(\mathbf{d})     & = 40 \cdot \mathbb{I}_{\mathrm{ls}}(\mathbf{d})                         \\
+  f_{12}(\mathbf{d})     & = 50 \cdot \mathbb{I}_{\mathrm{yahtzee}}(\mathbf{d})                    \\
+  f_{13}(\mathbf{d})     & = \mathbf{1}^\top \cdot \mathbf{d}                                      \\
   \mathbf{f}(\mathbf{d}) & =
   \bigl(f_1(\mathbf{d}), f_2(\mathbf{d}), \ldots, f_{13}(\mathbf{d})\bigr)
 \end{align*}
