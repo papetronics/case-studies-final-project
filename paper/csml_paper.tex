@@ -372,165 +372,144 @@ but aligning our model capacity with theoretical maximums \cite{horne-1994-bound
 We utilize layer normalization for improved training stability \cite{ba-2016-layernorm, bjorck-2022-high-variance}
 and Swish activations \cite{ramachandran-2017-swish} to introduce stable non-linearities.
 
-The basic block used throughout the network is shown in Figure~\ref{fig:basic-block}:
-
-\begin{figure}[H]
+\begin{figure}[htb]
   \centering
-  \begin{tikzpicture}[
-      node distance=0.8cm,
-      block/.style={rectangle, draw, minimum width=3cm, minimum height=0.6cm, align=center},
-    ]
+  \scalebox{0.70}{
+    \begin{tikzpicture}[
+        node distance=0.8cm,
+        layer/.style={rectangle, draw, minimum width=2.2cm, minimum height=0.5cm, align=center, rounded corners=3pt},
+        linear/.style={layer, fill=orange!15, draw=orange!45},
+        norm/.style={layer, fill=purple!12, draw=purple!40},
+        activation/.style={layer, fill=blue!15, draw=blue!45},
+      ]
 
-    % Input (outside the box)
-    \node (input) {Input};
+      % Input (outside the box)
+      \node (input) {$\underbrace{\phi(\mathbf{s})}_{\text{State Features}}$};
 
-    % Linear layer
-    \node[block, below=0.4cm of input] (linear) {Linear};
+      % ===== TRUNK BLOCK 1 =====
+      \node[linear, below=0.6cm of input] (trunk1_linear) {Linear};
+      \node[norm, below of=trunk1_linear] (trunk1_ln) {LayerNorm};
+      \node[activation, below of=trunk1_ln] (trunk1_swish) {Swish};
 
-    % Layer Norm
-    \node[block, below of=linear] (layernorm) {LayerNorm};
+      % ===== TRUNK BLOCK 2 =====
+      \node[linear, below=0.8cm of trunk1_swish] (trunk2_linear) {Linear};
+      \node[norm, below of=trunk2_linear] (trunk2_ln) {LayerNorm};
+      \node[activation, below of=trunk2_ln] (trunk2_swish) {Swish};
 
-    % Swish activation
-    \node[block, below of=layernorm] (swish) {Swish};
+      % ===== TRUNK BLOCK 3 =====
+      \node[linear, below=0.8cm of trunk2_swish] (trunk3_linear) {Linear};
+      \node[norm, below of=trunk3_linear] (trunk3_ln) {LayerNorm};
+      \node[activation, below of=trunk3_ln] (trunk3_swish) {Swish};
 
-    % Output (outside the box)
-    \node[below=0.4cm of swish] (output) {Output};
+      % ===== ROLL HEAD =====
+      \node[linear, below left=1.0cm and 1.4cm of trunk3_swish] (roll_linear) {Linear};
+      \node[norm, below of=roll_linear] (roll_ln) {LayerNorm};
+      \node[activation, below of=roll_ln] (roll_swish) {Swish};
 
-    % Surrounding box (drawn on background layer)
-    \begin{scope}[on background layer]
-      \node[draw=gray!50, thick, rectangle, rounded corners=5pt, fit={(linear) (layernorm) (swish)}, inner sep=0.3cm, fill=gray!5] {};
-    \end{scope}
+      % ===== SCORE HEAD =====
+      \node[linear, below=1.0cm of trunk3_swish] (score_linear) {Linear};
+      \node[norm, below of=score_linear] (score_ln) {LayerNorm};
+      \node[activation, below of=score_ln] (score_swish) {Swish};
 
-    % Arrows
-    \draw[->, thick] (input) -- (linear);
-    \draw[->, thick] (linear) -- (layernorm);
-    \draw[->, thick] (layernorm) -- (swish);
-    \draw[->, thick] (swish) -- (output);
+      % ===== VALUE HEAD =====
+      \node[linear, below right=1.0cm and 1.4cm of trunk3_swish] (value_linear) {Linear};
+      \node[norm, below of=value_linear] (value_ln) {LayerNorm};
+      \node[activation, below of=value_ln] (value_swish) {Swish};
 
-  \end{tikzpicture}
-  \caption{Basic building block}
-  \label{fig:basic-block}
-\end{figure}
+      % ===== ROLL OUTPUT =====
+      \node[linear, below=0.6cm of roll_swish] (roll_out_linear) {Linear};
+      \node[activation, below of=roll_out_linear] (roll_out_softmax) {Softmax};
+      \node[below=0.4cm of roll_out_softmax] (roll_out) {$\underbrace{a_{\mathrm{roll}}}_{\text{Rolling Action}}$};
 
-The overall architecture is illustrated in Figure~\ref{fig:network-architecture}:
+      % ===== SCORE OUTPUT =====
+      \node[linear, below=0.6cm of score_swish] (score_out_linear) {Linear};
+      \node[activation, below of=score_out_linear] (score_out_softmax) {Softmax};
+      \node[below=0.4cm of score_out_softmax] (score_out) {$\underbrace{a_{\mathrm{score}}}_{\text{Scoring Action}}$};
 
-\begin{figure}[H]
-  \centering
-  \begin{tikzpicture}[
-      node distance=0.8cm,
-      layer/.style={rectangle, draw, minimum width=2.2cm, minimum height=0.5cm, align=center, rounded corners=3pt},
-      linear/.style={layer, fill=orange!15, draw=orange!45},
-      norm/.style={layer, fill=purple!12, draw=purple!40},
-      activation/.style={layer, fill=blue!15, draw=blue!45},
-    ]
+      % ===== VALUE OUTPUT =====
+      \node[linear, below=0.6cm of value_swish] (value_out_linear) {Linear};
+      \node[activation, below of=value_out_linear] (value_out_elu) {ELU};
+      \node[below=0.4cm of value_out_elu] (value_out) {$\underbrace{\hat{V}(s)}_{\text{Value Est.}}$};
 
-    % Input (outside the box)
-    \node (input) {$\underbrace{\phi(\mathbf{s})}_{\text{State Features}}$};
+      % Surrounding boxes (drawn on background layer)
+      \begin{scope}[on background layer]
+        % Big trunk box (draw first, in background)
+        \node[draw=blue!50, very thick, rectangle, rounded corners=8pt, fit={(trunk1_linear) (trunk1_ln) (trunk1_swish) (trunk2_linear) (trunk2_ln) (trunk2_swish) (trunk3_linear) (trunk3_ln) (trunk3_swish)}, inner sep=0.35cm, fill=blue!5] (trunk_box) {};
 
-    % ===== TRUNK BLOCK 1 =====
-    \node[linear, below=0.6cm of input] (trunk1_linear) {Linear};
-    \node[norm, below of=trunk1_linear] (trunk1_ln) {LayerNorm};
-    \node[activation, below of=trunk1_ln] (trunk1_swish) {Swish};
+        % Roll head box (include output layers)
+        \node[draw=green!50, very thick, rectangle, rounded corners=8pt, fit={(roll_linear) (roll_ln) (roll_swish) (roll_out_linear) (roll_out_softmax)}, inner sep=0.35cm, fill=green!5] (roll_box) {};
 
-    % ===== TRUNK BLOCK 2 =====
-    \node[linear, below=0.8cm of trunk1_swish] (trunk2_linear) {Linear};
-    \node[norm, below of=trunk2_linear] (trunk2_ln) {LayerNorm};
-    \node[activation, below of=trunk2_ln] (trunk2_swish) {Swish};
+        % Score head box (include output layers)
+        \node[draw=purple!50, very thick, rectangle, rounded corners=8pt, fit={(score_linear) (score_ln) (score_swish) (score_out_linear) (score_out_softmax)}, inner sep=0.35cm, fill=purple!5] (score_box) {};
 
-    % ===== TRUNK BLOCK 3 =====
-    \node[linear, below=0.8cm of trunk2_swish] (trunk3_linear) {Linear};
-    \node[norm, below of=trunk3_linear] (trunk3_ln) {LayerNorm};
-    \node[activation, below of=trunk3_ln] (trunk3_swish) {Swish};
+        % Value head box (include output layers)
+        \node[draw=orange!50, very thick, rectangle, rounded corners=8pt, fit={(value_linear) (value_ln) (value_swish) (value_out_linear) (value_out_elu)}, inner sep=0.35cm, fill=orange!5] (value_box) {};
+      \end{scope}
 
-    % ===== ROLL HEAD =====
-    \node[linear, below left=0.8cm and 1.0cm of trunk3_swish] (roll_linear) {Linear};
-    \node[norm, below of=roll_linear] (roll_ln) {LayerNorm};
-    \node[activation, below of=roll_ln] (roll_swish) {Swish};
-
-    % ===== SCORE HEAD =====
-    \node[linear, below=0.8cm of trunk3_swish] (score_linear) {Linear};
-    \node[norm, below of=score_linear] (score_ln) {LayerNorm};
-    \node[activation, below of=score_ln] (score_swish) {Swish};
-
-    % ===== VALUE HEAD =====
-    \node[linear, below right=0.8cm and 1.0cm of trunk3_swish] (value_linear) {Linear};
-    \node[norm, below of=value_linear] (value_ln) {LayerNorm};
-    \node[activation, below of=value_ln] (value_swish) {Swish};
-
-    % ===== ROLL OUTPUT =====
-    \node[linear, below=0.6cm of roll_swish] (roll_out_linear) {Linear};
-    \node[activation, below of=roll_out_linear] (roll_out_softmax) {Softmax};
-    \node[below=0.4cm of roll_out_softmax] (roll_out) {$\underbrace{a_{\mathrm{roll}}}_{\text{Rolling Action}}$};
-
-    % ===== SCORE OUTPUT =====
-    \node[linear, below=0.6cm of score_swish] (score_out_linear) {Linear};
-    \node[activation, below of=score_out_linear] (score_out_softmax) {Softmax};
-    \node[below=0.4cm of score_out_softmax] (score_out) {$\underbrace{a_{\mathrm{score}}}_{\text{Scoring Action}}$};
-
-    % ===== VALUE OUTPUT =====
-    \node[linear, below=0.6cm of value_swish] (value_out_linear) {Linear};
-    \node[activation, below of=value_out_linear] (value_out_elu) {ELU};
-    \node[below=0.4cm of value_out_elu] (value_out) {$\underbrace{\hat{V}(s)}_{\text{Value Est.}}$};
-
-    % Surrounding boxes (drawn on background layer)
-    \begin{scope}[on background layer]
+      % Individual blocks with dashed grey outline (drawn on top)
       % Trunk Block 1
-      \node[draw=blue!50, thick, rectangle, rounded corners=5pt, fit={(trunk1_linear) (trunk1_ln) (trunk1_swish)}, inner sep=0.25cm, fill=blue!5] {};
+      \node[draw=gray!50, dashed, rectangle, rounded corners=5pt, fit={(trunk1_linear) (trunk1_ln) (trunk1_swish)}, inner sep=0.25cm, fill=none] {};
 
       % Trunk Block 2
-      \node[draw=blue!50, thick, rectangle, rounded corners=5pt, fit={(trunk2_linear) (trunk2_ln) (trunk2_swish)}, inner sep=0.25cm, fill=blue!5] {};
+      \node[draw=gray!50, dashed, rectangle, rounded corners=5pt, fit={(trunk2_linear) (trunk2_ln) (trunk2_swish)}, inner sep=0.25cm, fill=none] {};
 
       % Trunk Block 3
-      \node[draw=blue!50, thick, rectangle, rounded corners=5pt, fit={(trunk3_linear) (trunk3_ln) (trunk3_swish)}, inner sep=0.25cm, fill=blue!5] {};
+      \node[draw=gray!50, dashed, rectangle, rounded corners=5pt, fit={(trunk3_linear) (trunk3_ln) (trunk3_swish)}, inner sep=0.25cm, fill=none] {};
 
-      % Roll Head
-      \node[draw=green!50, thick, rectangle, rounded corners=5pt, fit={(roll_linear) (roll_ln) (roll_swish)}, inner sep=0.25cm, fill=green!5] {};
+      % Roll Head inner block
+      \node[draw=gray!50, dashed, rectangle, rounded corners=5pt, fit={(roll_linear) (roll_ln) (roll_swish)}, inner sep=0.25cm, fill=none] {};
 
-      % Score Head
-      \node[draw=green!50, thick, rectangle, rounded corners=5pt, fit={(score_linear) (score_ln) (score_swish)}, inner sep=0.25cm, fill=green!5] {};
+      % Score Head inner block
+      \node[draw=gray!50, dashed, rectangle, rounded corners=5pt, fit={(score_linear) (score_ln) (score_swish)}, inner sep=0.25cm, fill=none] {};
 
-      % Value Head
-      \node[draw=green!50, thick, rectangle, rounded corners=5pt, fit={(value_linear) (value_ln) (value_swish)}, inner sep=0.25cm, fill=green!5] {};
-    \end{scope}
+      % Value Head inner block
+      \node[draw=gray!50, dashed, rectangle, rounded corners=5pt, fit={(value_linear) (value_ln) (value_swish)}, inner sep=0.25cm, fill=none] {};
 
-    % Arrows - Trunk
-    \draw[->, thick] (input) -- (trunk1_linear);
-    \draw[->, thick] (trunk1_linear) -- (trunk1_ln);
-    \draw[->, thick] (trunk1_ln) -- (trunk1_swish);
-    \draw[->, thick] (trunk1_swish) -- (trunk2_linear);
-    \draw[->, thick] (trunk2_linear) -- (trunk2_ln);
-    \draw[->, thick] (trunk2_ln) -- (trunk2_swish);
-    \draw[->, thick] (trunk2_swish) -- (trunk3_linear);
-    \draw[->, thick] (trunk3_linear) -- (trunk3_ln);
-    \draw[->, thick] (trunk3_ln) -- (trunk3_swish);
+      % Labels for large boxes
+      \node[left=0.05cm of trunk_box.west, rotate=90, anchor=south, font=\small\bfseries] {Trunk};
+      \node[left=0.05cm of roll_box.west, rotate=90, anchor=south, font=\small\bfseries] {Roll Head};
+      \node[left=0.05cm of score_box.west, rotate=90, anchor=south, font=\small\bfseries] {Score Head};
+      \node[left=0.05cm of value_box.west, rotate=90, anchor=south, font=\small\bfseries] {Value Head};
 
-    % Arrows - Split to heads
-    \draw[->, thick] (trunk3_swish) -- (roll_linear);
-    \draw[->, thick] (trunk3_swish) -- (score_linear);
-    \draw[->, thick] (trunk3_swish) -- (value_linear);
+      % Arrows - Trunk
+      \draw[->, thick] (input) -- (trunk1_linear);
+      \draw[->, thick] (trunk1_linear) -- (trunk1_ln);
+      \draw[->, thick] (trunk1_ln) -- (trunk1_swish);
+      \draw[->, thick] (trunk1_swish) -- (trunk2_linear);
+      \draw[->, thick] (trunk2_linear) -- (trunk2_ln);
+      \draw[->, thick] (trunk2_ln) -- (trunk2_swish);
+      \draw[->, thick] (trunk2_swish) -- (trunk3_linear);
+      \draw[->, thick] (trunk3_linear) -- (trunk3_ln);
+      \draw[->, thick] (trunk3_ln) -- (trunk3_swish);
 
-    % Arrows - Roll head
-    \draw[->, thick] (roll_linear) -- (roll_ln);
-    \draw[->, thick] (roll_ln) -- (roll_swish);
-    \draw[->, thick] (roll_swish) -- (roll_out_linear);
-    \draw[->, thick] (roll_out_linear) -- (roll_out_softmax);
-    \draw[->, thick] (roll_out_softmax) -- (roll_out);
+      % Arrows - Split to heads
+      \draw[->, thick] (trunk3_swish) -- (roll_linear);
+      \draw[->, thick] (trunk3_swish) -- (score_linear);
+      \draw[->, thick] (trunk3_swish) -- (value_linear);
 
-    % Arrows - Score head
-    \draw[->, thick] (score_linear) -- (score_ln);
-    \draw[->, thick] (score_ln) -- (score_swish);
-    \draw[->, thick] (score_swish) -- (score_out_linear);
-    \draw[->, thick] (score_out_linear) -- (score_out_softmax);
-    \draw[->, thick] (score_out_softmax) -- (score_out);
+      % Arrows - Roll head
+      \draw[->, thick] (roll_linear) -- (roll_ln);
+      \draw[->, thick] (roll_ln) -- (roll_swish);
+      \draw[->, thick] (roll_swish) -- (roll_out_linear);
+      \draw[->, thick] (roll_out_linear) -- (roll_out_softmax);
+      \draw[->, thick] (roll_out_softmax) -- (roll_out);
 
-    % Arrows - Value head
-    \draw[->, thick] (value_linear) -- (value_ln);
-    \draw[->, thick] (value_ln) -- (value_swish);
-    \draw[->, thick] (value_swish) -- (value_out_linear);
-    \draw[->, thick] (value_out_linear) -- (value_out_elu);
-    \draw[->, thick] (value_out_elu) -- (value_out);
+      % Arrows - Score head
+      \draw[->, thick] (score_linear) -- (score_ln);
+      \draw[->, thick] (score_ln) -- (score_swish);
+      \draw[->, thick] (score_swish) -- (score_out_linear);
+      \draw[->, thick] (score_out_linear) -- (score_out_softmax);
+      \draw[->, thick] (score_out_softmax) -- (score_out);
 
-  \end{tikzpicture}
+      % Arrows - Value head
+      \draw[->, thick] (value_linear) -- (value_ln);
+      \draw[->, thick] (value_ln) -- (value_swish);
+      \draw[->, thick] (value_swish) -- (value_out_linear);
+      \draw[->, thick] (value_out_linear) -- (value_out_elu);
+      \draw[->, thick] (value_out_elu) -- (value_out);
+
+    \end{tikzpicture}
+  }
   \caption{Overall network architecture with shared trunk and three specialized heads}
   \label{fig:network-architecture}
 \end{figure}
