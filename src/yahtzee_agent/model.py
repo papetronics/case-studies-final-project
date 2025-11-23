@@ -62,7 +62,7 @@ def phi(
 
 
 def sample_action(
-    rolling_probs: torch.Tensor,
+    rolling_logits: torch.Tensor,
     scoring_probs: torch.Tensor,
     value_est: torch.Tensor,
     rolling_action_representation: RollingActionRepresentation,
@@ -70,11 +70,11 @@ def sample_action(
     """Sample an action given logits (rolling probs, scoring probs, and value estimate)."""
     rolling_dist: torch.distributions.Distribution
     if rolling_action_representation == RollingActionRepresentation.BERNOULLI:
-        rolling_dist = torch.distributions.Bernoulli(rolling_probs)
+        rolling_dist = torch.distributions.Bernoulli(logits=rolling_logits)
         rolling_tensor = rolling_dist.sample()
         rolling_log_prob = rolling_dist.log_prob(rolling_tensor).sum(dim=-1)
     else:  # CATEGORICAL
-        rolling_dist = torch.distributions.Categorical(rolling_probs)
+        rolling_dist = torch.distributions.Categorical(logits=rolling_logits)
         rolling_tensor = rolling_dist.sample()
         rolling_log_prob = rolling_dist.log_prob(rolling_tensor).sum()
 
@@ -86,16 +86,17 @@ def sample_action(
 
 
 def select_action(
-    rolling_probs: torch.Tensor,
+    rolling_logits: torch.Tensor,
     scoring_probs: torch.Tensor,
     rolling_action_representation: RollingActionRepresentation,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Select deterministic action using argmax/threshold (for validation/testing)."""
     if rolling_action_representation == RollingActionRepresentation.BERNOULLI:
         # Threshold at 0.5: keep dice with prob > 0.5
-        rolling_tensor = (rolling_probs > 0.5).float()  # noqa: PLR2004
+        sigmoided = torch.nn.functional.sigmoid(rolling_logits)
+        rolling_tensor = (sigmoided > 0.5).float()  # noqa: PLR2004
     else:  # CATEGORICAL
-        rolling_tensor = rolling_probs.argmax(dim=-1)
+        rolling_tensor = rolling_logits.argmax(dim=-1)
 
     scoring_tensor = scoring_probs.argmax(dim=-1)
 
