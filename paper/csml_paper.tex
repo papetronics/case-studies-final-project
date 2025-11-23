@@ -570,44 +570,45 @@ We also monitor standard training metrics such as average reward and loss values
 We first implement the REINFORCE algorithm \cite{williams-1992-reinforce} with baseline for single-turn optimization, then attempt to extend it to full-game optimization.
 The baseline is the output of the value head, $V_{\phi}(\mathbf{s})$. Thus, the loss function is:
 
-\begin{align*}
+\begin{align}
   \mathcal{L}(\theta,\phi)
   = &
   \underbrace{
   \overbrace{- \log \big(\pi_\theta(a_t \mid s_t)\big)}^{\text{negative log likelihood}} \,
   \overbrace{\big(\hat{R}_t - V_\phi(s_t)\big)}^{\text{advantage }}
-  }_{\text{policy loss}}                 \\
+  }_{\text{policy loss}}                 \nonumber \\
     & +
   \underbrace{
   \overbrace{\lambda_V}^{\text{weight}}
   \|
   V_\phi(s_t) - \hat{R}_t\big
   \|_2
-  }_{\text{value loss}}                  \\
+  }_{\text{value loss}}                  \nonumber \\
     & +
-  \mathcal{L}_{\mathrm{entropy}(\theta)} \\
-\end{align*}
+  \mathcal{L}_{\mathrm{entropy}(\theta)}
+\end{align}
 
 \subsubsection{Advantage Actor-Critic (A2C)}
 
 Second, we utilize an episodic, one-step TD(0) Advantage Actor-Critic (A2C) method. Its loss is:
 
-\begin{align*}
+\begin{align}
   \delta_t
-  = &
+   & =
   \overbrace{r_t}^{\text{reward}}
   +
   \overbrace{\gamma V_\phi(s_{t+1})}^{\text{bootstrap}}
   -
   \overbrace{V_\phi(s_t)}^{\text{current estimate}}
-  \\[8pt]
+\end{align}
+\begin{align}
   \mathcal{L}_{\text{TD-AC}}(\theta,\phi)
   = &
   \underbrace{
   \overbrace{- \log \big(\pi_\theta(a_t \mid s_t)\big)}^{\text{negative log likelihood}}
   \,
   \overbrace{\delta_t}^{\text{TD-error}}
-  }_{\text{policy loss}}                 \\[4pt]
+  }_{\text{policy loss}}                 \nonumber \\[4pt]
     & +
   \underbrace{
   \overbrace{\lambda_V}^{\text{weight}}
@@ -615,23 +616,25 @@ Second, we utilize an episodic, one-step TD(0) Advantage Actor-Critic (A2C) meth
   \big\|
   \delta_t
   \big\|_2^2
-  }_{\text{value loss}}                  \\[4pt]
+  }_{\text{value loss}}                  \nonumber \\[4pt]
     & +
-  \mathcal{L}_{\mathrm{entropy}(\theta)} \\
-\end{align*}
+  \mathcal{L}_{\mathrm{entropy}(\theta)}
+\end{align}
 
 \subsubsection{PPO}
 PPO improves on TD by utilizing a "surrogate" objective which clips large policy updates, improving training stability.
 This allows for substantially larger batch sizes and learning rates \cite{schulman-2017-ppo}. The loss we use is:
 
-\begin{align*}
+\begin{align}
   r_t(\theta)
-  = &
+   & =
   \frac{
   \overbrace{\pi_\theta(a_t \mid s_t)}^{\text{current policy}}
   }{
   \underbrace{\pi_{\theta_{\text{old}}}(a_t \mid s_t)}_{\text{behavior policy}}
-  }                                      \\[8pt]
+  }
+\end{align}
+\begin{align}
   \mathcal{L}(\theta,\phi)
   = &
   \underbrace{
@@ -641,17 +644,17 @@ This allows for substantially larger batch sizes and learning rates \cite{schulm
        & \operatorname{clip}\big(r_t(\theta), 1 - \epsilon, 1 + \epsilon\big)\,\hat{A}_t
     \end{aligned}
     \bigg\}
-  }_{\text{policy loss}}                 \\[6pt]
+  }_{\text{policy loss}}                 \nonumber \\[6pt]
     & +
   \underbrace{
   \overbrace{\lambda_V}^{\text{weight}}
   \big\|
   V_\phi(s_t) - \hat{R}_t
   \big\|_2^2
-  }_{\text{value loss}}                  \\[4pt]
+  }_{\text{value loss}}                  \nonumber \\[4pt]
     & +
-  \mathcal{L}_{\mathrm{entropy}(\theta)} \\
-\end{align*}
+  \mathcal{L}_{\mathrm{entropy}(\theta)}
+\end{align}
 
 \subsubsection{Training Regimes}
 We analyze several distinct training regimes for \textit{Yahtzee} agents:
