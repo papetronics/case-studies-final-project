@@ -425,7 +425,7 @@ The overall architecture is illustrated in Figure~\ref{fig:network-architecture}
     ]
 
     % Input (outside the box)
-    \node (input) {State Features $\phi(\mathbf{s})$};
+    \node (input) {$\underbrace{\phi(\mathbf{s})}_{\text{State Features}}$};
 
     % ===== TRUNK BLOCK 1 =====
     \node[linear, below=0.6cm of input] (trunk1_linear) {Linear};
@@ -446,19 +446,31 @@ The overall architecture is illustrated in Figure~\ref{fig:network-architecture}
     \node[linear, below left=0.8cm and 1.0cm of trunk3_swish] (roll_linear) {Linear};
     \node[norm, below of=roll_linear] (roll_ln) {LayerNorm};
     \node[activation, below of=roll_ln] (roll_swish) {Swish};
-    \node[below=0.6cm of roll_swish] (roll_out) {Roll};
 
     % ===== SCORE HEAD =====
     \node[linear, below=0.8cm of trunk3_swish] (score_linear) {Linear};
     \node[norm, below of=score_linear] (score_ln) {LayerNorm};
     \node[activation, below of=score_ln] (score_swish) {Swish};
-    \node[below=0.6cm of score_swish] (score_out) {Score};
 
     % ===== VALUE HEAD =====
     \node[linear, below right=0.8cm and 1.0cm of trunk3_swish] (value_linear) {Linear};
     \node[norm, below of=value_linear] (value_ln) {LayerNorm};
     \node[activation, below of=value_ln] (value_swish) {Swish};
-    \node[below=0.6cm of value_swish] (value_out) {Value};
+
+    % ===== ROLL OUTPUT =====
+    \node[linear, below=0.6cm of roll_swish] (roll_out_linear) {Linear};
+    \node[activation, below of=roll_out_linear] (roll_out_softmax) {Softmax};
+    \node[below=0.4cm of roll_out_softmax] (roll_out) {$\underbrace{a_{\mathrm{roll}}}_{\text{Rolling Action}}$};
+
+    % ===== SCORE OUTPUT =====
+    \node[linear, below=0.6cm of score_swish] (score_out_linear) {Linear};
+    \node[activation, below of=score_out_linear] (score_out_softmax) {Softmax};
+    \node[below=0.4cm of score_out_softmax] (score_out) {$\underbrace{a_{\mathrm{score}}}_{\text{Scoring Action}}$};
+
+    % ===== VALUE OUTPUT =====
+    \node[linear, below=0.6cm of value_swish] (value_out_linear) {Linear};
+    \node[activation, below of=value_out_linear] (value_out_elu) {ELU};
+    \node[below=0.4cm of value_out_elu] (value_out) {$\underbrace{\hat{V}(s)}_{\text{Value Est.}}$};
 
     % Surrounding boxes (drawn on background layer)
     \begin{scope}[on background layer]
@@ -500,17 +512,23 @@ The overall architecture is illustrated in Figure~\ref{fig:network-architecture}
     % Arrows - Roll head
     \draw[->, thick] (roll_linear) -- (roll_ln);
     \draw[->, thick] (roll_ln) -- (roll_swish);
-    \draw[->, thick] (roll_swish) -- (roll_out);
+    \draw[->, thick] (roll_swish) -- (roll_out_linear);
+    \draw[->, thick] (roll_out_linear) -- (roll_out_softmax);
+    \draw[->, thick] (roll_out_softmax) -- (roll_out);
 
     % Arrows - Score head
     \draw[->, thick] (score_linear) -- (score_ln);
     \draw[->, thick] (score_ln) -- (score_swish);
-    \draw[->, thick] (score_swish) -- (score_out);
+    \draw[->, thick] (score_swish) -- (score_out_linear);
+    \draw[->, thick] (score_out_linear) -- (score_out_softmax);
+    \draw[->, thick] (score_out_softmax) -- (score_out);
 
     % Arrows - Value head
     \draw[->, thick] (value_linear) -- (value_ln);
     \draw[->, thick] (value_ln) -- (value_swish);
-    \draw[->, thick] (value_swish) -- (value_out);
+    \draw[->, thick] (value_swish) -- (value_out_linear);
+    \draw[->, thick] (value_out_linear) -- (value_out_elu);
+    \draw[->, thick] (value_out_elu) -- (value_out);
 
   \end{tikzpicture}
   \caption{Overall network architecture with shared trunk and three specialized heads}
