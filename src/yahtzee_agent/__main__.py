@@ -240,6 +240,12 @@ def main() -> None:  # noqa: PLR0915
             choices=["reinforce", "a2c"],
             display_name="Algorithm",
         ),
+        ConfigParam(
+            "gae_lambda",
+            float,
+            0.90,
+            "GAE lambda parameter (for A2C algorithm only)",
+        ),
     ]
 
     # Initialize project with configuration
@@ -276,6 +282,7 @@ def main() -> None:  # noqa: PLR0915
     critic_coeff = config["critic_coeff"]
     rolling_action_representation = config["rolling_action_representation"]
     algorithm = config["algorithm"]
+    gae_lambda = config["gae_lambda"]
 
     torch.set_float32_matmul_precision("medium")
 
@@ -383,6 +390,7 @@ def main() -> None:  # noqa: PLR0915
             features=phi_features,
             rolling_action_representation=rolling_action_representation,
             he_kaiming_initialization=he_kaiming_initialization,
+            gae_lambda=gae_lambda,
         )
 
         # Save hyperparameters explicitly
@@ -412,6 +420,7 @@ def main() -> None:  # noqa: PLR0915
                 "phi_features": phi_features_str,
                 "rolling_action_representation": rolling_action_representation,
                 "algorithm": algorithm,
+                "gae_lambda": gae_lambda,
             }
         )
 

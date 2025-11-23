@@ -76,6 +76,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         rolling_action_representation: str,
         he_kaiming_initialization: bool,
         algorithm: Algorithm,
+        gae_lambda: float,
     ):
         super().__init__()
 
@@ -109,6 +110,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         self.entropy_anneal_period: float = entropy_anneal_period
         self.critic_coeff: float = critic_coeff
         self.num_steps_per_episode: int = num_steps_per_episode
+        self.gae_lambda: float = gae_lambda
 
         self.validation_envs: list[gym.Env[Observation, Action]] = []  # Created on demand
 
@@ -437,36 +439,69 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         self,
         num_episodes: int,
         steps_per_episode: int,
-        rewards_flat: torch.Tensor,
-        next_v_baseline: torch.Tensor,
-        v_ests: torch.Tensor,
+        rewards_flat: torch.Tensor,  # [B], B = num_episodes * steps_per_episode
+        next_v_baseline: torch.Tensor,  # [B], V(s_{t+1})
+        v_ests: torch.Tensor,  # [B] or [B, 1], V(s_t)
         phases_flat: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Calculate advantages using either REINFORCE or A2C method."""
+        """Calculate advantages using REINFORCE, A2C TD(0), or A2C+GAE, and log diagnostics."""
         gamma = self.get_gamma()
+        # Make sure value estimates are a flat 1D tensor
+        v_flat = v_ests.detach().view(-1)
+        next_v_flat = next_v_baseline.detach().view(-1)
+
+        B = num_episodes * steps_per_episode  # noqa: N806
+        assert rewards_flat.numel() == B
+        assert v_flat.numel() == B
+        assert next_v_flat.numel() == B
 
         with torch.no_grad():
             returns = torch.zeros_like(rewards_flat)
+            advantages = torch.zeros_like(rewards_flat)
+
             if self.algorithm == Algorithm.REINFORCE:
-                # REINFORCE: backward pass through episodes calculating cumulative discounted returns
+                # Monte Carlo: backward pass per episode
                 for episode_idx in range(num_episodes):
-                    g: torch.Tensor = torch.tensor(0.0, device=rewards_flat.device)
+                    g = torch.tensor(0.0, device=rewards_flat.device)
+                    base = episode_idx * steps_per_episode
                     for t in reversed(range(steps_per_episode)):
-                        flat_idx = episode_idx * steps_per_episode + t
-                        g = rewards_flat[flat_idx] + gamma * g
-                        returns[flat_idx] = g
-            else:  # A2C
-                # A2C: one-step bootstrapping using r_t + gamma * V(s_{t+1}) (TD(0))
-                returns = rewards_flat + gamma * next_v_baseline.detach()
+                        idx = base + t
+                        g = rewards_flat[idx] + gamma * g
+                        returns[idx] = g
+                # Advantages = returns - V(s)
+                advantages = returns - v_flat
 
-        advantages = returns - v_ests.detach().squeeze()
+            else:
+                # A2C / Actor-Critic branch: TD(0) or GAE
+                use_gae = getattr(self, "gae_lambda", None) is not None and self.gae_lambda > 0.0
+                if use_gae:
+                    lam = self.gae_lambda
+                    # GAE per episode
+                    for episode_idx in range(num_episodes):
+                        base = episode_idx * steps_per_episode
+                        gae = torch.tensor(0.0, device=rewards_flat.device)
+                        for t in reversed(range(steps_per_episode)):
+                            idx = base + t
+                            # δ_t = r_t + γ V(s_{t+1}) - V(s_t)  # noqa: RUF003
+                            delta = rewards_flat[idx] + gamma * next_v_flat[idx] - v_flat[idx]
+                            gae = delta + gamma * lam * gae
+                            advantages[idx] = gae
+                            # Return target: V_target = A + V(s_t)
+                            returns[idx] = gae + v_flat[idx]
+                else:
+                    # Plain A2C TD(0): r_t + γ V(s_{t+1})  # noqa: RUF003
+                    returns = rewards_flat + gamma * next_v_flat
+                    advantages = returns - v_flat
 
+        # -------------------------------------------------------
+        # Normalize advantages for the policy loss
+        # -------------------------------------------------------
         normalized_advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
-        ## =========================================================================================
-        ## Diagnostics
+        # -------------------------------------------------------
+        # Diagnostics
+        # -------------------------------------------------------
         episode_rewards = rewards_flat.view(num_episodes, steps_per_episode).sum(dim=1)
-
         avg_reward = episode_rewards.mean()
         self.log("train/avg_reward", avg_reward, prog_bar=True)
 
@@ -475,7 +510,6 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
 
         adv_stats = compute_advantage_stats(advantages, phases_flat)
         self.log_dict({f"train/{k}": v for k, v in adv_stats.items()}, prog_bar=False)
-        ## =========================================================================================
 
         return normalized_advantages, returns
 
