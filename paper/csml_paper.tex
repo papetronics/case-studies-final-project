@@ -418,43 +418,46 @@ The overall architecture is illustrated in Figure~\ref{fig:network-architecture}
   \centering
   \begin{tikzpicture}[
       node distance=0.8cm,
-      layer/.style={rectangle, draw, minimum width=2.2cm, minimum height=0.5cm, align=center},
+      layer/.style={rectangle, draw, minimum width=2.2cm, minimum height=0.5cm, align=center, rounded corners=3pt},
+      linear/.style={layer, fill=orange!15, draw=orange!45},
+      norm/.style={layer, fill=purple!12, draw=purple!40},
+      activation/.style={layer, fill=blue!15, draw=blue!45},
     ]
 
     % Input (outside the box)
     \node (input) {State Features $\phi(\mathbf{s})$};
 
     % ===== TRUNK BLOCK 1 =====
-    \node[layer, below=0.6cm of input] (trunk1_linear) {Linear};
-    \node[layer, below of=trunk1_linear] (trunk1_ln) {LayerNorm};
-    \node[layer, below of=trunk1_ln] (trunk1_swish) {Swish};
+    \node[linear, below=0.6cm of input] (trunk1_linear) {Linear};
+    \node[norm, below of=trunk1_linear] (trunk1_ln) {LayerNorm};
+    \node[activation, below of=trunk1_ln] (trunk1_swish) {Swish};
 
     % ===== TRUNK BLOCK 2 =====
-    \node[layer, below=0.8cm of trunk1_swish] (trunk2_linear) {Linear};
-    \node[layer, below of=trunk2_linear] (trunk2_ln) {LayerNorm};
-    \node[layer, below of=trunk2_ln] (trunk2_swish) {Swish};
+    \node[linear, below=0.8cm of trunk1_swish] (trunk2_linear) {Linear};
+    \node[norm, below of=trunk2_linear] (trunk2_ln) {LayerNorm};
+    \node[activation, below of=trunk2_ln] (trunk2_swish) {Swish};
 
     % ===== TRUNK BLOCK 3 =====
-    \node[layer, below=0.8cm of trunk2_swish] (trunk3_linear) {Linear};
-    \node[layer, below of=trunk3_linear] (trunk3_ln) {LayerNorm};
-    \node[layer, below of=trunk3_ln] (trunk3_swish) {Swish};
+    \node[linear, below=0.8cm of trunk2_swish] (trunk3_linear) {Linear};
+    \node[norm, below of=trunk3_linear] (trunk3_ln) {LayerNorm};
+    \node[activation, below of=trunk3_ln] (trunk3_swish) {Swish};
 
     % ===== ROLL HEAD =====
-    \node[layer, below left=0.8cm and 1.0cm of trunk3_swish] (roll_linear) {Linear};
-    \node[layer, below of=roll_linear] (roll_ln) {LayerNorm};
-    \node[layer, below of=roll_ln] (roll_swish) {Swish};
+    \node[linear, below left=0.8cm and 1.0cm of trunk3_swish] (roll_linear) {Linear};
+    \node[norm, below of=roll_linear] (roll_ln) {LayerNorm};
+    \node[activation, below of=roll_ln] (roll_swish) {Swish};
     \node[below=0.6cm of roll_swish] (roll_out) {Roll};
 
     % ===== SCORE HEAD =====
-    \node[layer, below=0.8cm of trunk3_swish] (score_linear) {Linear};
-    \node[layer, below of=score_linear] (score_ln) {LayerNorm};
-    \node[layer, below of=score_ln] (score_swish) {Swish};
+    \node[linear, below=0.8cm of trunk3_swish] (score_linear) {Linear};
+    \node[norm, below of=score_linear] (score_ln) {LayerNorm};
+    \node[activation, below of=score_ln] (score_swish) {Swish};
     \node[below=0.6cm of score_swish] (score_out) {Score};
 
     % ===== VALUE HEAD =====
-    \node[layer, below right=0.8cm and 1.0cm of trunk3_swish] (value_linear) {Linear};
-    \node[layer, below of=value_linear] (value_ln) {LayerNorm};
-    \node[layer, below of=value_ln] (value_swish) {Swish};
+    \node[linear, below right=0.8cm and 1.0cm of trunk3_swish] (value_linear) {Linear};
+    \node[norm, below of=value_linear] (value_ln) {LayerNorm};
+    \node[activation, below of=value_ln] (value_swish) {Swish};
     \node[below=0.6cm of value_swish] (value_out) {Value};
 
     % Surrounding boxes (drawn on background layer)
