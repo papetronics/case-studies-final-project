@@ -366,10 +366,11 @@ The neural network uses a unique architecture designed to handle the specific ch
 The architecture consists of a trunk, followed by heads for the policy and value functions.
 
 \subsubsection{Trunk}
-The trunk of the network is a standard feedforward architecture with 2-3 fully connected hidden layers.
-The width of each layer is 386-512 neurons, found through empirical hyperparameter tuning,
+The trunk of the network is a standard feedforward architecture with $L$ (typically 2 or 3) fully connected hidden layers.
+The width of each layer (hidden size $d_h$) is 600 neurons, found through empirical hyperparameter tuning,
 but aligning our model capacity with theoretical maximums \cite{horne-1994-bounds-rnn-fsm} and minimums \cite{hanin-2017-bounded-width-relu}.
-We utilize layer normalization for improved training stability \cite{ba-2016-layernorm, bjorck-2022-high-variance}
+We utilize layer normalization for improved training stability \cite{ba-2016-layernorm, bjorck-2022-high-variance},
+dropout with rate $p_d$ for regularization,
 and Swish activations \cite{ramachandran-2017-swish} to introduce stable non-linearities.
 
 \begin{figure}[htb]
@@ -527,9 +528,9 @@ In the scoring action head, we use 13 outputs with softmax activations for the c
 For the value head, we use a single linear output, constrained with ELU activation to clamp negative value estimates \cite{clevert2016elu}, since negative rewards are not possible in \textit{Yahtzee}.
 
 \subsubsection{Optimization \& Schedules}
-We utilize the Adam optimizer \cite{kingma2014adam} with maximum learning rate between $1\times 10^{-4}$ and $5\times 10^{-4}$.
+We utilize the Adam optimizer \cite{kingma2014adam} with maximum learning rate $\alpha$, typically between $1\times 10^{-4}$ and $5\times 10^{-4}$.
 To improve training stability, we utilize a warmup schedule over the first 5\% of training \cite{kalra-2024-warmup},
-plateau for 70\% of training, and then linearly decay over the final 25\% of training steps \cite{defazio2023optimal, lyle2024normalization}.
+plateau for 70\% of training, and then linearly decay over the final 25\% of training steps to a minimum ratio $r_{\alpha}$ of the maximum \cite{defazio2023optimal, lyle2024normalization}.
 
 \subsection{Entropy}
 To encourage exploration, we also add an entropy bonus to the loss function  \cite{williams-peng-1991-function-optimization}. These are held
@@ -562,13 +563,15 @@ To monitor for policy collapse, we track the policy entropy and KL divergence be
 mask diversity \cite{Hubara2021MaskDiversity},
 and the top-k action frequency \cite{sun-etal-2025-curiosity}.
 To monitor for learning stability, we track gradient norms and clip rate \cite{pascanu-2013-rnn-clipping, Engstrom2020ImplementationMatters}.
+Gradient clipping is applied with threshold $\tau_{\mathrm{clip}}$ to prevent destabilizing updates.
 To ensure advantages are well-conditioned, we track advantage mean and standard deviation \cite{Achiam2018SpinningUp}.
 We also monitor standard training metrics such as average reward and loss values.
 
 \subsection{Reinforcement Learning Algorithms}
 \subsubsection{REINFORCE}
 We first implement the REINFORCE algorithm \cite{williams-1992-reinforce} with baseline for single-turn optimization, then attempt to extend it to full-game optimization.
-The baseline is the output of the value head, $V_{\phi}(\mathbf{s})$. Thus, the loss function is:
+The baseline is the output of the value head, $V_{\phi}(\mathbf{s})$.
+We collect trajectories in batches of $B$ games before computing gradient updates. Thus, the loss function is:
 
 \begin{align}
   \mathcal{L}(\theta,\phi)
@@ -994,6 +997,69 @@ This paper utilized artificial intelligence tools in the following ways:
   \item \textbf{ChatGPT (GPT-5.1)} was used for brainstorming ideas for reinforcement learning applications in games, guidance in hyperparameter tuning, helping to outline the structure of this paper, assistance in discovering relevant research and citations, and for writing tone and quality feedback.
 \end{itemize}
 All other content, including research methodology, analysis, results interpretation, and conclusions, represents original work by the author. The AI tools were not used to generate substantive content or analysis in this document.
+
+
+\section{Hyperparameters}
+The following hyperparameters were used for the baseline models:
+
+\begin{table}[H]
+  \centering
+  \caption{Shared hyperparameters across all algorithms}
+  \label{tab:shared-hyperparameters}
+  \begin{tabular}{lc}
+    \hline
+    \textbf{Hyperparameter}       & \textbf{Value} \\
+    \hline
+    $d_h$ (Hidden Size)           & 600            \\
+    $L$ (Hidden Layers)           & 3              \\
+    $p_d$ (Dropout Rate)          & 0.1            \\
+    $r_{\alpha}$ (Min LR Ratio)   & 0.01           \\
+    $B$ (Games per Batch)         & 20             \\
+    Activation Function           & Swish          \\
+    Rolling Action Representation & Categorical    \\
+    \hline
+  \end{tabular}
+\end{table}
+
+\begin{table}[H]
+  \centering
+  \small
+  \setlength{\tabcolsep}{4pt}
+  \caption{Algorithm-specific hyperparameters}
+  \label{tab:algorithm-hyperparameters}
+  \begin{tabular}{lccc}
+    \hline
+    \textbf{Hyperparameter}        & \textbf{REINFORCE} & \textbf{A2C} & \textbf{PPO} \\
+    \hline
+    $\alpha$                       & 0.001              & 0.0001       & 0.0001       \\
+    $\gamma$ (min)                 & 0.95               & 0.99         & 0.99         \\
+    $\gamma$ (max)                 & 1.0                & 0.99         & 0.99         \\
+    $\tau_{\mathrm{clip}}$         & 0.0                & 1.0          & 1.0          \\
+    $\lambda_V$                    & 0.025              & 0.005        & 0.01         \\
+    $\beta_{\mathrm{roll}}$ (max)  & 0.1                & 0.06         & 0.02         \\
+    $\beta_{\mathrm{roll}}$ (min)  & 0.01               & 0.02         & 0.005        \\
+    $\beta_{\mathrm{score}}$ (max) & 0.02               & 0.03         & 0.05         \\
+    $\beta_{\mathrm{score}}$ (min) & 0.003              & 0.008        & 0.01         \\
+    Entropy Hold Period            & 0.1                & 0.3          & 0.1          \\
+    Entropy Anneal Period          & 0.55               & 0.6          & 0.8          \\
+    \hline
+  \end{tabular}
+\end{table}
+
+\begin{table}[H]
+  \centering
+  \caption{PPO-specific hyperparameters}
+  \label{tab:ppo-hyperparameters}
+  \begin{tabular}{lc}
+    \hline
+    \textbf{Hyperparameter} & \textbf{Value} \\
+    \hline
+    PPO Clip $\epsilon$     & 0.2            \\
+    PPO Games per Minibatch & 4              \\
+    PPO Epochs              & 3              \\
+    \hline
+  \end{tabular}
+\end{table}
 
 \section{Yahtzee Scoring Rules}
 \label{app:scoring}
