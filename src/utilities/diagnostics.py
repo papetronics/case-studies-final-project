@@ -69,7 +69,10 @@ def compute_critic_explained_variance(returns: torch.Tensor, v_ests: torch.Tenso
 
 
 def compute_entropy_stats(
-    rolling_probs: torch.Tensor, scoring_probs: torch.Tensor, phases_flat: torch.Tensor
+    rolling_probs: torch.Tensor,
+    scoring_probs: torch.Tensor,
+    phases_flat: torch.Tensor,
+    is_bernoulli: bool,
 ) -> dict[str, torch.Tensor]:
     """Compute entropy for both action heads.
 
@@ -77,7 +80,10 @@ def compute_entropy_stats(
     Red flags: roll <1.2 early = premature collapse; score near-zero = deterministic too soon.
     """
     # Rolling head: Bernoulli entropy per-die, sum to get per-step
-    roll_ent = bernoulli_entropy(rolling_probs).sum(dim=1)
+    if is_bernoulli:
+        roll_ent = bernoulli_entropy(rolling_probs).sum(dim=1)
+    else:
+        roll_ent = torch.distributions.Categorical(probs=rolling_probs).entropy()
 
     # Scoring head: categorical entropy
     score_ent = torch.distributions.Categorical(probs=scoring_probs).entropy()

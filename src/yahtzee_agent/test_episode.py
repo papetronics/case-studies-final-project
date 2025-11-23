@@ -12,7 +12,6 @@ from utilities.scoring_helper import (
     get_all_scores_with_target,
 )
 from yahtzee_agent.model import (
-    ActionType,
     YahtzeeAgent,
     convert_rolling_action_to_hold_mask,
     phi,
@@ -91,8 +90,8 @@ def run_episode(
             # Track dice state for display
             if obs["phase"] == 0:
                 # Rolling phase - update kept dice
-                kept_dice = obs["dice"][~np.array(rolling_action, dtype=bool)].tolist()
-                print_action_description(obs, rolling_action, None)
+                kept_dice = obs["dice"][~hold_mask].tolist()
+                print_action_description(obs, hold_mask, None)
             else:
                 # Scoring phase
                 print_action_description(obs, None, scoring_action_tensor)
@@ -226,22 +225,27 @@ def print_game_state(
 
 def print_action_description(
     observation: Observation,
-    rolling_action: ActionType | None = None,
+    hold_mask: np.ndarray | None = None,
     scoring_action_tensor: torch.Tensor | None = None,
 ) -> None:
-    """Print what action the model is taking."""
+    """Print what action the model is taking.
+
+    Args:
+        observation: Current game observation
+        hold_mask: Boolean array indicating which dice to keep (True = keep, False = re-roll)
+        scoring_action_tensor: Tensor containing the scoring category index
+    """
     print("\n" + "=" * 50)
-    if rolling_action is not None:
+    if hold_mask is not None:
         # Rolling action
-        hold_mask = np.array(rolling_action, dtype=bool)
         reroll_dice = []
         keep_dice = []
 
         for i, die_value in enumerate(observation["dice"]):
-            if hold_mask[i]:  # This die will be re-rolled
-                reroll_dice.append(f"Die {i + 1}({die_value})")
-            else:  # This die will be kept
+            if hold_mask[i]:  # This die will be kept
                 keep_dice.append(f"Die {i + 1}({die_value})")
+            else:  # This die will be re-rolled
+                reroll_dice.append(f"Die {i + 1}({die_value})")
 
         print("🎲 MODEL ACTION: Rolling dice")
         if keep_dice:

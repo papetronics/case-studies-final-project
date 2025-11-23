@@ -481,7 +481,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
 
     def get_policy_loss(
         self,
-        rolling_probs: torch.Tensor,
+        rolling_logits: torch.Tensor,
         rolling_actions_flat: torch.Tensor,
         scoring_probs: torch.Tensor,
         scoring_actions_flat: torch.Tensor,
@@ -490,13 +490,20 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Calculate policy loss using log probabilities and advantages."""
         rolling_dist: torch.distributions.Distribution
+
+        rolling_probs = (
+            torch.nn.functional.sigmoid(rolling_logits)
+            if self.rolling_action_representation == RollingActionRepresentation.BERNOULLI
+            else torch.nn.functional.softmax(rolling_logits, dim=-1)
+        )
+
         if self.rolling_action_representation == RollingActionRepresentation.CATEGORICAL:
-            rolling_dist = torch.distributions.Categorical(rolling_probs)
+            rolling_dist = torch.distributions.Categorical(probs=rolling_probs)
             rolling_log_probs = rolling_dist.log_prob(
                 rolling_actions_flat.float()
             )  # (BATCH_SIZE * 39,)
         else:  # BERNOULLI
-            rolling_dist = torch.distributions.Bernoulli(rolling_probs)
+            rolling_dist = torch.distributions.Bernoulli(probs=rolling_probs)
             rolling_log_probs = rolling_dist.log_prob(rolling_actions_flat.float()).sum(
                 dim=1
             )  # (BATCH_SIZE * 39,)
@@ -513,7 +520,12 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
 
         ## =========================================================================================
         ## Diagnostics
-        entropy_stats = compute_entropy_stats(rolling_probs, scoring_probs, phases_flat)
+        entropy_stats = compute_entropy_stats(
+            rolling_probs,
+            scoring_probs,
+            phases_flat,
+            self.rolling_action_representation == RollingActionRepresentation.BERNOULLI,
+        )
         if hasattr(self, "_epoch_metrics"):
             self._epoch_metrics["entropy_roll"].append(float(entropy_stats["entropy_roll"].item()))
             self._epoch_metrics["entropy_score"].append(
