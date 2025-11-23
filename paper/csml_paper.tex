@@ -16,6 +16,7 @@
 \usepackage{pgfplots}
 \usepackage[inline]{enumitem} % note the [inline]
 \pgfplotsset{compat=newest}
+\usetikzlibrary{fit,backgrounds,positioning}
 \usepackage{url}
 
 \aclfinalcopy % Uncomment this line for the final submission
@@ -33,13 +34,12 @@
 \begin{document}
 \maketitle
 \begin{abstract}
-  Write your abstract here. This should be a concise summary of your work,
-  including the problem you're addressing, your approach, and key results.
-  Keep it to about 150-250 words.
+  <ABSTRACT GOES HERE>
 \end{abstract}
 
 \section{Introduction}
-<600-900 words> % 361 words so far
+% <600-900 words>
+% 342 words
 \subsection{Yahtzee as a Reinforcement Learning Benchmark}
 While on the surface \textit{Yahtzee} appears to be a trivial dice game \cite{hasbro-2022-yahtzee-rules}, it is actually a complex stochastic optimization problem with combinatorial complexity.
 
@@ -47,32 +47,33 @@ Although there are methods for computing optimal play in \textit{Yahtzee} using 
 \textit{Yahtzee} offers a rich environment for testing reinforcement learning (RL) solutions due to its combination of a large but manageable state space, randomness, ease of simulation, subtle strategic considerations, and easily identifiable subproblems.
 While there have been a small number of efforts to create RL agents for \textit{Yahtzee}, a comprehensive approach using self-play has yet to be published.
 It remains an open question of whether deep RL methods can approach optimal performance in full-game \textit{Yahtzee}, and which architectural and training choices most affect learning efficiency and final performance.
-Similarly, a robust solution for multiplayer \textit{Yahtzee} using RL methods has yet to be demonstrated.
+Similarly, a robust RL-based solution for multiplayer \textit{Yahtzee} using RL methods has yet to be demonstrated.
 
 \textit{Yahtzee} is an ideal candidate to serve as a bridge between simple toy problems such as \textit{Lunar Lander} \cite{brockman2016openai} and extremely complex games like Go \cite{silver2016alphago}.
 Typical small benchmarks often offer low stochasticity and simple combinatorics whereas complex games have intractable state spaces and require massive computational resources and heavy engineering to solve.
 \textit{Yahtzee} sits in a middle ground where an analytic optimum exists, but reaching it with RL methods is non-trivial.
-Its blend of stochasticity and large state space makes it a challenging yet feasible benchmark for RL research.
+These factors make it a challenging yet feasible benchmark for RL research.
 
 \subsection{Objectives}
 
-In this paper we aim to methodically study whether a deep RL agent can achieve near DP-optimal performance in full-game solitaire \textit{Yahtzee} using only self-play without any shaping rewards or expert demonstrations,
+In this paper we aim to methodically study whether a deep RL agent can achieve near DP-optimal performance in full-game solitaire \textit{Yahtzee} using only self-play,
 and how architectural and training choices affect learning efficiency.
 
 Concretely, we ask: \begin{enumerate*}[label=(\roman*)]
   \item How does the trade-off between maximizing single-turn expected score and full-game performance behave?
-  \item Can a shaping-free self-play agent can reach optimal performance under a fixed training budget?
-  \item Which design choices (state and action encodings, variance controls, baselines, entropy, etc) most affect final performance?
+  \item Can an agent reach optimal performance under a fixed training budget, using only self-play?
+  \item Which design choices (state and action encodings, credit assignment, variance controls, baselines, entropy, etc) most affect final performance?
   \item What failure modes exist in learned policies and how can they be addressed?
   \item Can we find a successful architecture which could be adapted to multiplayer \textit{Yahtzee}?
 \end{enumerate*}
 
 \section{Related Work}
-<600-800 words> % 930 words so far
+% <600-800 words>
+% 1097 words
 
 \subsection{Policy Gradient Methods and Variance Reduction}
 \subsubsection{Return Estimation}
-Note that in this paper, we will follow notation from \citet{sutton-2018-reinforcement-book} and the policy gradient theorem \cite{sutton-2000-policy-gradient}.
+In this paper, we follow notation from \citet{sutton-2018-reinforcement-book} and the policy gradient theorem \cite{sutton-2000-policy-gradient}.
 
 In long episodic games, the choice of return calculation affects sample efficiency, bias, and variance.
 Monte-Carlo (MC) returns $G_{t}^{MC}$ use a summation over the full series of rewards until the end of the episode.
@@ -89,7 +90,7 @@ While TD estimates are biased (since they rely on future value estimates to be a
 In TD(0), the value function effectively learns using a single timestep; this is a much simpler problem than estimating the entire sequence of rewards.
 This often makes TD methods more sample efficient than REINFORCE, and provides the benefit of being able to learn online rather than waiting until the end of an episode.
 
-Pure TD methods can be viewed as a form of approximate dynamic programming, making them a natural fit for domains where dynamic-programming solutions exist \cite{bertsekas1996neuro}.
+Pure TD methods can also be viewed as a form of approximate dynamic programming, making them a natural fit for domains where dynamic-programming solutions exist \cite{bertsekas1996neuro}.
 
 \subsubsection{Policy Gradient Methods}
 Policy-gradient methods are a family of algorithms which directly optimize a parameterized policy $\pi_{\theta}$ to follow an estimate of the performance gradient.
@@ -115,6 +116,9 @@ Entropy regularization prevents early collapse to suboptimal policies by encoura
 Gradient clipping is frequently used alongside these techniques to stop rare, but large, gradient updates from destabilizing training \cite{pascanu-2013-rnn-clipping}.
 While high variance is unavoidable in deep reinforcement learning, poor performance can often be linked to numerical instability rather than inherent flaws in algorithmic design \cite{bjorck-2022-high-variance};
 simple tweaks like normalizing features before activations can dramatically improve stability.
+
+\subsubsection{Reward Shaping}
+<Do we need a section on reward shaping?>
 
 \subsection{Complex Games}
 Typical board and dice games have extreme state complexity or stochasticity; reinforcement learning methods are a natural fit for these problems.
@@ -143,18 +147,19 @@ Some prior attempts have been made to apply reinforcement learning to \textit{Ya
 YAMS attempted to use Q-learning and SARSA to attempt to learn \textit{Yahtzee}, but was not able to surpass $~120$ points median \cite{belaich-2024-yams}.
 Likewise, \citet{kang-2018-yahtzee-rl} applied hierarchical MAX-Q, achieving an average score of $129.58$ and a 67\% win-rate over a 1-turn expectimax agent baseline.
 \citet{vasseur-2019-strategy-ladders} explored strategy ladders for multiplayer \textit{Yahtzee}, to understand how sensitive Deep-Q networks were to the upper-bonus threshold.
-Later, \cite{yuan-2023-two-player-yahtzee} applied Deep-Q networks to the adversarial setting.
+Later, \cite{yuan-2023-two-player-yahtzee} applied Deep-Q networks to the adversarial setting, with moderate success.
 
 Additionally, some recent informal work has reported success using RL methods for \textit{Yahtzee}.
 For example, Yahtzotron used heavy supervised pretraining and A2C to achieve an average of $~236$ points \cite{Haefner2021Yahtzotron}.
-Although it is unclear if the results are repeatable, \citet{DutschkeYahtzee} reports a deep-Q agent achieving a score of $241.6 \pm 40.7$ after just 8,000 games.
+Although not a true reinforcement learning approach, \citet{DutschkeYahtzee} reports a statistical agent achieving a score of $241.6 \pm 40.7$ after just 8,000 games, using a combination of heuristics.
 
 No prior work systematically explores policy gradient methods with variance reduction tricks on full-game solitaire \textit{Yahtzee}, attempts transfer learning from single-turn optimization, provides a detailed ablation and failure mode analysis,
 or offers an architecture that is theoretically transferrable to multiplayer settings.
 
 
 \section{Problem Formulation}
-<400-600 words> % 703 words so far
+% <400-600 words>
+% 615 words so far
 \subsection{Game Description}
 \subsubsection{Rules of Yahtzee}
 \textit{Yahtzee} is played with five standard six-sided dice and a shared scorecard containing 13 categories.
@@ -275,11 +280,12 @@ allowing us to analyze the network architecture and training regime in a low-var
 \subsection{Full-Game Optimization Task}
 In the full-game optimization task, 13-turn episodes (totalling 39 individual steps) are played to completion.
 The objective again is to maximize the total score at the end of the game.
-This task is more challenging due to the longer horizon, increased variance, and the requirement for
-the network to learn explicit long-term strategies, such as planning for the upper bonus.
+This task is more challenging due to the longer horizon and increased variance.
+Additionally, the network must learn to balance optimal single-turn play with long-term strategies, such as planning for the upper bonus.
 
 \section{Methodology}
-<1400-1700 words> % 1076 words so far
+% <1400-1700 words>
+% 1076 words so far
 \subsection{State Representation \& Input Features}
 The design of $\mathbf{\phi}(\mathbf{s}) \rightarrow \mathbf{x}$ is one of the most critical components to the performance of a model \cite{sutton-2018-reinforcement-book}.
 
@@ -297,15 +303,14 @@ however, it comes at the cost of implicitly biasing the model to specific dice o
 However, eliminating ordering information requires the model to either waste capacity learning permutation invariance or be inherently supportive of invariance (e.g. with self-attention).
 It also requires a different action representation, since actions can no longer correspond to specific dice indices. We attempted 5 different dice representations:
 
-\begin{itemize}
-  \item \textbf{One-hot encoding of ordered dice:} Each die is represented as a one-hot vector of length 6, and the 5 dice are concatenated in order.
-  \item \textbf{Bin representation:} Here we pass through the dice face count vector $\mathbf{n}(\mathbf{d})$.
-  \item \textbf{Combined representation:} Both ordered one-hot and bin representations are concatenated.
-  \item \textbf{Learnable encoding of dice:} Each die is represented as a learnable embedding vector of length $d$, and self-attention is applied.
-  \item \textbf{Learnable encoding of dice with positional encodings:} Similar to above, but with sinusoidal positional encodings added to each die embedding.
-\end{itemize}
-
-$$\phi_{\mathrm{dice}}(\mathbf{d}) = \text{(varies by representation)}$$
+\begin{align*}
+  \phi_{\mathrm{dice}}^{\mathrm{onehot}}(\mathbf{d})   & = \bigl[\mathrm{onehot}(d_1), \ldots, \mathrm{onehot}(d_5)\bigr]                                                  \\[4pt]
+  \phi_{\mathrm{dice}}^{\mathrm{bin}}(\mathbf{d})      & = \mathbf{n}(\mathbf{d})                                                                                          \\[4pt]
+  \phi_{\mathrm{dice}}^{\mathrm{combined}}(\mathbf{d}) & = \bigl[\phi_{\mathrm{dice}}^{\mathrm{onehot}}(\mathbf{d}), \phi_{\mathrm{dice}}^{\mathrm{bin}}(\mathbf{d})\bigr] \\[4pt]
+  \phi_{\mathrm{dice}}^{\mathrm{emb}}(\mathbf{d})      & = \bigl[\mathbf{E}[d_1], \ldots, \mathbf{E}[d_5]\bigr]                                                            \\[4pt]
+  \phi_{\mathrm{dice}}^{\mathrm{pos\_emb}}(\mathbf{d}) & = \bigl[\mathbf{E}[d_1], \ldots, \mathbf{E}[d_5]\bigr] + \mathbf{PE}
+\end{align*}
+where $\mathbf{E} \in \mathbb{R}^{6 \times d_{\mathrm{emb}}}$ is a learnable embedding matrix and $\mathbf{PE}$ is a sinusoidal positional encodings.
 
 \subsubsection{Scorecard Representation}
 There are two important pieces of information $\mathbf{\phi}$ must encode about the scorecard: whether a category is open or closed,
@@ -319,13 +324,16 @@ $$\phi_{\mathrm{bonus}}(\mathbf{c}) = \min\biggl(\frac{1}{63} \sum_{i=1}^{6} c_{
 There are some key features that can be computed from the raw state, providing these can allow the model to focus on higher-level patterns.
 
 \begin{align*}
-  \phi_{\mathrm{progress}}(t)       & = \frac{t}{12}                                                                        \\[4pt]
-  \phi_{\mathrm{rolls}}(r)          & \in \{0,1\}^3, \quad \|\phi_{\mathrm{rolls}}(r)\|_1 = 1                               \\[4pt]
-  \phi_{\mathrm{joker}}(\mathbf{c}) & \in \{0,1\}, \quad \text{(Joker rule active)}                                         \\[4pt]
-  \phi_{\mathrm{potential}}(\mathbf{d}, \mathbf{c})
-                                    & = \bigl(\mathbf{u}(\mathbf{c}) \odot \mathbf{f}(\mathbf{d})\bigr) \oslash \mathbf{m},
+  \phi_{\mathrm{progress}}(t)       & = \frac{t}{12}                                          \\[4pt]
+  \phi_{\mathrm{rolls}}(r)          & \in \{0,1\}^3, \quad \|\phi_{\mathrm{rolls}}(r)\|_1 = 1 \\[4pt]
+  \phi_{\mathrm{joker}}(\mathbf{c}) & \in \{0,1\}, \quad \text{(Joker rule active)}
 \end{align*}
-where $m_k = \max_{\mathbf{d}'} f_k(\mathbf{d}')$ is the maximum possible score for category $k$.
+
+We also defined a lock-in feature to indicate whether scoring in a given upper category would secure the upper bonus:
+\begin{align*}
+  \phi_{\mathrm{lockin}}(\mathbf{d}, \mathbf{c})   & \in \{0,1\}^{6},                                                                                      \\[4pt]
+  \phi_{\mathrm{lockin},k}(\mathbf{d}, \mathbf{c}) & = \mathbb{I}\Bigl\{\sum_{i=1}^{6} \mathbf{u}(\mathbf{c})_i \cdot c_i + f_k(\mathbf{d}) \geq 63\Bigr\}
+\end{align*}
 
 \subsection{Action Representation}
 \subsubsection{Rolling Action}
@@ -348,6 +356,7 @@ The scoring action is always a categorical distribution over the 13 scoring cate
 \]
 
 \subsubsection{Rewards}
+<TODO: This might need updating>
 We intentionally do not use any reward shaping or extra rewards beyond the change in score after each action.
 While this poses a greater challenge for the model, it ensures that the learned policy is not biased by hand-crafted rewards,
 and allows us to better focus on other aspects of the learning process.
@@ -362,6 +371,95 @@ The width of each layer is 386-512 neurons, found through empirical hyperparamet
 but aligning our model capacity with theoretical maximums \cite{horne-1994-bounds-rnn-fsm} and minimums \cite{hanin-2017-bounded-width-relu}.
 We utilize layer normalization for improved training stability \cite{ba-2016-layernorm, bjorck-2022-high-variance}
 and Swish activations \cite{ramachandran-2017-swish} to introduce stable non-linearities.
+
+The basic block used throughout the network is shown in Figure~\ref{fig:basic-block}:
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[
+      node distance=0.8cm,
+      block/.style={rectangle, draw, minimum width=3cm, minimum height=0.6cm, align=center},
+    ]
+
+    % Input (outside the box)
+    \node (input) {Input};
+
+    % Linear layer
+    \node[block, below=0.4cm of input] (linear) {Linear};
+
+    % Layer Norm
+    \node[block, below of=linear] (layernorm) {LayerNorm};
+
+    % Swish activation
+    \node[block, below of=layernorm] (swish) {Swish};
+
+    % Output (outside the box)
+    \node[below=0.4cm of swish] (output) {Output};
+
+    % Surrounding box (drawn on background layer)
+    \begin{scope}[on background layer]
+      \node[draw=gray!50, thick, rectangle, rounded corners=5pt, fit={(linear) (layernorm) (swish)}, inner sep=0.3cm, fill=gray!5] {};
+    \end{scope}
+
+    % Arrows
+    \draw[->, thick] (input) -- (linear);
+    \draw[->, thick] (linear) -- (layernorm);
+    \draw[->, thick] (layernorm) -- (swish);
+    \draw[->, thick] (swish) -- (output);
+
+  \end{tikzpicture}
+  \caption{Basic building block}
+  \label{fig:basic-block}
+\end{figure}
+
+The overall architecture is illustrated in Figure~\ref{fig:network-architecture}:
+
+\begin{figure}[H]
+  \centering
+  \begin{tikzpicture}[
+      node distance=1cm,
+      block/.style={rectangle, draw, minimum width=2.5cm, minimum height=0.6cm, align=center, fill=blue!10},
+      head/.style={rectangle, draw, minimum width=2.5cm, minimum height=0.6cm, align=center, fill=green!10},
+      output/.style={rectangle, draw, minimum width=2.5cm, minimum height=0.6cm, align=center, fill=orange!10},
+    ]
+
+    % Input
+    \node[block] (input) {State Features $\phi(\mathbf{s})$};
+
+    % Trunk blocks
+    \node[block, below of=input] (trunk1) {Block 1};
+    \node[block, below of=trunk1] (trunk2) {Block 2};
+    \node[block, below of=trunk2] (trunk3) {Block 3};
+
+    % Split into three heads
+    \node[head, below left of=trunk3, xshift=-2cm, yshift=-1.5cm] (roll_head) {Roll Head Block};
+    \node[head, below of=trunk3, yshift=-1.5cm] (score_head) {Score Head Block};
+    \node[head, below right of=trunk3, xshift=2cm, yshift=-1.5cm] (value_head) {Value Head Block};
+
+    % Outputs
+    \node[output, below of=roll_head] (roll_out) {Roll Action\\(Bernoulli/Categorical)};
+    \node[output, below of=score_head] (score_out) {Score Action\\(Categorical)};
+    \node[output, below of=value_head] (value_out) {Value Estimate\\(Scalar)};
+
+    % Main trunk arrows
+    \draw[->, thick] (input) -- (trunk1);
+    \draw[->, thick] (trunk1) -- (trunk2);
+    \draw[->, thick] (trunk2) -- (trunk3);
+
+    % Split to heads
+    \draw[->, thick] (trunk3) -- (roll_head);
+    \draw[->, thick] (trunk3) -- (score_head);
+    \draw[->, thick] (trunk3) -- (value_head);
+
+    % Head to output arrows
+    \draw[->, thick] (roll_head) -- (roll_out);
+    \draw[->, thick] (score_head) -- (score_out);
+    \draw[->, thick] (value_head) -- (value_out);
+
+  \end{tikzpicture}
+  \caption{Overall network architecture with shared trunk and three specialized heads}
+  \label{fig:network-architecture}
+\end{figure}
 
 \subsubsection{Policy and Value Heads}
 We utilize two distinct heads for the rolling and scoring actions, allowing the model to specialize in
@@ -521,7 +619,7 @@ Likewise, we compute category statistics to analyze strategic preferences of dif
 \section{Results}
 
 \subsection{Single-Turn Results}
-<600-700 words>
+% <600-700 words>
 \subsubsection{Baseline Model Performance}
 For state representation, the baseline model utilizes a combined dice representation (ordered one-hot + bin),
 the category usage mask for the scorecard, and computed features for bonus progress, and roll index.
@@ -667,7 +765,7 @@ We expect that there is a Pareto frontier between these two objectives, and that
 \end{figure}
 
 \subsection{Full-Game Results}
-<600-700 words>
+% <600-700 words>
 For the full-game model, we added several additional features to the state representation: $\phi_{\mathrm{progress}}(t)$ and $\phi_{\mathrm{potential}}(\mathbf{d}, \mathbf{c})$
 while reusing the same underlying neural network architecture as the single-turn model. These additions were necessary to provide the model with sufficient context to make long-term strategic decisions.
 While the $\phi_{\mathrm{progress}}(t)$ feature could be inferred from the scorecard, the model struggled to do so reliably.
@@ -779,7 +877,7 @@ PPO proved to be the most effective algorithm for full-game optimization, achiev
 
 
 \subsection{Policy Analysis}
-<300-500 words>
+% <300-500 words>
 \subsubsection{Category Usage Distribution}
 <Bar chart showing average score per category for different agents>
 
@@ -796,11 +894,11 @@ PPO proved to be the most effective algorithm for full-game optimization, achiev
 <Analyze failures during training such as policy collapse>
 
 \section{Discussion}
-<400-600 words>
+% <400-600 words>
 <Discuss implications of results, limitations, and potential improvements.>
 
 \section{Conclusion and Future Work}
-<200-300 words>
+% <200-300 words>
 
 Learning a robust policy for \textit{Yahtzee} using reinforcement learning presents several interesting challenges and insights.
 First, we showed that \textit{Yahtzee}'s combinatorial action space and sparse rewards make it suitable as a non-trivial benchmark environment.
@@ -897,6 +995,5 @@ $P$ can be defined by the following generative process.
   \item If $r = 2$ and $a = i$, set $d' = d$, update $c' = \mathrm{score}(c,d,i)$,
         set $r' = 0,\ t' = t+1$.
 \end{itemize}
-
 
 \end{document}
