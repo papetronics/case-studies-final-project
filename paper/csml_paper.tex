@@ -417,44 +417,97 @@ The overall architecture is illustrated in Figure~\ref{fig:network-architecture}
 \begin{figure}[H]
   \centering
   \begin{tikzpicture}[
-      node distance=1cm,
-      block/.style={rectangle, draw, minimum width=2.5cm, minimum height=0.6cm, align=center, fill=blue!10},
-      head/.style={rectangle, draw, minimum width=2.5cm, minimum height=0.6cm, align=center, fill=green!10},
-      output/.style={rectangle, draw, minimum width=2.5cm, minimum height=0.6cm, align=center, fill=orange!10},
+      node distance=0.8cm,
+      layer/.style={rectangle, draw, minimum width=2.2cm, minimum height=0.5cm, align=center},
     ]
 
-    % Input
-    \node[block] (input) {State Features $\phi(\mathbf{s})$};
+    % Input (outside the box)
+    \node (input) {State Features $\phi(\mathbf{s})$};
 
-    % Trunk blocks
-    \node[block, below of=input] (trunk1) {Block 1};
-    \node[block, below of=trunk1] (trunk2) {Block 2};
-    \node[block, below of=trunk2] (trunk3) {Block 3};
+    % ===== TRUNK BLOCK 1 =====
+    \node[layer, below=0.6cm of input] (trunk1_linear) {Linear};
+    \node[layer, below of=trunk1_linear] (trunk1_ln) {LayerNorm};
+    \node[layer, below of=trunk1_ln] (trunk1_swish) {Swish};
 
-    % Split into three heads
-    \node[head, below left of=trunk3, xshift=-2cm, yshift=-1.5cm] (roll_head) {Roll Head Block};
-    \node[head, below of=trunk3, yshift=-1.5cm] (score_head) {Score Head Block};
-    \node[head, below right of=trunk3, xshift=2cm, yshift=-1.5cm] (value_head) {Value Head Block};
+    % ===== TRUNK BLOCK 2 =====
+    \node[layer, below=0.8cm of trunk1_swish] (trunk2_linear) {Linear};
+    \node[layer, below of=trunk2_linear] (trunk2_ln) {LayerNorm};
+    \node[layer, below of=trunk2_ln] (trunk2_swish) {Swish};
 
-    % Outputs
-    \node[output, below of=roll_head] (roll_out) {Roll Action\\(Bernoulli/Categorical)};
-    \node[output, below of=score_head] (score_out) {Score Action\\(Categorical)};
-    \node[output, below of=value_head] (value_out) {Value Estimate\\(Scalar)};
+    % ===== TRUNK BLOCK 3 =====
+    \node[layer, below=0.8cm of trunk2_swish] (trunk3_linear) {Linear};
+    \node[layer, below of=trunk3_linear] (trunk3_ln) {LayerNorm};
+    \node[layer, below of=trunk3_ln] (trunk3_swish) {Swish};
 
-    % Main trunk arrows
-    \draw[->, thick] (input) -- (trunk1);
-    \draw[->, thick] (trunk1) -- (trunk2);
-    \draw[->, thick] (trunk2) -- (trunk3);
+    % ===== ROLL HEAD =====
+    \node[layer, below left=0.8cm and 1.0cm of trunk3_swish] (roll_linear) {Linear};
+    \node[layer, below of=roll_linear] (roll_ln) {LayerNorm};
+    \node[layer, below of=roll_ln] (roll_swish) {Swish};
+    \node[below=0.6cm of roll_swish] (roll_out) {Roll};
 
-    % Split to heads
-    \draw[->, thick] (trunk3) -- (roll_head);
-    \draw[->, thick] (trunk3) -- (score_head);
-    \draw[->, thick] (trunk3) -- (value_head);
+    % ===== SCORE HEAD =====
+    \node[layer, below=0.8cm of trunk3_swish] (score_linear) {Linear};
+    \node[layer, below of=score_linear] (score_ln) {LayerNorm};
+    \node[layer, below of=score_ln] (score_swish) {Swish};
+    \node[below=0.6cm of score_swish] (score_out) {Score};
 
-    % Head to output arrows
-    \draw[->, thick] (roll_head) -- (roll_out);
-    \draw[->, thick] (score_head) -- (score_out);
-    \draw[->, thick] (value_head) -- (value_out);
+    % ===== VALUE HEAD =====
+    \node[layer, below right=0.8cm and 1.0cm of trunk3_swish] (value_linear) {Linear};
+    \node[layer, below of=value_linear] (value_ln) {LayerNorm};
+    \node[layer, below of=value_ln] (value_swish) {Swish};
+    \node[below=0.6cm of value_swish] (value_out) {Value};
+
+    % Surrounding boxes (drawn on background layer)
+    \begin{scope}[on background layer]
+      % Trunk Block 1
+      \node[draw=blue!50, thick, rectangle, rounded corners=5pt, fit={(trunk1_linear) (trunk1_ln) (trunk1_swish)}, inner sep=0.25cm, fill=blue!5] {};
+
+      % Trunk Block 2
+      \node[draw=blue!50, thick, rectangle, rounded corners=5pt, fit={(trunk2_linear) (trunk2_ln) (trunk2_swish)}, inner sep=0.25cm, fill=blue!5] {};
+
+      % Trunk Block 3
+      \node[draw=blue!50, thick, rectangle, rounded corners=5pt, fit={(trunk3_linear) (trunk3_ln) (trunk3_swish)}, inner sep=0.25cm, fill=blue!5] {};
+
+      % Roll Head
+      \node[draw=green!50, thick, rectangle, rounded corners=5pt, fit={(roll_linear) (roll_ln) (roll_swish)}, inner sep=0.25cm, fill=green!5] {};
+
+      % Score Head
+      \node[draw=green!50, thick, rectangle, rounded corners=5pt, fit={(score_linear) (score_ln) (score_swish)}, inner sep=0.25cm, fill=green!5] {};
+
+      % Value Head
+      \node[draw=green!50, thick, rectangle, rounded corners=5pt, fit={(value_linear) (value_ln) (value_swish)}, inner sep=0.25cm, fill=green!5] {};
+    \end{scope}
+
+    % Arrows - Trunk
+    \draw[->, thick] (input) -- (trunk1_linear);
+    \draw[->, thick] (trunk1_linear) -- (trunk1_ln);
+    \draw[->, thick] (trunk1_ln) -- (trunk1_swish);
+    \draw[->, thick] (trunk1_swish) -- (trunk2_linear);
+    \draw[->, thick] (trunk2_linear) -- (trunk2_ln);
+    \draw[->, thick] (trunk2_ln) -- (trunk2_swish);
+    \draw[->, thick] (trunk2_swish) -- (trunk3_linear);
+    \draw[->, thick] (trunk3_linear) -- (trunk3_ln);
+    \draw[->, thick] (trunk3_ln) -- (trunk3_swish);
+
+    % Arrows - Split to heads
+    \draw[->, thick] (trunk3_swish) -- (roll_linear);
+    \draw[->, thick] (trunk3_swish) -- (score_linear);
+    \draw[->, thick] (trunk3_swish) -- (value_linear);
+
+    % Arrows - Roll head
+    \draw[->, thick] (roll_linear) -- (roll_ln);
+    \draw[->, thick] (roll_ln) -- (roll_swish);
+    \draw[->, thick] (roll_swish) -- (roll_out);
+
+    % Arrows - Score head
+    \draw[->, thick] (score_linear) -- (score_ln);
+    \draw[->, thick] (score_ln) -- (score_swish);
+    \draw[->, thick] (score_swish) -- (score_out);
+
+    % Arrows - Value head
+    \draw[->, thick] (value_linear) -- (value_ln);
+    \draw[->, thick] (value_ln) -- (value_swish);
+    \draw[->, thick] (value_swish) -- (value_out);
 
   \end{tikzpicture}
   \caption{Overall network architecture with shared trunk and three specialized heads}
