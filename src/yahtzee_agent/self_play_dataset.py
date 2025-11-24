@@ -3,7 +3,12 @@ from typing import TYPE_CHECKING, TypedDict, cast
 import gymnasium as gym
 import torch
 
-from environments.full_yahtzee_env import Action, Observation, YahtzeeEnv
+from environments.full_yahtzee_env import (
+    MINIMUM_UPPER_SCORE_FOR_BONUS,
+    Action,
+    Observation,
+    YahtzeeEnv,
+)
 from yahtzee_agent.features import PhiFeature
 
 from .model import convert_rolling_action_to_hold_mask, get_input_dimensions, phi, sample_action
@@ -35,6 +40,9 @@ class EpisodeBatch(TypedDict):
     next_v_baseline: (
         torch.Tensor
     )  # (BATCH_SIZE*num_steps,) float32 - value estimates for next states
+    received_bonus: (
+        torch.Tensor
+    )  # (BATCH_SIZE*num_steps,) int (0 or 1) - whether episode received upper section bonus
 
 
 class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
@@ -113,7 +121,7 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
         """Return the number of batches per epoch."""
         return self.size
 
-    def __getitem__(self, idx: int) -> EpisodeBatch:  # noqa: PLR0912, PLR0915
+    def __getitem__(self, idx: int) -> EpisodeBatch:  # noqa: PLR0912, PLR0915, C901
         """Collect a batch of self-play episodes using the current policy network."""
         # idx is unused: each call collects a fresh batch of self-play trajectories
 
@@ -151,6 +159,9 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
         phases = torch.zeros(self.batch_size, num_steps, dtype=torch.long, device=device)
         v_baseline = torch.zeros(self.batch_size, num_steps, dtype=torch.float32, device=device)
 
+        # Track whether each episode received the upper section bonus
+        episode_received_bonus = torch.zeros(self.batch_size, dtype=torch.long, device=device)
+
         # ---- Rollout collection ----
         with torch.no_grad():
             for step_idx in range(num_steps):
@@ -162,7 +173,8 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
                 states[:, step_idx, :] = state_tensors
 
                 # Single batched forward pass for all envs: π_roll, π_score, V(s_t)
-                rolling_probs, scoring_probs, v_ests = self.policy_net.forward(state_tensors)
+                # ignore the bonus prediction, since we run a forward pass in training with grad
+                rolling_probs, scoring_probs, v_ests, _ = self.policy_net.forward(state_tensors)
                 v_baseline[:, step_idx] = v_ests.squeeze(-1)
 
                 # Sample actions
@@ -207,6 +219,12 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
                         next_obs, _ = env.reset()
                     observations[env_idx] = next_obs
 
+        # ---- Check which episodes received the upper section bonus ----
+        for env_idx, env in enumerate(self.envs):
+            env_unwrapped: YahtzeeEnv = cast("YahtzeeEnv", env.unwrapped)
+            if int(env_unwrapped.state.score_sheet[0:6].sum()) >= MINIMUM_UPPER_SCORE_FOR_BONUS:
+                episode_received_bonus[env_idx] = 1
+
         # ---- Build next_v_baseline via time-shift (no second forward) ----
         # v_baseline[e, t] = V(s_t)
         # We want next_v_baseline[e, t] = V(s_{t+1}) for TD(0) bootstrapping.
@@ -228,6 +246,12 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
         else:
             rolling_actions_flat = rolling_actions.view(-1)
 
+        # Broadcast episode_received_bonus (B,) to (B, T) then flatten to (B*T,)
+        received_bonus_expanded = episode_received_bonus.unsqueeze(1).expand(
+            self.batch_size, num_steps
+        )
+        received_bonus_flat = received_bonus_expanded.reshape(-1)
+
         batch: EpisodeBatch = {
             "states": states_flat,
             "rolling_actions": rolling_actions_flat,
@@ -237,5 +261,6 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
             "phases": phases_flat,
             "v_baseline": v_baseline_flat,
             "next_v_baseline": next_v_baseline_flat,
+            "received_bonus": received_bonus_flat,
         }
         return batch

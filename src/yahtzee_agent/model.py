@@ -9,6 +9,7 @@ from environments.full_yahtzee_env import ActionType, Observation
 from utilities.activation_functions import ActivationFunction, ActivationFunctionName
 from utilities.scoring_helper import NUMBER_OF_DICE
 from utilities.sequential_block import SequentialBlock
+from yahtzee_agent.modules.bonus_likelihood_head import BonusLikelihoodHead
 
 from .features import PhiFeature
 from .modules import Block, RollingHead, ScoringHead, ValueHead
@@ -190,6 +191,8 @@ class YahtzeeAgent(nn.Module):
         ).to(self.device)
         self.value_head = ValueHead(hidden_size, activation).to(self.device)
 
+        self.bonus_likelihood_head = BonusLikelihoodHead(hidden_size, activation).to(self.device)
+
         # Initialize weights for better behavior at high learning rates
         if he_kaiming_initialization:
             self._initialize_weights()
@@ -221,14 +224,24 @@ class YahtzeeAgent(nn.Module):
         self.action_spine.apply(self._init_kaiming_linear)
 
         # Initialize head hidden layers (all but last)
-        for head in [self.rolling_head, self.scoring_head, self.value_head]:
+        for head in [
+            self.rolling_head,
+            self.scoring_head,
+            self.value_head,
+            self.bonus_likelihood_head,
+        ]:
             modules_list = list(head.modules())
             for module in modules_list[:-1]:
                 self._init_kaiming_linear(module)
 
         # Initialize final layers with small orthogonal gain
         # Find the last Linear layer in each head and apply final initialization
-        for head in [self.rolling_head, self.scoring_head, self.value_head]:
+        for head in [
+            self.rolling_head,
+            self.scoring_head,
+            self.value_head,
+            self.bonus_likelihood_head,
+        ]:
             for module in reversed(list(head.modules())):
                 if isinstance(module, nn.Linear):
                     self._init_final_linear(module)
@@ -239,11 +252,15 @@ class YahtzeeAgent(nn.Module):
         """Get the device of the model parameters."""
         return next(self.parameters()).device
 
-    def __call__(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def __call__(
+        self, x: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """Call method to enable direct calls to the model."""
         return self.forward(x)
 
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(
+        self, x: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """Forward pass through the model."""
         spine = self.network(x)
 
@@ -258,5 +275,11 @@ class YahtzeeAgent(nn.Module):
 
         scoring_output = self.scoring_head(spine, mask)
         value_output = self.value_head(spine)
+        bonus_likelihood_output = self.bonus_likelihood_head(spine)
 
-        return rolling_output.squeeze(0), scoring_output.squeeze(0), value_output.squeeze(0)
+        return (
+            rolling_output.squeeze(0),
+            scoring_output.squeeze(0),
+            value_output.squeeze(0),
+            bonus_likelihood_output.squeeze(0),
+        )

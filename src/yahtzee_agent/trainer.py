@@ -163,7 +163,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
                 )  # (num_active, state_size)
 
                 # Single batched forward pass
-                rolling_probs, scoring_probs, v_ests = self.policy_net.forward(state_tensors)
+                rolling_probs, scoring_probs, v_ests, _ = self.policy_net.forward(state_tensors)
 
                 # Separate deterministic and stochastic actions
                 # Deterministic for first num_det, stochastic for remaining
@@ -398,6 +398,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         rewards_flat = batch["rewards"]
         next_v_baseline = batch["next_v_baseline"]
         phases_flat = batch["phases"]
+        received_bonus = batch["received_bonus"]
 
         # Calculate num_episodes and steps_per_episode from flattened shape
         # single_turn: 338 episodes x 3 steps = 1014 total
@@ -407,7 +408,9 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         num_episodes = total_steps // steps_per_episode
 
         # Forward pass through current policy to get probabilities and value estimates
-        rolling_probs, scoring_probs, v_ests = self.policy_net.forward(states_flat)
+        rolling_probs, scoring_probs, v_ests, bonus_likelihood_logit = self.policy_net.forward(
+            states_flat
+        )
 
         normalized_advantage, returns = self.get_advantage(
             num_episodes, steps_per_episode, rewards_flat, next_v_baseline, v_ests, phases_flat
@@ -425,6 +428,19 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         loss: torch.Tensor = (
             policy_loss + self.critic_coeff * self.get_value_loss(v_ests, returns) + entropy_loss
         )
+
+        if self.algorithm == Algorithm.A2C:
+            bonus_likelihood_loss_weight = self.critic_coeff / 5.0  # Smaller than critic loss
+            bonus_likelihood_loss = torch.nn.functional.binary_cross_entropy_with_logits(
+                bonus_likelihood_logit.squeeze(), received_bonus.float()
+            )
+            loss += bonus_likelihood_loss_weight * bonus_likelihood_loss
+            self.log(
+                "train/bonus_likelihood_loss",
+                bonus_likelihood_loss_weight * bonus_likelihood_loss,
+                prog_bar=False,
+            )
+            self.log("train/bonus_likelihood_loss_raw", bonus_likelihood_loss, prog_bar=False)
 
         self.log("train/total_loss", loss, prog_bar=True)
         self.log("lr", self.trainer.optimizers[0].param_groups[0]["lr"], prog_bar=False)
