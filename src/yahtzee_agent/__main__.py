@@ -247,6 +247,13 @@ def main() -> None:  # noqa: PLR0915
             "Weight for the bonus likelihood regression loss term",
             display_name="Bonus regression loss weight",
         ),
+        ConfigParam(
+            "bonus_regression_shaping_weight",
+            float,
+            0.1,
+            "Weight for the bonus likelihood regression shaping loss term",
+            display_name="Bonus regression shaping weight",
+        ),
     ]
 
     # Initialize project with configuration
@@ -284,6 +291,7 @@ def main() -> None:  # noqa: PLR0915
     rolling_action_representation = config["rolling_action_representation"]
     algorithm = config["algorithm"]
     bonus_regression_loss_weight = config["bonus_regression_loss_weight"]
+    bonus_regression_shaping_weight = config["bonus_regression_shaping_weight"]
 
     torch.set_float32_matmul_precision("medium")
 
@@ -392,6 +400,7 @@ def main() -> None:  # noqa: PLR0915
             rolling_action_representation=rolling_action_representation,
             he_kaiming_initialization=he_kaiming_initialization,
             bonus_regression_loss_weight=bonus_regression_loss_weight,
+            bonus_regression_shaping_weight=bonus_regression_shaping_weight,
         )
 
         # Save hyperparameters explicitly
@@ -422,6 +431,7 @@ def main() -> None:  # noqa: PLR0915
                 "rolling_action_representation": rolling_action_representation,
                 "algorithm": algorithm,
                 "bonus_regression_loss_weight": bonus_regression_loss_weight,
+                "bonus_regression_shaping_weight": bonus_regression_shaping_weight,
             }
         )
 

@@ -40,6 +40,12 @@ class EpisodeBatch(TypedDict):
     next_v_baseline: (
         torch.Tensor
     )  # (BATCH_SIZE*num_steps,) float32 - value estimates for next states
+    current_upper_potential: (
+        torch.Tensor
+    )  # (BATCH_SIZE*num_steps,) float32 - bonus potential for current states
+    next_upper_potential: (
+        torch.Tensor
+    )  # (BATCH_SIZE*num_steps,) float32 - bonus potential for next states
     received_bonus: (
         torch.Tensor
     )  # (BATCH_SIZE*num_steps,) int (0 or 1) - whether episode received upper section bonus
@@ -65,6 +71,8 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
       - "phases":          (B*num_steps,)
       - "v_baseline":      (B*num_steps,)        = V(s_t)
       - "next_v_baseline": (B*num_steps,)        = V(s_{t+1}) for t < T-1, 0 at last step
+      - "current_upper_potential": (B*num_steps,) = Φ(s_t) - bonus potential for current state
+      - "next_upper_potential":    (B*num_steps,) = Φ(s_{t+1}) - bonus potential for next state
     """
 
     def __init__(
@@ -158,6 +166,9 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
         )
         phases = torch.zeros(self.batch_size, num_steps, dtype=torch.long, device=device)
         v_baseline = torch.zeros(self.batch_size, num_steps, dtype=torch.float32, device=device)
+        current_upper_potential = torch.zeros(
+            self.batch_size, num_steps, dtype=torch.float32, device=device
+        )
 
         # Track whether each episode received the upper section bonus
         episode_received_bonus = torch.zeros(self.batch_size, dtype=torch.float32, device=device)
@@ -172,10 +183,12 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
 
                 states[:, step_idx, :] = state_tensors
 
-                # Single batched forward pass for all envs: π_roll, π_score, V(s_t)
-                # ignore the bonus prediction, since we run a forward pass in training with grad
-                rolling_probs, scoring_probs, v_ests, _ = self.policy_net.forward(state_tensors)
+                # Single batched forward pass for all envs: π_roll, π_score, V(s_t), Φ(s_t)
+                rolling_probs, scoring_probs, v_ests, bonus_potential = self.policy_net.forward(
+                    state_tensors
+                )
                 v_baseline[:, step_idx] = v_ests.squeeze(-1)
+                current_upper_potential[:, step_idx] = bonus_potential.squeeze(-1)
 
                 # Sample actions
                 actions, _, _ = sample_action(
@@ -230,19 +243,25 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
         # if int(env_unwrapped.state.score_sheet[0:6].sum()) >= MINIMUM_UPPER_SCORE_FOR_BONUS:
         #    episode_received_bonus[env_idx] = 1
 
-        # ---- Build next_v_baseline via time-shift (no second forward) ----
-        # v_baseline[e, t] = V(s_t)
-        # We want next_v_baseline[e, t] = V(s_{t+1}) for TD(0) bootstrapping.
+        # ---- Build next_v_baseline and next_upper_potential via time-shift (no second forward) ----
+        # v_baseline[e, t] = V(s_t), current_upper_potential[e, t] = Φ(s_t)
+        # We want next_v_baseline[e, t] = V(s_{t+1}) and next_upper_potential[e, t] = Φ(s_{t+1})
         # For the last step (t = T-1), this value is unused; we set it to 0.
         next_v_baseline = torch.zeros_like(v_baseline)
+        next_upper_potential = torch.zeros_like(current_upper_potential)
         if num_steps > 1:
             next_v_baseline[:, :-1] = v_baseline[:, 1:]  # shift along time within each env
+            next_upper_potential[:, :-1] = current_upper_potential[
+                :, 1:
+            ]  # shift along time within each env
 
         # ---- Flatten all (B, T, ...) -> (B*T, ...) ----
         states_flat = states.view(-1, state_size)
         next_states_flat = next_states.view(-1, state_size)
         v_baseline_flat = v_baseline.view(-1)
         next_v_baseline_flat = next_v_baseline.view(-1)
+        current_upper_potential_flat = current_upper_potential.view(-1)
+        next_upper_potential_flat = next_upper_potential.view(-1)
         phases_flat = phases.view(-1)
         rewards_flat = rewards.view(-1)
 
@@ -266,6 +285,8 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
             "phases": phases_flat,
             "v_baseline": v_baseline_flat,
             "next_v_baseline": next_v_baseline_flat,
+            "current_upper_potential": current_upper_potential_flat,
+            "next_upper_potential": next_upper_potential_flat,
             "received_bonus": received_bonus_flat,
         }
         return batch

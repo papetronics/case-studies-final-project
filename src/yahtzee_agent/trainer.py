@@ -21,7 +21,7 @@ from utilities.diagnostics import (
     compute_rolling_mask_diversity,
     compute_training_health_score,
 )
-from utilities.scoring_helper import MINIMUM_UPPER_SCORE_FOR_BONUS, YAHTZEE_SCORE
+from utilities.scoring_helper import BONUS_POINTS, MINIMUM_UPPER_SCORE_FOR_BONUS, YAHTZEE_SCORE
 from yahtzee_agent.features import PhiFeature
 
 from .model import (
@@ -77,6 +77,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         he_kaiming_initialization: bool,
         algorithm: Algorithm,
         bonus_regression_loss_weight: float,
+        bonus_regression_shaping_weight: float,
     ):
         super().__init__()
 
@@ -111,6 +112,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         self.critic_coeff: float = critic_coeff
         self.num_steps_per_episode: int = num_steps_per_episode
         self.bonus_regression_loss_weight: float = bonus_regression_loss_weight
+        self.bonus_regression_shaping_weight: float = bonus_regression_shaping_weight
 
         self.validation_envs: list[gym.Env[Observation, Action]] = []  # Created on demand
 
@@ -401,6 +403,8 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         next_v_baseline = batch["next_v_baseline"]
         phases_flat = batch["phases"]
         received_bonus = batch["received_bonus"]
+        current_upper_potential = batch.get("current_upper_potential")
+        next_upper_potential = batch.get("next_upper_potential")
 
         # Calculate num_episodes and steps_per_episode from flattened shape
         # single_turn: 338 episodes x 3 steps = 1014 total
@@ -415,7 +419,14 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         )
 
         normalized_advantage, returns = self.get_advantage(
-            num_episodes, steps_per_episode, rewards_flat, next_v_baseline, v_ests, phases_flat
+            num_episodes,
+            steps_per_episode,
+            rewards_flat,
+            next_v_baseline,
+            v_ests,
+            phases_flat,
+            current_upper_potential,
+            next_upper_potential,
         )
 
         policy_loss, entropy_loss = self.get_policy_loss(
@@ -463,7 +474,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
 
         return loss
 
-    def get_advantage(
+    def get_advantage(  # noqa: PLR0913
         self,
         num_episodes: int,
         steps_per_episode: int,
@@ -471,6 +482,8 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         next_v_baseline: torch.Tensor,
         v_ests: torch.Tensor,
         phases_flat: torch.Tensor,
+        current_upper_potential: torch.Tensor | None,
+        next_upper_potential: torch.Tensor | None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Calculate advantages using either REINFORCE or A2C method."""
         gamma = self.get_gamma()
@@ -486,8 +499,16 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
                         g = rewards_flat[flat_idx] + gamma * g
                         returns[flat_idx] = g
             else:  # A2C
+                # Apply reward shaping if bonus potential is provided
+                if current_upper_potential is not None and next_upper_potential is not None:
+                    shaped_rewards = self.shaped_reward(
+                        rewards_flat, current_upper_potential, next_upper_potential
+                    )
+                else:
+                    shaped_rewards = rewards_flat
+
                 # A2C: one-step bootstrapping using r_t + gamma * V(s_{t+1}) (TD(0))
-                returns = rewards_flat + gamma * next_v_baseline.detach()
+                returns = shaped_rewards + gamma * next_v_baseline.detach()
 
         advantages = returns - v_ests.detach().squeeze()
 
@@ -508,6 +529,58 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         ## =========================================================================================
 
         return normalized_advantages, returns
+
+    def shaped_reward(
+        self,
+        rewards_flat: torch.Tensor,
+        current_potential_raw: torch.Tensor,
+        next_potential_raw: torch.Tensor,
+    ) -> torch.Tensor:
+        """Calculate shaped rewards using potential-based shaping.
+
+        Converts normalized potential back to raw score, clamps to [0, 63],
+        and computes potential difference scaled by BONUS_POINTS.
+        """
+        # Convert normalized potential back to raw score: potential * 63 + 63
+        # Then clamp to [0, 63]
+        next_score = torch.clamp(
+            next_potential_raw.squeeze() * MINIMUM_UPPER_SCORE_FOR_BONUS
+            + MINIMUM_UPPER_SCORE_FOR_BONUS,
+            min=0.0,
+            max=float(MINIMUM_UPPER_SCORE_FOR_BONUS),
+        )
+        current_score = torch.clamp(
+            current_potential_raw.squeeze() * MINIMUM_UPPER_SCORE_FOR_BONUS
+            + MINIMUM_UPPER_SCORE_FOR_BONUS,
+            min=0.0,
+            max=float(MINIMUM_UPPER_SCORE_FOR_BONUS),
+        )
+
+        # Compute potential: (score / 63) * BONUS_POINTS
+        next_potential = (next_score / MINIMUM_UPPER_SCORE_FOR_BONUS) * BONUS_POINTS
+        current_potential = (current_score / MINIMUM_UPPER_SCORE_FOR_BONUS) * BONUS_POINTS
+
+        # Calculate potential difference
+        potential_diff = next_potential - current_potential
+        shaping_bonus = self.bonus_regression_shaping_weight * potential_diff
+
+        # Shaped reward = r + weight * (Phi(s') - Phi(s))
+        shaped_rewards: torch.Tensor = rewards_flat + shaping_bonus
+
+        ## =========================================================================================
+        ## Diagnostics
+        self.log("train/shaping_weight", self.bonus_regression_shaping_weight, prog_bar=False)
+        self.log("train/current_potential_mean", current_potential.mean(), prog_bar=False)
+        self.log("train/next_potential_mean", next_potential.mean(), prog_bar=False)
+        self.log("train/potential_diff_mean", potential_diff.mean(), prog_bar=False)
+        self.log("train/potential_diff_abs_mean", potential_diff.abs().mean(), prog_bar=False)
+        self.log("train/shaping_bonus_mean", shaping_bonus.mean(), prog_bar=False)
+        self.log("train/shaping_bonus_abs_mean", shaping_bonus.abs().mean(), prog_bar=False)
+        self.log("train/raw_reward_mean", rewards_flat.mean(), prog_bar=False)
+        self.log("train/shaped_reward_mean", shaped_rewards.mean(), prog_bar=False)
+        ## =========================================================================================
+
+        return shaped_rewards
 
     def get_policy_loss(
         self,
