@@ -373,7 +373,7 @@ We utilize layer normalization for improved training stability \cite{ba-2016-lay
 dropout with rate $p_d$ for regularization,
 and Swish activations \cite{ramachandran-2017-swish} to introduce stable non-linearities.
 
-\begin{figure}[htb]
+\begin{figure}[H]
   \centering
   \scalebox{0.70}{
     \begin{tikzpicture}[
@@ -425,17 +425,17 @@ and Swish activations \cite{ramachandran-2017-swish} to introduce stable non-lin
 
       % ===== ROLL OUTPUT =====
       \node[linear, below=0.6cm of roll_dropout] (roll_out_linear) {Linear};
-      \node[activation, below of=roll_out_linear] (roll_out_softmax) {Softmax};
+      \node[activation, below=0.7cm of roll_out_linear] (roll_out_softmax) {Softmax};
       \node[below=0.4cm of roll_out_softmax] (roll_out) {$\underbrace{a_{\mathrm{roll}}}_{\text{Rolling Action}}$};
 
       % ===== SCORE OUTPUT =====
       \node[linear, below=0.6cm of score_dropout] (score_out_linear) {Linear};
-      \node[activation, below of=score_out_linear] (score_out_softmax) {Softmax};
+      \node[activation, below=0.7cm of score_out_linear] (score_out_softmax) {Masked\\Softmax};
       \node[below=0.4cm of score_out_softmax] (score_out) {$\underbrace{a_{\mathrm{score}}}_{\text{Scoring Action}}$};
 
       % ===== VALUE OUTPUT =====
       \node[linear, below=0.6cm of value_ln] (value_out_linear) {Linear};
-      \node[activation, below of=value_out_linear] (value_out_elu) {ELU};
+      \node[activation, below=0.7cm of value_out_linear] (value_out_elu) {ELU};
       \node[below=0.4cm of value_out_elu] (value_out) {$\underbrace{\hat{V}(s)}_{\text{Value Est.}}$};
 
       % Surrounding boxes (drawn on background layer)
@@ -443,14 +443,14 @@ and Swish activations \cite{ramachandran-2017-swish} to introduce stable non-lin
         % Big trunk box (draw first, in background)
         \node[draw=blue!50, very thick, rectangle, rounded corners=8pt, fit={(trunk1_linear) (trunk1_swish) (trunk1_ln) (trunk1_dropout) (trunk2_linear) (trunk2_swish) (trunk2_ln) (trunk2_dropout) (trunk3_linear) (trunk3_swish) (trunk3_ln) (trunk3_dropout)}, inner sep=0.35cm, fill=blue!5] (trunk_box) {};
 
-        % Roll head box (include output layers)
-        \node[draw=green!50, very thick, rectangle, rounded corners=8pt, fit={(roll_linear) (roll_swish) (roll_ln) (roll_dropout) (roll_out_linear) (roll_out_softmax)}, inner sep=0.35cm, fill=green!5] (roll_box) {};
+        % Roll head box (exclude output softmax)
+        \node[draw=green!50, very thick, rectangle, rounded corners=8pt, fit={(roll_linear) (roll_swish) (roll_ln) (roll_dropout) (roll_out_linear)}, inner sep=0.35cm, fill=green!5] (roll_box) {};
 
-        % Score head box (include output layers)
-        \node[draw=purple!50, very thick, rectangle, rounded corners=8pt, fit={(score_linear) (score_swish) (score_ln) (score_dropout) (score_out_linear) (score_out_softmax)}, inner sep=0.35cm, fill=purple!5] (score_box) {};
+        % Score head box (exclude output softmax)
+        \node[draw=purple!50, very thick, rectangle, rounded corners=8pt, fit={(score_linear) (score_swish) (score_ln) (score_dropout) (score_out_linear)}, inner sep=0.35cm, fill=purple!5] (score_box) {};
 
         % Value head box (include output layers)
-        \node[draw=orange!50, very thick, rectangle, rounded corners=8pt, fit={(value_linear) (value_swish) (value_ln) (value_out_linear) (value_out_elu)}, inner sep=0.35cm, fill=orange!5] (value_box) {};
+        \node[draw=orange!50, very thick, rectangle, rounded corners=8pt, fit={(value_linear) (value_swish) (value_ln) (value_out_linear)}, inner sep=0.35cm, fill=orange!5] (value_box) {};
       \end{scope}
 
       % Individual blocks with dashed grey outline (drawn on top)
