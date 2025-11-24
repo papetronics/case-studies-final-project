@@ -216,7 +216,8 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
                     next_states[env_idx, step_idx, :] = next_state_tensor
                     env_unwrapped: YahtzeeEnv = cast("YahtzeeEnv", env.unwrapped)
                     episode_received_bonus[env_idx] = (
-                        env_unwrapped.state.score_sheet[0:6].sum() - MINIMUM_UPPER_SCORE_FOR_BONUS
+                        env_unwrapped.state.score_sheet[0:6].sum() * 1.0
+                        - MINIMUM_UPPER_SCORE_FOR_BONUS
                     ) / MINIMUM_UPPER_SCORE_FOR_BONUS
 
                     if terminated or truncated:
