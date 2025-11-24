@@ -1,0 +1,125 @@
+\section{Problem Formulation}
+% <400-600 words>
+% 615 words so far
+\subsection{Game Description}
+\subsubsection{Rules of Yahtzee}
+\textit{Yahtzee} is played with five standard six-sided dice and a shared scorecard containing 13 categories.
+Turns are rotated among players. A turn starts with a player rolling all five dice. They may then choose to keep
+some dice, and re-roll the remaining ones. This process can be repeated up to two more times, for a total of three rolls.
+After the final roll, the player must select one of the 13 scoring categories to apply to their current dice.
+Each category has specific scoring rules, and each can only be used once per game.
+
+\subsubsection{Mathematical Representation of Yahtzee}
+\label{sec:yahtzee-definitions}
+The space of all possible dice configurations is:
+$$\mathcal{D} \in \{1, 2, 3, 4, 5, 6\}^5$$
+and the current state of the dice is represented as:
+\begin{equation}
+    \mathbf{d} \in \mathcal{D}
+\end{equation}
+
+In addition, we can represent the score card as a vector of length 13, where each element corresponds to a scoring category:
+\begin{equation}
+    \mathbf{c} = (c_1, c_2, \ldots, c_{13}) \text{ where } c_i \in \mathcal{D}_i \cup \{\varnothing\}
+\end{equation}
+where $\varnothing$ indicates an unused category.
+
+Let us also define a dice face counting function which we can use to simplify score calculations:
+\begin{align}
+    n_v(\mathbf{d})        & = \sum_{i=1}^{5} \mathbb{I}(d_i = v),
+    \quad v \in \{1,\dots,6\}                                                 \nonumber \\
+    \mathbf{n}(\mathbf{d}) & = \big(n_1(\mathbf{d}),\dots,n_6(\mathbf{d})\big)
+\end{align}
+
+Let the potential score for each category be defined as follows (where detailed scoring rules can be found in Appendix~\ref{app:scoring}):
+\begin{equation}
+    \begin{aligned}
+        \mathbf{f}(\mathbf{d}) & =
+        \bigl(f_1(\mathbf{d}), f_2(\mathbf{d}), \ldots, f_{13}(\mathbf{d})\bigr)
+    \end{aligned}
+\end{equation}
+
+The current turn number can be represented as:
+\begin{equation}
+    t \in \{1, 2, \ldots, 13\}, \quad t = \sum_{i=1}^{13} \mathbb{I}(c_i \neq \varnothing)
+\end{equation}
+
+A single turn is composed of an initial dice roll, two optional re-rolls, and a final scoring decision.
+Let $r = 0$, with $r \in \{0,1,2\}$ which is the number of rolls taken so far.
+Prior to the first roll, the dice are randomized:
+$$
+    \mathbf{d}_{r=0} \sim U(\mathcal{D})
+$$
+
+The player must decide which dice to keep and which to re-roll. Let the player define a keep vector:
+\begin{equation}
+    \mathbf{k} \in \{0,1\}^5
+\end{equation}
+where $\mathbf{k}_i = 1$ indicates that die $i$ is kept, otherwise it is re-rolled.
+
+We can then define the transition of the dice state after a re-roll as:
+\begin{align*}
+    \mathbf{d}' & \sim U(\mathcal{D}),                          \\
+    \mathbf{d}_{r+1}
+                & = (\mathbf{1} - \mathbf{k}) \odot \mathbf{d}'
+    + \mathbf{k} \odot \mathbf{d}
+\end{align*}
+
+
+When $r=2$, the player must choose a scoring category to apply their current dice to. Define a scoring choice mask as a one-hot vector:
+\begin{equation}
+    \mathbf{s} \in \{0,1\}^{13}, \quad \|\mathbf{s}\|_1 = 1
+\end{equation}
+
+For the purposes of calculating the final (or current) score, any field that has not been scored yet can be counted as zero.
+We can define a mask vector for this:
+
+\begin{align}
+     & \mathbf{u}(\mathbf{c}) \in \{0,1\}^{13}                                                                  \nonumber \\
+     & \mathbf{u}(\mathbf{c})_i = \mathbb{I}\bigl(c_i \neq \varnothing\bigr), \quad \forall i = \{ 1, \ldots 13 \}
+\end{align}
+
+
+If a player achieves a total score of 63 or more in the upper section (categories 1-6), they receive a bonus of 35 points:
+$$
+    B(\mathbf{c}) = \begin{cases}
+        35, & \sum_{i=1}^{6} \mathbf{u}(\mathbf{c})_i \cdot \mathbf{c}_i \geq 63 \\
+        0,  & \text{otherwise}
+    \end{cases}
+$$
+
+The player's score can thus be calculated as:
+\begin{equation}
+    \mathrm{score}(\mathbf{c}) = B(\mathbf{c}) + \big\langle \mathbf{u}(\mathbf{c}), \mathbf{c} \big\rangle
+\end{equation}
+
+\subsection{MDP Formulation}
+We model \textit{Yahtzee} as a Markov Decision Process $(\mathcal S,\mathcal A,P,R,\gamma)$ \citep{Puterman1994MDP}.
+
+A state is represented as $\mathbf{s} = (\mathbf{d},\mathbf{c},r, t)$, where $\mathbf{d}$ is the current
+dice configuration, $\mathbf{c}$ the scorecard, and $r$ the roll index, and $t$ the current turn index
+(see Section~\ref{sec:yahtzee-definitions}).
+
+For simplicity, we define the action $\mathbf{a} = (\mathbf{k}, \mathbf{s})$, where $\mathbf{k}$ is the keep vector and $s$ is the score category choice.
+We can define the action as a parameterization of the policy: $\pi_{\theta}(\mathbf{a}|\mathbf{s}) = \pi_{\theta}(\phi(\mathbf{s}))$,
+where $\phi(\mathbf{s})$ is a feature representation of the state $\mathbf{s}$.
+
+The transition function $P$ is is specified in Appendix~\ref{app:transition-function}. Note that when $r < 2$, the $\mathbf{k}$ is used by $P$, otherwise $\mathbf{s}$ is used.
+
+The reward is the change in total score between steps $R_t = \mathrm{score}(c_{t+1}) - \mathrm{score}(c_t)$,
+and since we desire to maximize total score at the end of the game, we set $\gamma = 1$.
+
+
+\subsection{Single-Turn Optimization Task}
+In the single-turn optimization task, the agent is trained to maximize the expected score over a single turn.
+This task has 3 steps total; after being initialized with a random dice roll, the agent chooses which
+dice to keep and which to re-roll twice, and then selects a scoring category. A single reward is given at the end of the turn.
+
+This is a useful subproblem to study, as it isolates the decision-making process in a single turn,
+allowing us to analyze the network architecture and training regime in a low-variance setting.
+
+\subsection{Full-Game Optimization Task}
+In the full-game optimization task, 13-turn episodes (totalling 39 individual steps) are played to completion.
+The objective again is to maximize the total score at the end of the game.
+This task is more challenging due to the longer horizon and increased variance.
+Additionally, the network must learn to balance optimal single-turn play with long-term strategies, such as planning for the upper bonus.

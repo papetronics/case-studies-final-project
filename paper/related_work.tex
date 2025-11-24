@@ -1,0 +1,88 @@
+\section{Related Work}
+% <600-800 words>
+% 1097 words
+
+\subsection{Policy Gradient Methods and Variance Reduction}
+\subsubsection{Return Estimation}
+In this paper, we follow notation from \citet{sutton-2018-reinforcement-book} and the policy gradient theorem \cite{sutton-2000-policy-gradient}.
+
+In long episodic games, the choice of return calculation affects sample efficiency, bias, and variance.
+Monte-Carlo (MC) returns $G_{t}^{MC}$ use a summation over the full series of rewards until the end of the episode.
+This approach is unbiased but has high variance.
+In contrast, Temporal Difference methods use a "bootstrapped" estimate of future rewards to reduce variance.
+Essentially, they only consider received rewards $R$ in a specific time window, and use an estimate from the value function $V(S_{t+1})$ for future rewards beyond that window; this is called the TD estimate \cite{sutton-2018-reinforcement-book}.
+
+This time window can also be adjusted, depending on the task.
+For example, n-step returns $G_{t}^{TD(n)}$  interpolate between MC and single-step TD returns, allowing us to define a time horizon $n$ over which to sum rewards before bootstrapping.
+This lets us manually control the bias-variance tradeoff.
+A related method is $TD(\lambda)$, which uses an exponentially weighted average of n-step returns, effectively blending multiple time horizons into a single estimate controlled by $\lambda$ \cite{sutton-2018-reinforcement-book}.
+
+While TD estimates are biased (since they rely on future value estimates to be accurate), they have much lower variance than full-episode returns.
+In TD(0), the value function effectively learns using a single timestep; this is a much simpler problem than estimating the entire sequence of rewards.
+This often makes TD methods more sample efficient than REINFORCE, and provides the benefit of being able to learn online rather than waiting until the end of an episode.
+
+Pure TD methods can also be viewed as a form of approximate dynamic programming, making them a natural fit for domains where dynamic-programming solutions exist \cite{bertsekas1996neuro}.
+
+\subsubsection{Policy Gradient Methods}
+Policy-gradient methods are a family of algorithms which directly optimize a parameterized policy $\pi_{\theta}$ to follow an estimate of the performance gradient.
+A simple formulation of this is the REINFORCE algorithm \cite{williams-1992-reinforce}, which uses Monte-Carlo returns $G_{t}^{MC}$ on finite, episodic tasks; however, while unbiased, it suffers from high variance.
+One trick for reducing variance in REINFORCE is to subtract a baseline (often just an average return, but potentially a learned estimate) from an episode's MC return.
+This yields an advantage estimate that reduces variance without changing its expectation \cite{weaver2013optimal, greensmith-2004-variance-reduction}.
+
+Actor-critic methods \cite{konda-1999-actorcritic} such as Advantage Actor-Critic (A2C) and Asynchronous Advantage Actor-Critic (A3C) \cite{mnih-2016-a3c} typically use a TD-style return estimate to update the policy.
+These methods learn a separate value function: the critic $V_{\phi}$.
+This critic is used directly in the TD return estimate as the bootstrap value estimate for a state.
+For these methods, we can define the TD error $\delta_t$ as the difference between the TD estimate and the value estimate for the current state $V(S_t)$.
+This $\delta_t$ error is then used as the advantage estimate for a normal policy gradient update \cite{konda-1999-actorcritic}.
+
+Another widely used algorithm, proximal policy optimization (PPO), utilizes a clipped objective $L^{CLIP}(\theta)$
+and explicit Kullback-Leibler (KL) divergence control to dramatically reduce variance and ensure stable updates \cite{schulman-2017-ppo}.
+PPO uses the Generalized Advantage Estimate (GAE), which is closely related to $TD(\lambda)$, applying a $\lambda$-weighted mixture at the level of advantages \cite{schulman-2016-gae}.
+
+\subsubsection{Other Variance Reduction Techniques}
+Aside from return estimation, there is a host of other variance reduction techniques which can be employed for policy gradient methods.
+
+Normalizing advantages across a batch improves gradient conditioning and is common practice \cite{schulman2015trpo}.
+Entropy regularization prevents early collapse to suboptimal policies by encouraging exploration via the addition of an explicit entropy bonus term in the loss function \cite{williams-peng-1991-function-optimization, mnih-2016-a3c, schulman-2017-ppo}.
+Gradient clipping is frequently used alongside these techniques to stop rare, but large, gradient updates from destabilizing training \cite{pascanu-2013-rnn-clipping}.
+While high variance is unavoidable in deep reinforcement learning, poor performance can often be linked to numerical instability rather than inherent flaws in algorithmic design \cite{bjorck-2022-high-variance};
+simple tweaks like normalizing features before activations can dramatically improve stability.
+
+\subsubsection{Reward Shaping}
+<Do we need a section on reward shaping?>
+
+\subsection{Complex Games}
+Typical board and dice games have extreme state complexity or stochasticity; reinforcement learning methods are a natural fit for these problems.
+In a classic example, \citet{tesauro1995tdgammon} utilized temporal difference learning to achieve superhuman performance in \textit{Backgammon}, another game with a large state space and stochastic elements.
+Tetris, which is deterministic but combinatorial, has also been studied extensively; \citet{bertsekas1996tetris} utilized approximate dynamic programming methods to learn effective policies for the game,
+while \citet{gabillon2013tetris} effectively tackled the game using reinforcement learning methods.
+\citet{moravcik2017deepstack} demonstrated that \textit{Texas Hold'em}, a stochastic game with hidden information, could be effectively learned.
+Many other stochastic games can be learned well, so long as methods which ensure better exploration are used \cite{osband2016bootstrappeddqn}.
+Lastly, RL methods can be used to reach superhuman performance on adversarial games, even despite their sparse reward structures.
+For example, the game of Go, which has a notoriously intractable state space was solved using Monte-Carlo Tree Search and deep value networks \cite{silver2016alphago}.
+Subsequent work showed Go could be learned without the use of expert data, purely through self-play \cite{silver2017alphagozero}.
+In total, these works establish that RL methods can handle highly stochastic, combinatorial games, suggesting that \textit{Yahtzee} is a natural but underexplored candidate in this family.
+
+\subsection{DP Methods for Yahtzee}
+Solitaire \textit{Yahtzee} is a complex game with an upper bound of $~7 \times 10^{15}$ possible states in its state space.
+It has a high degree of stochasticity, as dice rolls are the primary driver of state transitions.
+Despite this, it has been analytically solved using dynamic programming techniques; \citet{verhoeff-1999-solitaire-yahtzee}, calculated that the average score achieved during ideal play is $254.59$ points, which serves as the gold-standard baselline for solitaire \textit{Yahtzee}.
+Later work by \citet{glenn-2006-optimal-yahtzee} optimized the DP approach via symmetries to propose a more efficient algorithm for computing the optimal policy, with a reachable state space of $~5.3 \times 10^8$ states \cite{glenn-2007-solitaire-yahtzee}.
+
+However, adversarial \textit{Yahtzee} remains an open problem.
+While \citet{pawlewicz-2011-multiplayer-yahtzee} showed that DP techniques can be expanded to 2-player adversarial \textit{Yahtzee}, they do not scale to more players due to the exponential growth of the state space.
+Approximation methods must be utilized for larger player counts.
+
+\subsection{Reinforcement Learning for Yahtzee}
+Some prior attempts have been made to apply reinforcement learning to \textit{Yahtzee}.
+YAMS attempted to use Q-learning and SARSA to attempt to learn \textit{Yahtzee}, but was not able to surpass $~120$ points median \cite{belaich-2024-yams}.
+Likewise, \citet{kang-2018-yahtzee-rl} applied hierarchical MAX-Q, achieving an average score of $129.58$ and a 67\% win-rate over a 1-turn expectimax agent baseline.
+\citet{vasseur-2019-strategy-ladders} explored strategy ladders for multiplayer \textit{Yahtzee}, to understand how sensitive Deep-Q networks were to the upper-bonus threshold.
+Later, \cite{yuan-2023-two-player-yahtzee} applied Deep-Q networks to the adversarial setting, with moderate success.
+
+Additionally, some recent informal work has reported success using RL methods for \textit{Yahtzee}.
+For example, Yahtzotron used heavy supervised pretraining and A2C to achieve an average of $~236$ points \cite{Haefner2021Yahtzotron}.
+Although not a true reinforcement learning approach, \citet{DutschkeYahtzee} reports a statistical agent achieving a score of $241.6 \pm 40.7$ after just 8,000 games, using a combination of heuristics.
+
+No prior work systematically explores policy gradient methods with variance reduction tricks on full-game solitaire \textit{Yahtzee}, attempts transfer learning from single-turn optimization, provides a detailed ablation and failure mode analysis,
+or offers an architecture that is theoretically transferrable to multiplayer settings.
