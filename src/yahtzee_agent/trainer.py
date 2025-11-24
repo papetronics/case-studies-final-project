@@ -76,6 +76,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         rolling_action_representation: str,
         he_kaiming_initialization: bool,
         algorithm: Algorithm,
+        bonus_regression_loss_weight: float,
     ):
         super().__init__()
 
@@ -109,6 +110,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         self.entropy_anneal_period: float = entropy_anneal_period
         self.critic_coeff: float = critic_coeff
         self.num_steps_per_episode: int = num_steps_per_episode
+        self.bonus_regression_loss_weight: float = bonus_regression_loss_weight
 
         self.validation_envs: list[gym.Env[Observation, Action]] = []  # Created on demand
 
@@ -430,14 +432,13 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         )
 
         if self.algorithm == Algorithm.A2C:
-            bonus_likelihood_loss_weight = 20.0  # Smaller than critic loss
             bonus_likelihood_loss = torch.nn.functional.mse_loss(
                 bonus_likelihood_logit.squeeze(), received_bonus.float()
             )
-            loss += bonus_likelihood_loss_weight * bonus_likelihood_loss
+            loss += self.bonus_regression_loss_weight * bonus_likelihood_loss
             self.log(
                 "train/bonus_likelihood_loss",
-                bonus_likelihood_loss_weight * bonus_likelihood_loss,
+                self.bonus_regression_loss_weight * bonus_likelihood_loss,
                 prog_bar=False,
             )
             self.log("train/bonus_likelihood_loss_raw", bonus_likelihood_loss, prog_bar=False)

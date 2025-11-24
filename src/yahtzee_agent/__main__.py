@@ -240,6 +240,13 @@ def main() -> None:  # noqa: PLR0915
             choices=["reinforce", "a2c"],
             display_name="Algorithm",
         ),
+        ConfigParam(
+            "bonus_regression_loss_weight",
+            float,
+            20.0,
+            "Weight for the bonus likelihood regression loss term",
+            display_name="Bonus regression loss weight",
+        ),
     ]
 
     # Initialize project with configuration
@@ -276,6 +283,7 @@ def main() -> None:  # noqa: PLR0915
     critic_coeff = config["critic_coeff"]
     rolling_action_representation = config["rolling_action_representation"]
     algorithm = config["algorithm"]
+    bonus_regression_loss_weight = config["bonus_regression_loss_weight"]
 
     torch.set_float32_matmul_precision("medium")
 
@@ -383,6 +391,7 @@ def main() -> None:  # noqa: PLR0915
             features=phi_features,
             rolling_action_representation=rolling_action_representation,
             he_kaiming_initialization=he_kaiming_initialization,
+            bonus_regression_loss_weight=bonus_regression_loss_weight,
         )
 
         # Save hyperparameters explicitly
@@ -412,6 +421,7 @@ def main() -> None:  # noqa: PLR0915
                 "phi_features": phi_features_str,
                 "rolling_action_representation": rolling_action_representation,
                 "algorithm": algorithm,
+                "bonus_regression_loss_weight": bonus_regression_loss_weight,
             }
         )
 
