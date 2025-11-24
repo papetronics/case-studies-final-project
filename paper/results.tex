@@ -12,7 +12,7 @@ We trained on <X> single-turn episodes, using a batch size of <Y> episodes, for 
 Although it does not nearly reach optimal performance, it performs surprisingly well over the full game; this is likely due to the high correlation between single-turn and full-game optimal actions.
 However, we suspected target leakage (selecting parameters and architectures based on full-game performance) could also play a role and analyze the full-game vs. single-turn tradeoff in Section~\ref{sec:tradeoff-curve}.
 
-\begin{figure}[!htbp]
+\begin{figure}[tb]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
@@ -76,7 +76,7 @@ However, we suspected target leakage (selecting parameters and architectures bas
     \label{fig:single-turn-performance}
 \end{figure}
 
-\begin{figure}[!htbp]
+\begin{figure}[tb]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
@@ -146,7 +146,7 @@ To understand the tradeoff between single-turn and full-game performance, we abl
 the resulting performance on both the primary single-turn score, as well as the auxiliary full-game score.
 We expect that there is a Pareto frontier between these two objectives, and that some hyperparameter choices push performance towards one or the other.
 
-\begin{figure}[!htbp]
+\begin{figure}[tb]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
@@ -204,7 +204,7 @@ However, after optimization we were able to achieve reasonable performance, scor
 
 <Talk about how PPO surprisingly did not outperform A2C here, possible reasons why>
 
-\begin{figure}[!htbp]
+\begin{figure}[tb]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
@@ -305,7 +305,7 @@ However, after optimization we were able to achieve reasonable performance, scor
     \label{fig:full-game-learning-curves}
 \end{figure}
 
-\begin{figure}[!htbp]
+\begin{figure}[tb]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
@@ -352,7 +352,7 @@ However, after optimization we were able to achieve reasonable performance, scor
     \label{fig:final-performance-comparison}
 \end{figure}
 
-\begin{figure}[!htbp]
+\begin{figure}[tb]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
@@ -427,7 +427,7 @@ However, after optimization we were able to achieve reasonable performance, scor
 
 <Discuss different state representations tested and their impact on performance>
 
-\begin{figure}[!htbp]
+\begin{figure}[tb]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
@@ -526,7 +526,7 @@ However, after optimization we were able to achieve reasonable performance, scor
     \label{fig:representation-learning}
 \end{figure}
 
-\begin{figure}[!htbp]
+\begin{figure}[tb]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
@@ -629,7 +629,7 @@ However, after optimization we were able to achieve reasonable performance, scor
 
 <Discuss network architecture choices and their impact>
 
-\begin{figure}[!htbp]
+\begin{figure}[tb]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
@@ -687,7 +687,7 @@ However, after optimization we were able to achieve reasonable performance, scor
 
 <Discuss LayerNorm's impact on training stability and performance>
 
-\begin{figure}[!htbp]
+\begin{figure}[tb]
     \centering
     % Panel (a): Learning curves
     \begin{tikzpicture}
@@ -756,7 +756,7 @@ However, after optimization we were able to achieve reasonable performance, scor
     \label{fig:layernorm-learning}
 \end{figure}
 
-\begin{figure}[!htbp]
+\begin{figure}[tb]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
@@ -828,7 +828,7 @@ However, after optimization we were able to achieve reasonable performance, scor
 
 <Discuss the effect of GAE lambda on performance and training dynamics>
 
-\begin{figure}[!htbp]
+\begin{figure}[tb]
     \centering
     % Panel (a): Mean score vs lambda
     \begin{tikzpicture}
@@ -873,7 +873,7 @@ However, after optimization we were able to achieve reasonable performance, scor
     \label{fig:gae-lambda-performance}
 \end{figure}
 
-\begin{figure}[!htbp]
+\begin{figure}[tb]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
@@ -921,7 +921,7 @@ However, after optimization we were able to achieve reasonable performance, scor
 
 <Discuss the importance of entropy scheduling for exploration and policy collapse prevention>
 
-\begin{table}[!htbp]
+\begin{table}[tb]
     \centering
     \small
     \caption{Entropy regime definitions}
@@ -937,7 +937,7 @@ However, after optimization we were able to achieve reasonable performance, scor
     \end{tabular}
 \end{table}
 
-\begin{figure}[!htbp]
+\begin{figure}[tb]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
@@ -1027,7 +1027,7 @@ However, after optimization we were able to achieve reasonable performance, scor
     \label{fig:entropy-rolling}
 \end{figure}
 
-\begin{figure}[!htbp]
+\begin{figure}[tb]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
@@ -1117,7 +1117,7 @@ However, after optimization we were able to achieve reasonable performance, scor
     \label{fig:entropy-scoring}
 \end{figure}
 
-\begin{table}[!htbp]
+\begin{table}[tb]
     \centering
     \small
     \caption{Entropy regime performance (placeholder data)}
@@ -1155,7 +1155,7 @@ However, after optimization we were able to achieve reasonable performance, scor
     \end{tabular}
 \end{table*}
 
-\begin{table}[!htbp]
+\begin{table}[tb]
     \centering
     \small
     \caption{Score distribution (placeholder data)}
@@ -1188,7 +1188,7 @@ However, after optimization we were able to achieve reasonable performance, scor
 <Bar chart showing average score per category for different agents>
 
 <Summarize full-game results and key findings>
-\begin{figure}[!htbp]
+\begin{figure}[tb]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
@@ -1249,7 +1249,7 @@ However, after optimization we were able to achieve reasonable performance, scor
     \label{fig:category-upper}
 \end{figure}
 
-\begin{figure}[!htbp]
+\begin{figure}[tb]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
@@ -1314,7 +1314,7 @@ However, after optimization we were able to achieve reasonable performance, scor
 
 \subsubsection{Strategy Comparison Across Agents}
 
-\begin{figure}[!htbp]
+\begin{figure}[tb]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
@@ -1369,7 +1369,7 @@ However, after optimization we were able to achieve reasonable performance, scor
     \label{fig:strategy-first-category}
 \end{figure}
 
-\begin{figure}[!htbp]
+\begin{figure}[tb]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
