@@ -441,9 +441,20 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
                 self.bonus_regression_loss_weight * bonus_likelihood_loss,
                 prog_bar=False,
             )
+
             self.log("train/bonus_likelihood_loss_raw", bonus_likelihood_loss, prog_bar=False)
-            self.log("train/pred_upper", bonus_likelihood_logit.mean().item() * 63, prog_bar=False)
-            self.log("train/target_upper", received_bonus.mean().item() * 63, prog_bar=False)
+            self.log(
+                "train/pred_upper",
+                bonus_likelihood_logit.mean().item() * MINIMUM_UPPER_SCORE_FOR_BONUS
+                + MINIMUM_UPPER_SCORE_FOR_BONUS,
+                prog_bar=False,
+            )
+            self.log(
+                "train/target_upper",
+                received_bonus.mean().item() * MINIMUM_UPPER_SCORE_FOR_BONUS
+                + MINIMUM_UPPER_SCORE_FOR_BONUS,
+                prog_bar=False,
+            )
 
         self.log("train/total_loss", loss, prog_bar=True)
         self.log("lr", self.trainer.optimizers[0].param_groups[0]["lr"], prog_bar=False)
