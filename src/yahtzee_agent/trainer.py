@@ -430,8 +430,8 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         )
 
         if self.algorithm == Algorithm.A2C:
-            bonus_likelihood_loss_weight = self.critic_coeff / 5.0  # Smaller than critic loss
-            bonus_likelihood_loss = torch.nn.functional.binary_cross_entropy_with_logits(
+            bonus_likelihood_loss_weight = 0.01  # Smaller than critic loss
+            bonus_likelihood_loss = torch.nn.functional.mse_loss(
                 bonus_likelihood_logit.squeeze(), received_bonus.float()
             )
             loss += bonus_likelihood_loss_weight * bonus_likelihood_loss

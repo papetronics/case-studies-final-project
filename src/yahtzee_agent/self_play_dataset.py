@@ -4,7 +4,6 @@ import gymnasium as gym
 import torch
 
 from environments.full_yahtzee_env import (
-    MINIMUM_UPPER_SCORE_FOR_BONUS,
     Action,
     Observation,
     YahtzeeEnv,
@@ -222,8 +221,9 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
         # ---- Check which episodes received the upper section bonus ----
         for env_idx, env in enumerate(self.envs):
             env_unwrapped: YahtzeeEnv = cast("YahtzeeEnv", env.unwrapped)
-            if int(env_unwrapped.state.score_sheet[0:6].sum()) >= MINIMUM_UPPER_SCORE_FOR_BONUS:
-                episode_received_bonus[env_idx] = 1
+            episode_received_bonus[env_idx] = env_unwrapped.state.score_sheet[0:6].sum() / 63.0
+            # if int(env_unwrapped.state.score_sheet[0:6].sum()) >= MINIMUM_UPPER_SCORE_FOR_BONUS:
+            #    episode_received_bonus[env_idx] = 1
 
         # ---- Build next_v_baseline via time-shift (no second forward) ----
         # v_baseline[e, t] = V(s_t)
