@@ -4,7 +4,9 @@
 % <600-700 words>
 \subsubsection{Baseline Single-Turn Performance}
 For state representation, the baseline model utilizes:
-$$\mathbf{x} = \phi(\mathbf{s}) = \big[\phi_{\mathrm{dice}}^{\mathrm{combined}}(\mathbf{d}), \phi_{\mathrm{cat}}(\mathbf{c}), \phi_{\mathrm{bonus}}(\mathbf{c}), \phi_{\mathrm{rolls}}(r)\big]$$
+
+$$\phi(\mathbf{s}) = \big[\phi_{\mathrm{dice}}^{\mathrm{combined}}(\mathbf{d}), \phi_{\mathrm{cat}}(\mathbf{c}), \phi_{\mathrm{bonus}}(\mathbf{c}), \phi_{\mathrm{rolls}}(r)\big]$$
+
 For outputs, it uses Bernoulli rolling actions and categorical scoring actions.
 The single turn model has a short horizon (3 steps); REINFORCE was the natural choice here.
 We trained on <X> single-turn episodes, using a batch size of <Y> episodes, for <Z> total gradient updates.
@@ -12,7 +14,7 @@ We trained on <X> single-turn episodes, using a batch size of <Y> episodes, for 
 Although it does not nearly reach optimal performance, it performs surprisingly well over the full game; this is likely due to the high correlation between single-turn and full-game optimal actions.
 However, we suspected target leakage (selecting parameters and architectures based on full-game performance) could also play a role and analyze the full-game vs. single-turn tradeoff in Section~\ref{sec:tradeoff-curve}.
 
-\begin{figure}[tb]
+\begin{figure}[H]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
@@ -21,7 +23,7 @@ However, we suspected target leakage (selecting parameters and architectures bas
                 xlabel={Training Steps ($\times 10^3$)},
                 ylabel={Mean Single-Turn Score},
                 xmin=0, xmax=500,
-                ymin=10, ymax=25,
+                ymin=0, ymax=20,
                 grid=both,
                 grid style={dotted},
                 tick align=outside,
@@ -58,7 +60,7 @@ However, we suspected target leakage (selecting parameters and architectures bas
                 gray!70,
                 thick,
                 domain=0:500
-            ] {50};
+            ] {3.8};
             \addlegendentry{Random Policy}
 
             % DP per-turn expectation
@@ -67,7 +69,7 @@ However, we suspected target leakage (selecting parameters and architectures bas
                 red!60!white,
                 thick,
                 domain=0:500
-            ] {50};
+            ] {19.59};
             \addlegendentry{DP Per-Turn Expectation}
 
         \end{axis}
@@ -76,7 +78,7 @@ However, we suspected target leakage (selecting parameters and architectures bas
     \label{fig:single-turn-performance}
 \end{figure}
 
-\begin{figure}[tb]
+\begin{figure}[H]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
@@ -122,7 +124,7 @@ However, we suspected target leakage (selecting parameters and architectures bas
                 black!80,
                 thick,
                 domain=0:500
-            ] {50};
+            ] {254.69};
             \addlegendentry{DP Optimal}
 
             % Random policy baseline
@@ -131,7 +133,7 @@ However, we suspected target leakage (selecting parameters and architectures bas
                 gray!70,
                 thick,
                 domain=0:500
-            ] {50};
+            ] {49.5};
             \addlegendentry{Random Policy}
 
         \end{axis}
@@ -146,7 +148,18 @@ To understand the tradeoff between single-turn and full-game performance, we abl
 the resulting performance on both the primary single-turn score, as well as the auxiliary full-game score.
 We expect that there is a Pareto frontier between these two objectives, and that some hyperparameter choices push performance towards one or the other.
 
-\begin{figure}[tb]
+<Pick one:>
+
+<As expected, we can see that full game performance generally increases linearly with single-turn performance.
+However, at very high levels of full-game performance, single-turn performance begins to plateau, and even decline slightly.
+Since the single-turn model does not have access to the full game context, these are actually imperfectly optimizing their purported objective.
+This indicates that selecting hyperparameters for a single-turn model based on full-game performance is indeed a form of target leakage.>
+
+<Contrary to our expectations, we do not see a clear tradeoff between single-turn and full-game performance at high performance levels.
+This suggests that single-turn optimization is a good proxy for full-game performance, or that the model is able to reconstruct
+sufficient full-game context from the single-turn state representation to make effective long-term decisions.>
+
+\begin{figure}[H]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
@@ -200,11 +213,16 @@ It was highly sensitive to hyperparameters such as the critic coefficient, the e
 We also found that REINFORCE simply required more training data to converge at a reliable performance level across seeds; our implementation was trained on 1,000,000 games.
 However, after optimization we were able to achieve reasonable performance, scoring a mean of <X> points on average over 10,000 full games.
 
-<Talk about how A2C performs better than REINFORCE>
+Our most successful algorithm was TD(0)-style Actor-Critic (A2C). We found is easiest to tune and with an immediate performance boost over REINFORCE.
+This was the algorithm we use for ablation studies in Section~\ref{sec:ablation-studies}. With a fixed training budget of 1 million full-games,
+A2C was able to approach DP-optimal performance.
 
-<Talk about how PPO surprisingly did not outperform A2C here, possible reasons why>
+We also attempted to use Proximal Policy Optimization (PPO) with TD(0), but found it difficult to tune effectively within our computational budget. Each PPO rollout requires
+$k$ epochs of minibatch updates, which significantly increases training time compared to A2C and REINFORCE. Sample efficiency wasn't a huge factor for us, since Yahtzee is so easy to simulate.
+For fair comparison to the other algorithms, we had to reduce the total number of games seen during training by a factor of $k$.
+However, it is possible PPO could reach or surpass A2C performance with more extensive hyperparameter tuning.
 
-\begin{figure}[tb]
+\begin{figure}[H]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
@@ -305,7 +323,7 @@ However, after optimization we were able to achieve reasonable performance, scor
     \label{fig:full-game-learning-curves}
 \end{figure}
 
-\begin{figure}[tb]
+\begin{figure}[H]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
@@ -352,7 +370,7 @@ However, after optimization we were able to achieve reasonable performance, scor
     \label{fig:final-performance-comparison}
 \end{figure}
 
-\begin{figure}[tb]
+\begin{figure}[H]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
@@ -425,108 +443,16 @@ However, after optimization we were able to achieve reasonable performance, scor
 
 \subsubsection{Representational Ablations}
 
-<Discuss different state representations tested and their impact on performance>
+While a number of additional representational choices were explored, one of the most important is the state representation of the dice.
+One important thing to note is that our environment always sorts the dice in ascending order before passing them to the agent.
+If this was not done, the network would be forced to waste capacity on understanding permutations of the same dice configuration,
+which we found early on was a significant impediment to learning.
+<Future work could explore permutation-invariant architectures such as Deep Sets \cite{zaheer-2017-deep-sets} or embeddings with self-attention to handle unsorted dice.>
 
-\begin{figure}[tb]
-    \centering
-    \begin{tikzpicture}
-        \begin{axis}[
-                width=\columnwidth,
-                height=5cm,
-                xlabel={Games Seen ($\times 10^3$)},
-                ylabel={Mean Full-Game Score},
-                xmin=0, xmax=1000,
-                ymin=140, ymax=250,
-                grid=both,
-                grid style={dotted},
-                tick align=outside,
-                tick label style={font=\small},
-                label style={font=\small},
-                legend style={at={(0.98,0.02)},anchor=south east,font=\small}
-            ]
+We wanted to highlight the importance of using a combined representation of both one-hot encodings and counts-based encodings of the dice.
+While the network could theoretically learn to reconstruct either representation from the other, in practice we found that using both improved performance.
 
-            % Combined (baseline)
-            \addplot[
-                thick,
-                blue!70!white,
-                mark=*,
-                mark size=1.5pt,
-                mark repeat=20
-            ] coordinates {
-                    (0, 50)
-                    (100, 50)
-                    (200, 50)
-                    (300, 50)
-                    (400, 50)
-                    (500, 50)
-                    (600, 50)
-                    (700, 50)
-                    (800, 50)
-                    (900, 50)
-                    (1000, 50)
-                };
-            \addlegendentry{Combined (Baseline)}
-
-            % Counts-only (simplest)
-            \addplot[
-                thick,
-                red!60!white,
-                mark=square*,
-                mark size=1.5pt,
-                mark repeat=20
-            ] coordinates {
-                    (0, 50)
-                    (100, 50)
-                    (200, 50)
-                    (300, 50)
-                    (400, 50)
-                    (500, 50)
-                    (600, 50)
-                    (700, 50)
-                    (800, 50)
-                    (900, 50)
-                    (1000, 50)
-                };
-            \addlegendentry{Counts-Only}
-
-            % One-hot only (potentially unstable or different)
-            \addplot[
-                thick,
-                green!60!black,
-                mark=triangle*,
-                mark size=1.5pt,
-                mark repeat=20
-            ] coordinates {
-                    (0, 50)
-                    (100, 50)
-                    (200, 50)
-                    (300, 50)
-                    (400, 50)
-                    (500, 50)
-                    (600, 50)
-                    (700, 50)
-                    (800, 50)
-                    (900, 50)
-                    (1000, 50)
-                };
-            \addlegendentry{One-Hot Only}
-
-            % DP optimal baseline
-            \addplot[
-                dashed,
-                black!80,
-                thick,
-                domain=0:1000
-            ] {50};
-            \addlegendentry{DP Optimal}
-
-        \end{axis}
-    \end{tikzpicture}
-    \caption{Learning curves by state representation (placeholder data)}
-    \label{fig:representation-learning}
-\end{figure}
-
-\begin{figure}[tb]
+\begin{figure}[H]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
@@ -621,15 +547,139 @@ However, after optimization we were able to achieve reasonable performance, scor
 
         \end{axis}
     \end{tikzpicture}
-    \caption{Upper bonus achievement by state representation (placeholder data)}
-    \label{fig:representation-bonus}
+    \caption{Upper bonus achievement by dice representation (placeholder data)}
+    \label{fig:dice-representation-bonus}
+\end{figure}
+
+For the full-game model, we added several additional features beyond the single-turn representation.
+To understand the importance of each, they were ablated individually.
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+                width=\columnwidth,
+                height=5cm,
+                xlabel={Epochs},
+                ylabel={Upper Bonus Rate (\%)},
+                xmin=0, xmax=500,
+                ymin=0, ymax=100,
+                grid=both,
+                grid style={dotted},
+                tick align=outside,
+                tick label style={font=\small},
+                label style={font=\small},
+                legend style={at={(0.98,0.02)},anchor=south east,font=\small}
+            ]
+
+            % All features (baseline)
+            \addplot[
+                thick,
+                blue!70!white,
+                mark=*,
+                mark size=1.5pt,
+                mark repeat=10
+            ] coordinates {
+                    (0, 50)
+                    (50, 50)
+                    (100, 50)
+                    (150, 50)
+                    (200, 50)
+                    (250, 50)
+                    (300, 50)
+                    (350, 50)
+                    (400, 50)
+                    (450, 50)
+                    (500, 50)
+                };
+            \addlegendentry{All Features (Baseline)}
+
+            % No potential
+            \addplot[
+                thick,
+                red!60!white,
+                mark=square*,
+                mark size=1.5pt,
+                mark repeat=10
+            ] coordinates {
+                    (0, 50)
+                    (50, 50)
+                    (100, 50)
+                    (150, 50)
+                    (200, 50)
+                    (250, 50)
+                    (300, 50)
+                    (350, 50)
+                    (400, 50)
+                    (450, 50)
+                    (500, 50)
+                };
+            \addlegendentry{No Potential}
+
+            % No bonus progress
+            \addplot[
+                thick,
+                green!60!black,
+                mark=triangle*,
+                mark size=1.5pt,
+                mark repeat=10
+            ] coordinates {
+                    (0, 50)
+                    (50, 50)
+                    (100, 50)
+                    (150, 50)
+                    (200, 50)
+                    (250, 50)
+                    (300, 50)
+                    (350, 50)
+                    (400, 50)
+                    (450, 50)
+                    (500, 50)
+                };
+            \addlegendentry{No Bonus Progress}
+
+            % No game progress
+            \addplot[
+                thick,
+                orange!70!white,
+                mark=diamond*,
+                mark size=1.5pt,
+                mark repeat=10
+            ] coordinates {
+                    (0, 50)
+                    (50, 50)
+                    (100, 50)
+                    (150, 50)
+                    (200, 50)
+                    (250, 50)
+                    (300, 50)
+                    (350, 50)
+                    (400, 50)
+                    (450, 50)
+                    (500, 50)
+                };
+            \addlegendentry{No Game Progress}
+
+            % DP optimal baseline
+            \addplot[
+                dashed,
+                black!80,
+                thick,
+                domain=0:500
+            ] {50};
+            \addlegendentry{DP Optimal}
+
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Upper bonus achievement by feature ablation (placeholder data)}
+    \label{fig:feature-ablation-bonus}
 \end{figure}
 
 \subsubsection{Architectural Ablations}
 
 <Discuss network architecture choices and their impact>
 
-\begin{figure}[tb]
+\begin{figure}[H]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
@@ -687,7 +737,7 @@ However, after optimization we were able to achieve reasonable performance, scor
 
 <Discuss LayerNorm's impact on training stability and performance>
 
-\begin{figure}[tb]
+\begin{figure}[H]
     \centering
     % Panel (a): Learning curves
     \begin{tikzpicture}
@@ -756,7 +806,7 @@ However, after optimization we were able to achieve reasonable performance, scor
     \label{fig:layernorm-learning}
 \end{figure}
 
-\begin{figure}[tb]
+\begin{figure}[H]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
@@ -828,7 +878,7 @@ However, after optimization we were able to achieve reasonable performance, scor
 
 <Discuss the effect of GAE lambda on performance and training dynamics>
 
-\begin{figure}[tb]
+\begin{figure}[H]
     \centering
     % Panel (a): Mean score vs lambda
     \begin{tikzpicture}
@@ -873,7 +923,7 @@ However, after optimization we were able to achieve reasonable performance, scor
     \label{fig:gae-lambda-performance}
 \end{figure}
 
-\begin{figure}[tb]
+\begin{figure}[H]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
@@ -921,7 +971,7 @@ However, after optimization we were able to achieve reasonable performance, scor
 
 <Discuss the importance of entropy scheduling for exploration and policy collapse prevention>
 
-\begin{table}[tb]
+\begin{table}[H]
     \centering
     \small
     \caption{Entropy regime definitions}
@@ -937,7 +987,7 @@ However, after optimization we were able to achieve reasonable performance, scor
     \end{tabular}
 \end{table}
 
-\begin{figure}[tb]
+\begin{figure}[H]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
@@ -1027,7 +1077,7 @@ However, after optimization we were able to achieve reasonable performance, scor
     \label{fig:entropy-rolling}
 \end{figure}
 
-\begin{figure}[tb]
+\begin{figure}[H]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
@@ -1117,7 +1167,7 @@ However, after optimization we were able to achieve reasonable performance, scor
     \label{fig:entropy-scoring}
 \end{figure}
 
-\begin{table}[tb]
+\begin{table}[H]
     \centering
     \small
     \caption{Entropy regime performance (placeholder data)}
@@ -1155,7 +1205,7 @@ However, after optimization we were able to achieve reasonable performance, scor
     \end{tabular}
 \end{table*}
 
-\begin{table}[tb]
+\begin{table}[H]
     \centering
     \small
     \caption{Score distribution (placeholder data)}
@@ -1188,7 +1238,7 @@ However, after optimization we were able to achieve reasonable performance, scor
 <Bar chart showing average score per category for different agents>
 
 <Summarize full-game results and key findings>
-\begin{figure}[tb]
+\begin{figure}[H]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
@@ -1249,7 +1299,7 @@ However, after optimization we were able to achieve reasonable performance, scor
     \label{fig:category-upper}
 \end{figure}
 
-\begin{figure}[tb]
+\begin{figure}[H]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
@@ -1314,7 +1364,7 @@ However, after optimization we were able to achieve reasonable performance, scor
 
 \subsubsection{Strategy Comparison Across Agents}
 
-\begin{figure}[tb]
+\begin{figure}[H]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
@@ -1369,7 +1419,7 @@ However, after optimization we were able to achieve reasonable performance, scor
     \label{fig:strategy-first-category}
 \end{figure}
 
-\begin{figure}[tb]
+\begin{figure}[H]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
