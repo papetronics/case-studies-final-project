@@ -215,15 +215,18 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
                     next_state_tensor = phi(next_obs, features, device)
                     next_states[env_idx, step_idx, :] = next_state_tensor
 
+                    env_unwrapped: YahtzeeEnv = cast("YahtzeeEnv", env.unwrapped)
+                    if (
+                        int(env_unwrapped.state.score_sheet[0:6].sum())
+                        >= MINIMUM_UPPER_SCORE_FOR_BONUS
+                    ):
+                        episode_received_bonus[env_idx] = 1
+
                     if terminated or truncated:
                         next_obs, _ = env.reset()
                     observations[env_idx] = next_obs
 
         # ---- Check which episodes received the upper section bonus ----
-        for env_idx, env in enumerate(self.envs):
-            env_unwrapped: YahtzeeEnv = cast("YahtzeeEnv", env.unwrapped)
-            if int(env_unwrapped.state.score_sheet[0:6].sum()) >= MINIMUM_UPPER_SCORE_FOR_BONUS:
-                episode_received_bonus[env_idx] = 1
 
         # ---- Build next_v_baseline via time-shift (no second forward) ----
         # v_baseline[e, t] = V(s_t)
