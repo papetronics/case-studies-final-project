@@ -724,7 +724,7 @@ However, we suspected target leakage (selecting parameters and architectures bas
       % Main REINFORCE learning curve
       \addplot[
         thick,
-        blue,
+        blue!70!white,
         mark=*,
         mark size=1pt,
         mark repeat=10
@@ -746,7 +746,7 @@ However, we suspected target leakage (selecting parameters and architectures bas
       % Random policy baseline
       \addplot[
         dashed,
-        gray,
+        gray!70,
         thick,
         domain=0:500
       ] {50};
@@ -755,7 +755,7 @@ However, we suspected target leakage (selecting parameters and architectures bas
       % DP per-turn expectation
       \addplot[
         dashed,
-        red!60,
+        red!60!white,
         thick,
         domain=0:500
       ] {50};
@@ -788,7 +788,7 @@ However, we suspected target leakage (selecting parameters and architectures bas
       % Full-game evaluation at checkpoints
       \addplot[
         thick,
-        blue,
+        blue!70!white,
         mark=*,
         mark size=1pt,
         mark repeat=10
@@ -810,7 +810,7 @@ However, we suspected target leakage (selecting parameters and architectures bas
       % DP optimal baseline
       \addplot[
         dashed,
-        red!60,
+        black!80,
         thick,
         domain=0:500
       ] {50};
@@ -819,7 +819,7 @@ However, we suspected target leakage (selecting parameters and architectures bas
       % Random policy baseline
       \addplot[
         dashed,
-        gray,
+        gray!70,
         thick,
         domain=0:500
       ] {50};
@@ -859,6 +859,7 @@ We expect that there is a Pareto frontier between these two objectives, and that
       \addplot[
         only marks,
         mark=*,
+        blue!70!white,
         mark size=1.5pt
       ] coordinates {
           (50, 50)
@@ -917,7 +918,7 @@ However, after optimization we were able to achieve reasonable performance, scor
       % REINFORCE learning curve
       \addplot[
         thick,
-        red,
+        red!60!white,
         mark=square*,
         mark size=1.5pt,
         mark repeat=20
@@ -939,7 +940,7 @@ However, after optimization we were able to achieve reasonable performance, scor
       % A2C learning curve
       \addplot[
         thick,
-        blue,
+        blue!70!white,
         mark=*,
         mark size=1.5pt,
         mark repeat=20
@@ -983,7 +984,7 @@ However, after optimization we were able to achieve reasonable performance, scor
       % DP optimal baseline
       \addplot[
         dashed,
-        red!60,
+        black!80,
         thick,
         domain=0:1000
       ] {50};
@@ -1021,8 +1022,8 @@ However, after optimization we were able to achieve reasonable performance, scor
       ]
 
       \addplot[
-        fill=red!60,
-        draw=red!80,
+        fill=blue!70!white,
+        draw=blue!80,
         error bars/.cd,
         y dir=both,
         y explicit
@@ -1034,7 +1035,7 @@ However, after optimization we were able to achieve reasonable performance, scor
         };
 
       % Horizontal dashed line at DP optimal
-      \draw[dashed, red!60, thick] (axis cs:REINFORCE,50) -- (axis cs:DP Optimal,50);
+      \draw[dashed, black!80, thick] (axis cs:REINFORCE,50) -- (axis cs:DP Optimal,50);
 
     \end{axis}
   \end{tikzpicture}
@@ -1069,8 +1070,8 @@ However, after optimization we were able to achieve reasonable performance, scor
 
       % REINFORCE
       \addplot[
-        fill=red!60,
-        draw=red!80
+        fill=red!60!white,
+        draw=red!80!white
       ] coordinates {
           (Upper Bonus, 50)
           (Yahtzee, 50)
@@ -1079,8 +1080,8 @@ However, after optimization we were able to achieve reasonable performance, scor
 
       % A2C
       \addplot[
-        fill=blue!60,
-        draw=blue!80
+        fill=blue!70!white,
+        draw=blue!80!white
       ] coordinates {
           (Upper Bonus, 50)
           (Yahtzee, 50)
@@ -1089,8 +1090,8 @@ However, after optimization we were able to achieve reasonable performance, scor
 
       % PPO
       \addplot[
-        fill=green!60,
-        draw=green!80
+        fill=green!60!white,
+        draw=green!80!white
       ] coordinates {
           (Upper Bonus, 50)
           (Yahtzee, 50)
@@ -1099,8 +1100,8 @@ However, after optimization we were able to achieve reasonable performance, scor
 
       % DP Optimal
       \addplot[
-        fill=orange!60,
-        draw=orange!80
+        fill=black!70,
+        draw=black!80
       ] coordinates {
           (Upper Bonus, 50)
           (Yahtzee, 50)
@@ -1141,7 +1142,7 @@ However, after optimization we were able to achieve reasonable performance, scor
       % Combined (baseline)
       \addplot[
         thick,
-        blue,
+        blue!70!white,
         mark=*,
         mark size=1.5pt,
         mark repeat=20
@@ -1163,7 +1164,7 @@ However, after optimization we were able to achieve reasonable performance, scor
       % Counts-only (simplest)
       \addplot[
         thick,
-        red,
+        red!60!white,
         mark=square*,
         mark size=1.5pt,
         mark repeat=20
@@ -1207,7 +1208,7 @@ However, after optimization we were able to achieve reasonable performance, scor
       % DP optimal baseline
       \addplot[
         dashed,
-        red!60,
+        black!80,
         thick,
         domain=0:1000
       ] {50};
@@ -1240,7 +1241,7 @@ However, after optimization we were able to achieve reasonable performance, scor
       % Combined (baseline)
       \addplot[
         thick,
-        blue,
+        blue!70!white,
         mark=*,
         mark size=1.5pt,
         mark repeat=10
@@ -1262,7 +1263,7 @@ However, after optimization we were able to achieve reasonable performance, scor
       % Counts-only
       \addplot[
         thick,
-        red,
+        red!60!white,
         mark=square*,
         mark size=1.5pt,
         mark repeat=10
@@ -1306,7 +1307,7 @@ However, after optimization we were able to achieve reasonable performance, scor
       % DP optimal baseline
       \addplot[
         dashed,
-        red!60,
+        black!80,
         thick,
         domain=0:500
       ] {50};
@@ -1404,7 +1405,7 @@ However, after optimization we were able to achieve reasonable performance, scor
       % With LayerNorm
       \addplot[
         thick,
-        blue,
+        blue!70!white,
         mark=*,
         mark size=1.5pt,
         mark repeat=20
@@ -1426,7 +1427,7 @@ However, after optimization we were able to achieve reasonable performance, scor
       % Without LayerNorm
       \addplot[
         thick,
-        red,
+        red!60!white,
         mark=square*,
         mark size=1.5pt,
         mark repeat=20
@@ -1472,7 +1473,7 @@ However, after optimization we were able to achieve reasonable performance, scor
       % With LayerNorm
       \addplot[
         thick,
-        blue,
+        blue!70!white,
         mark=*,
         mark size=1.5pt,
         mark repeat=20
@@ -1494,7 +1495,7 @@ However, after optimization we were able to achieve reasonable performance, scor
       % Without LayerNorm
       \addplot[
         thick,
-        red,
+        red!60!white,
         mark=square*,
         mark size=1.5pt,
         mark repeat=20
@@ -1550,8 +1551,8 @@ However, after optimization we were able to achieve reasonable performance, scor
       ]
 
       \addplot[
-        fill=blue!60,
-        draw=blue!80,
+        fill=blue!70!white,
+        draw=blue!80!white,
         error bars/.cd,
         y dir=both,
         y explicit
@@ -1594,8 +1595,8 @@ However, after optimization we were able to achieve reasonable performance, scor
       ]
 
       \addplot[
-        fill=orange!60,
-        draw=orange!80,
+        fill=green!60!white,
+        draw=green!80!white,
         error bars/.cd,
         y dir=both,
         y explicit
@@ -1658,7 +1659,7 @@ However, after optimization we were able to achieve reasonable performance, scor
       % Low entropy
       \addplot[
         thick,
-        red,
+        red!60!white,
         mark=square*,
         mark size=1.5pt,
         mark repeat=20
@@ -1680,7 +1681,7 @@ However, after optimization we were able to achieve reasonable performance, scor
       % Baseline entropy
       \addplot[
         thick,
-        blue,
+        blue!70!white,
         mark=*,
         mark size=1.5pt,
         mark repeat=20
@@ -1702,7 +1703,7 @@ However, after optimization we were able to achieve reasonable performance, scor
       % High entropy
       \addplot[
         thick,
-        green!60!black,
+        green!60!white,
         mark=triangle*,
         mark size=1.5pt,
         mark repeat=20
@@ -1748,7 +1749,7 @@ However, after optimization we were able to achieve reasonable performance, scor
       % Low entropy
       \addplot[
         thick,
-        red,
+        red!60!white,
         mark=square*,
         mark size=1.5pt,
         mark repeat=20
@@ -1770,7 +1771,7 @@ However, after optimization we were able to achieve reasonable performance, scor
       % Baseline entropy
       \addplot[
         thick,
-        blue,
+        blue!70!white,
         mark=*,
         mark size=1.5pt,
         mark repeat=20
@@ -1792,7 +1793,7 @@ However, after optimization we were able to achieve reasonable performance, scor
       % High entropy
       \addplot[
         thick,
-        green!60!black,
+        green!60!white,
         mark=triangle*,
         mark size=1.5pt,
         mark repeat=20
@@ -1920,25 +1921,25 @@ However, after optimization we were able to achieve reasonable performance, scor
       ]
 
       % A2C
-      \addplot[fill=blue!60, draw=blue!80!black, thick] coordinates {
+      \addplot[fill=blue!70!white, draw=blue!80!white, thick] coordinates {
           (Ones,   5) (Twos,   5) (Threes, 5) (Fours,  5)
           (Fives,  5) (Sixes,  5) (Bonus,  5)
         };
 
       % PPO
-      \addplot[fill=red!60, draw=red!80!black, thick] coordinates {
+      \addplot[fill=red!60!white, draw=red!80!white, thick] coordinates {
           (Ones,   5) (Twos,   5) (Threes, 5) (Fours,  5)
           (Fives,  5) (Sixes,  5) (Bonus,  5)
         };
 
       % REINFORCE
-      \addplot[fill=orange!60, draw=orange!80!black, thick] coordinates {
+      \addplot[fill=green!60!white, draw=green!80!white, thick] coordinates {
           (Ones,   5) (Twos,   5) (Threes, 5) (Fours,  5)
           (Fives,  5) (Sixes,  5) (Bonus,  5)
         };
 
       % DP
-      \addplot[fill=black!70, draw=black, thick] coordinates {
+      \addplot[fill=black!70, draw=black!80, thick] coordinates {
           (Ones,   5) (Twos,   5) (Threes, 5) (Fours,  5)
           (Fives,  5) (Sixes,  5) (Bonus,  5)
         };
@@ -1980,25 +1981,25 @@ However, after optimization we were able to achieve reasonable performance, scor
       ]
 
       % A2C
-      \addplot[fill=blue!60, draw=blue!80!black, thick] coordinates {
+      \addplot[fill=blue!70!white, draw=blue!80!white, thick] coordinates {
           (3oK,  5) (4oK,  5) (FH,   5) (SS,   5)
           (LS,   5) (Ch,   5) (Ytz,  5)
         };
 
       % PPO
-      \addplot[fill=red!60, draw=red!80!black, thick] coordinates {
+      \addplot[fill=red!60!white, draw=red!80!white, thick] coordinates {
           (3oK,  5) (4oK,  5) (FH,   5) (SS,   5)
           (LS,   5) (Ch,   5) (Ytz,  5)
         };
 
       % REINFORCE
-      \addplot[fill=orange!60, draw=orange!80!black, thick] coordinates {
+      \addplot[fill=green!60!white, draw=green!80!white, thick] coordinates {
           (3oK,  5) (4oK,  5) (FH,   5) (SS,   5)
           (LS,   5) (Ch,   5) (Ytz,  5)
         };
 
       % DP
-      \addplot[fill=black!70, draw=black, thick] coordinates {
+      \addplot[fill=black!70, draw=black!80, thick] coordinates {
           (3oK,  5) (4oK,  5) (FH,   5) (SS,   5)
           (LS,   5) (Ch,   5) (Ytz,  5)
         };
@@ -2047,19 +2048,19 @@ However, after optimization we were able to achieve reasonable performance, scor
       ]
 
       % DP
-      \addplot[fill=black!70, draw=black, thick] coordinates {
+      \addplot[fill=black!70, draw=black!80, thick] coordinates {
           (Ones,5) (Twos,5) (Threes,5) (Fours,5) (Fives,5) (Sixes,5)
           (3oK,5) (4oK,5) (FH,5) (SS,5) (LS,5) (Ch,5) (Ytz,5)
         };
 
       % A2C
-      \addplot[fill=blue!60, draw=blue!80!black, thick] coordinates {
+      \addplot[fill=blue!70!white, draw=blue!80!white, thick] coordinates {
           (Ones,5) (Twos,5) (Threes,5) (Fours,5) (Fives,5) (Sixes,5)
           (3oK,5) (4oK,5) (FH,5) (SS,5) (LS,5) (Ch,5) (Ytz,5)
         };
 
       % PPO
-      \addplot[fill=red!60, draw=red!80!black, thick] coordinates {
+      \addplot[fill=red!60!white, draw=red!80!white, thick] coordinates {
           (Ones,5) (Twos,5) (Threes,5) (Fours,5) (Fives,5) (Sixes,5)
           (3oK,5) (4oK,5) (FH,5) (SS,5) (LS,5) (Ch,5) (Ytz,5)
         };
@@ -2101,17 +2102,17 @@ However, after optimization we were able to achieve reasonable performance, scor
       ]
 
       % DP
-      \addplot[fill=black!70, draw=black, thick] coordinates {
+      \addplot[fill=black!70, draw=black!80, thick] coordinates {
           (Ones,5) (Sixes,5) (4oK,5) (Ch,5) (Ytz,5)
         };
 
       % A2C
-      \addplot[fill=blue!60, draw=blue!80!black, thick] coordinates {
+      \addplot[fill=blue!70!white, draw=blue!80!white, thick] coordinates {
           (Ones,5) (Sixes,5) (4oK,5) (Ch,5) (Ytz,5)
         };
 
       % PPO
-      \addplot[fill=red!60, draw=red!80!black, thick] coordinates {
+      \addplot[fill=red!60!white, draw=red!80!white, thick] coordinates {
           (Ones,5) (Sixes,5) (4oK,5) (Ch,5) (Ytz,5)
         };
 
@@ -2185,6 +2186,7 @@ The following hyperparameters were used for the baseline models:
 
 \begin{table}[H]
   \centering
+  \small
   \caption{Shared hyperparameters across all algorithms}
   \label{tab:shared-hyperparameters}
   \begin{tabular}{lc}
@@ -2229,6 +2231,7 @@ The following hyperparameters were used for the baseline models:
 
 \begin{table}[H]
   \centering
+  \small
   \caption{PPO-specific hyperparameters}
   \label{tab:ppo-hyperparameters}
   \begin{tabular}{lc}
@@ -2302,6 +2305,7 @@ $P$ can be defined by the following generative process.
 
 \begin{table}[H]
   \centering
+  \small
   \caption{Category statistics (placeholder data)}
   \label{tab:category-stats}
   \begin{tabular}{lcc}
@@ -2341,30 +2345,33 @@ $P$ can be defined by the following generative process.
         ymin=0, ymax=4.5,
         xtick={100,200,300,400,500},
         grid=both,
-        legend style={at={(0.5,1.05)},anchor=south,legend columns=4},
+        grid style={dotted},
+        tick label style={font=\small},
+        label style={font=\small},
+        legend style={at={(0.5,1.05)},anchor=south,legend columns=4,font=\small},
         mark options={solid},
       ]
 
       % --- Run 1 (placeholder data around 1) ---
-      \addplot+[mark=*] coordinates {
+      \addplot[blue!70!white, thick, mark=*] coordinates {
           ( 50,0.5) (100,0.5) (150,0.5) (200,0.5) (250,0.5)
           (300,0.5) (350,0.5) (400,0.5) (450,0.5) (500,0.5)
         };
 
       % --- Run 2 (placeholder data around 2) ---
-      \addplot+[mark=*] coordinates {
+      \addplot[red!60!white, thick, mark=square*] coordinates {
           ( 50,0.5) (100,0.5) (150,0.5) (200,0.5) (250,0.5)
           (300,0.5) (350,0.5) (400,0.5) (450,0.5) (500,0.5)
         };
 
       % --- Run 3 (placeholder data around 3) ---
-      \addplot+[mark=*] coordinates {
+      \addplot[green!60!white, thick, mark=triangle*] coordinates {
           ( 50,0.5) (100,0.5) (150,0.5) (200,0.5) (250,0.5)
           (300,0.5) (350,0.5) (400,0.5) (450,0.5) (500,0.5)
         };
 
       % --- Run 4 (placeholder data around 4) ---
-      \addplot+[mark=*] coordinates {
+      \addplot[purple!70!white, thick, mark=diamond*] coordinates {
           ( 50,0.5) (100,0.5) (150,0.5) (200,0.5) (250,0.5)
           (300,0.5) (350,0.5) (400,0.5) (450,0.5) (500,0.5)
         };
