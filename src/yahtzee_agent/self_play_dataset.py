@@ -159,7 +159,7 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
         v_baseline = torch.zeros(self.batch_size, num_steps, dtype=torch.float32, device=device)
 
         # Track whether each episode received the upper section bonus
-        episode_received_bonus = torch.zeros(self.batch_size, dtype=torch.long, device=device)
+        episode_received_bonus = torch.zeros(self.batch_size, dtype=torch.float32, device=device)
 
         # ---- Rollout collection ----
         with torch.no_grad():
