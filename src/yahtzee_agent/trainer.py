@@ -430,7 +430,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         )
 
         if self.algorithm == Algorithm.A2C:
-            bonus_likelihood_loss_weight = 0.01  # Smaller than critic loss
+            bonus_likelihood_loss_weight = 0.1  # Smaller than critic loss
             bonus_likelihood_loss = torch.nn.functional.mse_loss(
                 bonus_likelihood_logit.squeeze(), received_bonus.float()
             )
