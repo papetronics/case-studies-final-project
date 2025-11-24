@@ -302,7 +302,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
                     )
 
                 self.log("val/pct_yahtzee", det_metrics["pct_yahtzee"], prog_bar=False)
-                self.log("val/pct_bonus", det_metrics["pct_bonus"], prog_bar=False)
+                self.log("val/pct_bonus", det_metrics["pct_bonus"], prog_bar=True)
         else:
             det_mean = 0.0
 
