@@ -574,7 +574,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         self.log("train/next_potential_mean", next_potential.mean(), prog_bar=False)
         self.log("train/potential_diff_mean", potential_diff.mean(), prog_bar=False)
         self.log("train/potential_diff_abs_mean", potential_diff.abs().mean(), prog_bar=False)
-        self.log("train/shaping_bonus_mean", shaping_bonus.mean(), prog_bar=False)
+        self.log("train/shaping_bonus_mean", shaping_bonus.mean(), prog_bar=True)
         self.log("train/shaping_bonus_abs_mean", shaping_bonus.abs().mean(), prog_bar=False)
         self.log("train/raw_reward_mean", rewards_flat.mean(), prog_bar=False)
         self.log("train/shaped_reward_mean", shaped_rewards.mean(), prog_bar=False)
