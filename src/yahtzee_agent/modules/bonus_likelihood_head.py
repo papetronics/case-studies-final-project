@@ -20,7 +20,6 @@ class BonusLikelihoodHead(nn.Module):
         layers: list[nn.Module] = [
             Block(hidden_size, hidden_size, 0.0, activation),
             nn.Linear(hidden_size, 1),
-            nn.ELU(),
         ]
         self.network = SequentialBlock(*layers)
 
