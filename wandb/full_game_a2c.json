@@ -4,7 +4,7 @@
     "run_config": {
         "activation_function": "Swish",
         "algorithm": "a2c",
-        "bonus_regression_loss_weight": 10.0,
+        "bonus_regression_loss_weight": 0.1,
         "critic_coeff": 0.005,
         "dropout_rate": 0.1,
         "entropy_anneal_period": 0.6,

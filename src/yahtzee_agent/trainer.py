@@ -456,12 +456,18 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
                 prog_bar=False,
             )
             print(
+                "Actual bonus:",
                 received_bonus.mean().item() * MINIMUM_UPPER_SCORE_FOR_BONUS
-                + MINIMUM_UPPER_SCORE_FOR_BONUS
+                + MINIMUM_UPPER_SCORE_FOR_BONUS,
             )
             print(
+                "Prediction:",
                 bonus_likelihood_logit.mean().item() * MINIMUM_UPPER_SCORE_FOR_BONUS
-                + MINIMUM_UPPER_SCORE_FOR_BONUS
+                + MINIMUM_UPPER_SCORE_FOR_BONUS,
+            )
+            print("Loss:", bonus_likelihood_loss.item())
+            print(
+                "Weighted loss:", self.bonus_regression_loss_weight * bonus_likelihood_loss.item()
             )
 
         self.log("train/total_loss", loss, prog_bar=True)

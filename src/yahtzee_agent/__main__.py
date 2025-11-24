@@ -243,7 +243,7 @@ def main() -> None:  # noqa: PLR0915
         ConfigParam(
             "bonus_regression_loss_weight",
             float,
-            20.0,
+            0.1,
             "Weight for the bonus likelihood regression loss term",
             display_name="Bonus regression loss weight",
         ),
