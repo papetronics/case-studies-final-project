@@ -441,6 +441,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
                 prog_bar=False,
             )
             self.log("train/bonus_likelihood_loss_raw", bonus_likelihood_loss, prog_bar=False)
+            self.log("train/pred_upper", bonus_likelihood_logit.mean().item() * 63, prog_bar=False)
 
         self.log("train/total_loss", loss, prog_bar=True)
         self.log("lr", self.trainer.optimizers[0].param_groups[0]["lr"], prog_bar=False)
