@@ -156,18 +156,25 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
             display_name="Min LR ratio",
         ),
         ConfigParam(
-            "gamma_max",
+            "gamma_end",
             float,
             1.0,
             "Discount factor for reward calculation (max, end)",
             display_name="Discount factor",
         ),
         ConfigParam(
-            "gamma_min",
+            "gamma_start",
             float,
             None,  # Will default based on game_scenario: 0.9 for single_turn, 1.0 for full_game
             "Discount factor for reward calculation (min, start)",
             display_name="Discount factor",
+        ),
+        ConfigParam(
+            "gamma_anneal_period",
+            float,
+            0.5,
+            "Fraction of training over which to anneal gamma from start to end",
+            display_name="Gamma anneal period",
         ),
         ConfigParam(
             "dropout_rate",
@@ -249,6 +256,26 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
             display_name="Algorithm",
         ),
         ConfigParam(
+            "gae_lambda",
+            float,
+            0.0,
+            "GAE lambda parameter (for A2C algorithm only)",
+        ),
+        ConfigParam(
+            "upper_score_regression_loss_weight",
+            float,
+            0.1,
+            "Weight for the upper score regression loss term",
+            display_name="Upper score regression loss weight",
+        ),
+        ConfigParam(
+            "upper_score_shaping_weight",
+            float,
+            0.1,
+            "Weight for the upper score regression shaping loss term",
+            display_name="Upper score regression shaping weight",
+        ),
+        ConfigParam(
             "clip_epsilon",
             float,
             0.2,
@@ -291,8 +318,9 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
     phi_features_str = config["phi_features"]
     activation_function = config["activation_function"]
     min_lr_ratio = config["min_lr_ratio"]
-    gamma_min = config["gamma_min"]
-    gamma_max = config["gamma_max"]
+    gamma_start = config["gamma_start"]
+    gamma_end = config["gamma_end"]
+    gamma_anneal_period = config["gamma_anneal_period"]
     dropout_rate = config["dropout_rate"]
     gradient_clip_val = config["gradient_clip_val"]
     entropy_coeff_rolling_max = config["entropy_coeff_rolling_max"]
@@ -304,6 +332,9 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
     critic_coeff = config["critic_coeff"]
     rolling_action_representation = config["rolling_action_representation"]
     algorithm = config["algorithm"]
+    gae_lambda = config["gae_lambda"]
+    upper_score_regression_loss_weight = config["upper_score_regression_loss_weight"]
+    upper_score_shaping_weight = config["upper_score_shaping_weight"]
     clip_epsilon = config["clip_epsilon"]
     ppo_games_per_minibatch = config["ppo_games_per_minibatch"]
     ppo_epochs = config["ppo_epochs"]
@@ -318,10 +349,10 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
     else:
         raise MissingPhiFeaturesError(list(FEATURE_REGISTRY.keys()))
 
-    # Set gamma_min default based on game_scenario if not explicitly provided
-    if gamma_min is None:
-        gamma_min = 0.9 if game_scenario == "single_turn" else 1.0
-        log.info(f"Setting gamma_min={gamma_min} based on game_scenario={game_scenario}")
+    # Set gamma_start default based on game_scenario if not explicitly provided
+    if gamma_start is None:
+        gamma_start = 0.9 if game_scenario == "single_turn" else 1.0
+        log.info(f"Setting gamma_start={gamma_start} based on game_scenario={game_scenario}")
 
     # Calculate derived values based on game scenario
     if game_scenario == "single_turn":
@@ -410,8 +441,9 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
             activation_function=activation_function,
             epochs=epochs,
             min_lr_ratio=min_lr_ratio,
-            gamma_min=gamma_min,
-            gamma_max=gamma_max,
+            gamma_start=gamma_start,
+            gamma_end=gamma_end,
+            gamma_anneal_period=gamma_anneal_period,
             entropy_coeff_rolling_max=entropy_coeff_rolling_max,
             entropy_coeff_rolling_min=entropy_coeff_rolling_min,
             entropy_coeff_scoring_max=entropy_coeff_scoring_max,
@@ -423,6 +455,9 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
             features=phi_features,
             rolling_action_representation=rolling_action_representation,
             he_kaiming_initialization=he_kaiming_initialization,
+            gae_lambda=gae_lambda,
+            upper_score_regression_loss_weight=upper_score_regression_loss_weight,
+            upper_score_shaping_weight=upper_score_shaping_weight,
             clip_epsilon=clip_epsilon,
             ppo_games_per_minibatch=ppo_games_per_minibatch,
             ppo_epochs=ppo_epochs,
@@ -439,8 +474,9 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                 "activation_function": activation_function,
                 "epochs": epochs,
                 "min_lr_ratio": min_lr_ratio,
-                "gamma_max": gamma_max,
-                "gamma_min": gamma_min,
+                "gamma_end": gamma_end,
+                "gamma_start": gamma_start,
+                "gamma_anneal_period": gamma_anneal_period,
                 "total_train_games": total_train_games,
                 "games_per_batch": games_per_batch,
                 "gradient_clip_val": gradient_clip_val,
@@ -455,6 +491,9 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                 "phi_features": phi_features_str,
                 "rolling_action_representation": rolling_action_representation,
                 "algorithm": algorithm,
+                "gae_lambda": gae_lambda,
+                "upper_score_regression_loss_weight": upper_score_regression_loss_weight,
+                "upper_score_shaping_weight": upper_score_shaping_weight,
                 "clip_epsilon": clip_epsilon,
                 "ppo_games_per_minibatch": ppo_games_per_minibatch,
                 "ppo_epochs": ppo_epochs,

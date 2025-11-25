@@ -1,0 +1,25 @@
+
+\section{Conclusion and Future Work}
+% <200-300 words>
+
+Learning a robust policy for \textit{Yahtzee} using reinforcement learning presents several interesting challenges and insights.
+First, we showed that \textit{Yahtzee}'s combinatorial action space and sparse rewards make it suitable as a non-trivial benchmark environment.
+Our results back up theoretical results in the literature regarding training stability and sample efficiency of common RL algorithms.
+Likewise, our ablation studies highlight the importance of finding semantically meaningful state and action representations that align the model architecture with the underlying structure of the problem.
+Our analysis of learned policies showed that these algorithms often struggle to learn rare, yet high-reward strategies, especially if they require strong coherence over longer time horizons.
+
+Future research could be done to find architectures, samples, and learning methods that allow the model to better approximate optimal play.
+For example, curriculum learning approaches, where the agent is gradually exposed to more complex scenarios over time, could be used to help the model overcome some challenges outlined in this paper.
+
+We found that \textrm{Yahtzee} is trivially broken into several a heirarchy of interesting sub-problems.
+It was fairly expensive to train a full-game agent from scratch, but training a single-turn agent was much more efficient.
+Transfer learning could be explored further to see if knowledge from single-turn optimization could be effectively transferred to full-game, multiplayer Yahtzee, or other variants of the game.
+Additionally, \textrm{Yahtzee} could also be considered as a candidate environment for research into hierarchical reinforcement learning (HRL) methods.
+
+Perhaps most interestingly, we showed that an architecture that is, in theory, applicable to the multiplayer setting can be effectively trained to play Solitaire \textit{Yahtzee} at a high level.
+This opens the door to future research into adversarial formulations of the game, which are intractable using analytic methods.
+Our agent tries only to achieve the best game score, but in a multiplayer setting, it would need to reason about opponents' strategies and scorecards and adapt accordingly to maximize its chances of winning.
+Likewise, the use of self-attention and other permutation-invariant architectures could be applicable to many games or scenarios involving multiple agents in a shared environment.
+
+
+

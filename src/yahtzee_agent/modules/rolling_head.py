@@ -24,7 +24,7 @@ class RollingHead(nn.Module):
         ]
         if dropout_rate > 0.0:
             layers.append(nn.Dropout(dropout_rate))
-        layers.extend([nn.Linear(hidden_size, output_size), nn.Sigmoid()])
+        layers.extend([nn.Linear(hidden_size, output_size)])
         self.network = SequentialBlock(*layers)
 
     def __call__(self, x: torch.Tensor) -> torch.Tensor:

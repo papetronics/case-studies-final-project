@@ -8,6 +8,7 @@ from numpy.typing import NDArray
 
 from environments.full_yahtzee_env import FINAL_ROLL, Observation
 from utilities.scoring_helper import (
+    MINIMUM_UPPER_SCORE_FOR_BONUS,
     NUMBER_OF_CATEGORIES,
     NUMBER_OF_DICE,
     NUMBER_OF_DICE_SIDES,
@@ -230,8 +231,42 @@ class PercentProgressTowardsBonusFeature(PhiFeature):
     def compute(self, observation: Observation) -> NDArray[np.floating]:
         """Compute percent progress towards bonus."""
         total_upper_score = observation["score_sheet"][:6].sum()
-        percent_progress = min(1.0, total_upper_score / UPPER_SCORE_THRESHOLD)
+        percent_progress = total_upper_score / UPPER_SCORE_THRESHOLD
         return np.array([percent_progress], dtype=np.float64)
+
+
+class WillReceiveBonusIfChosenFeature(PhiFeature):
+    """Binary indicator for each upper section category: 1 if choosing it ensures bonus, 0 otherwise."""
+
+    @property
+    def name(self) -> str:
+        return "will_receive_bonus_if_chosen"
+
+    @property
+    def size(self) -> int:
+        return 6
+
+    def compute(self, observation: Observation) -> NDArray[np.floating]:
+        """Compute which upper section categories would guarantee bonus if scored."""
+        dice = observation["dice"]
+        score_sheet = observation["score_sheet"]
+        available_categories = observation["score_sheet_available_mask"]
+        has_scored_yahtzee = score_sheet[ScoreCategory.YAHTZEE] == YAHTZEE_SCORE
+
+        # Get current upper section total
+        current_upper_total = score_sheet[:6].sum()
+
+        # Get potential scores for all categories
+        potential_scores, _ = get_all_scores(dice, available_categories, has_scored_yahtzee)
+
+        # For each upper section category, check if scoring it would reach the bonus threshold
+        upper_potential_scores = potential_scores[:6]
+        upper_available = available_categories[:6]
+        new_upper_totals = current_upper_total + upper_potential_scores
+        would_reach_bonus = (new_upper_totals >= MINIMUM_UPPER_SCORE_FOR_BONUS).astype(np.float64)
+        result: NDArray[np.floating] = would_reach_bonus * upper_available
+
+        return result
 
 
 FEATURE_REGISTRY: dict[str, type[PhiFeature]] = {
@@ -247,6 +282,7 @@ FEATURE_REGISTRY: dict[str, type[PhiFeature]] = {
     "available_categories": AvailableCategoriesFeature,
     # Bonus-related features
     "percent_progress_towards_bonus": PercentProgressTowardsBonusFeature,
+    "will_receive_bonus_if_chosen": WillReceiveBonusIfChosenFeature,
 }
 
 
