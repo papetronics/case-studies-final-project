@@ -13,6 +13,7 @@
         "entropy_coeff_scoring_min": 0.008,
         "entropy_hold_period": 0.3,
         "epochs": 500,
+        "gae_lambda": 0.0,
         "game_scenario": "full_game",
         "games_per_batch": 20,
         "gamma_anneal_period": 1.0,
@@ -27,6 +28,6 @@
         "rolling_action_representation": "categorical",
         "total_train_games": 250000,
         "upper_score_regression_loss_weight": 1.0,
-        "upper_score_shaping_weight": 0.1
+        "upper_score_shaping_weight": 1.0
     }
 }

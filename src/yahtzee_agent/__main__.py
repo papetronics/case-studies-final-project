@@ -241,6 +241,12 @@ def main() -> None:  # noqa: PLR0915
             display_name="Algorithm",
         ),
         ConfigParam(
+            "gae_lambda",
+            float,
+            0.0,
+            "GAE lambda parameter (for A2C algorithm only)",
+        ),
+        ConfigParam(
             "upper_score_regression_loss_weight",
             float,
             0.1,
@@ -290,6 +296,7 @@ def main() -> None:  # noqa: PLR0915
     critic_coeff = config["critic_coeff"]
     rolling_action_representation = config["rolling_action_representation"]
     algorithm = config["algorithm"]
+    gae_lambda = config["gae_lambda"]
     upper_score_regression_loss_weight = config["upper_score_regression_loss_weight"]
     upper_score_shaping_weight = config["upper_score_shaping_weight"]
 
@@ -399,6 +406,7 @@ def main() -> None:  # noqa: PLR0915
             features=phi_features,
             rolling_action_representation=rolling_action_representation,
             he_kaiming_initialization=he_kaiming_initialization,
+            gae_lambda=gae_lambda,
             upper_score_regression_loss_weight=upper_score_regression_loss_weight,
             upper_score_shaping_weight=upper_score_shaping_weight,
         )
@@ -430,6 +438,7 @@ def main() -> None:  # noqa: PLR0915
                 "phi_features": phi_features_str,
                 "rolling_action_representation": rolling_action_representation,
                 "algorithm": algorithm,
+                "gae_lambda": gae_lambda,
                 "upper_score_regression_loss_weight": upper_score_regression_loss_weight,
                 "upper_score_shaping_weight": upper_score_shaping_weight,
             }
