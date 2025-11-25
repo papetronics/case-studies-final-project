@@ -83,7 +83,7 @@ def run_batch_games(
                 ]
             )
 
-            rolling_probs, scoring_probs, _ = model.forward(input_tensors)
+            rolling_probs, scoring_probs, _, _ = model.forward(input_tensors)
             rolling_actions, scoring_actions = select_action(
                 rolling_probs, scoring_probs, model.rolling_action_representation
             )
