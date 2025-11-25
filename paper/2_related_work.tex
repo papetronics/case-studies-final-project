@@ -43,13 +43,17 @@ PPO uses the Generalized Advantage Estimate (GAE), which is closely related to $
 Aside from return estimation, there is a host of other variance reduction techniques which can be employed for policy gradient methods.
 
 Normalizing advantages across a batch improves gradient conditioning and is common practice \cite{schulman2015trpo}.
-Entropy regularization prevents early collapse to suboptimal policies by encouraging exploration via the addition of an explicit entropy bonus term in the loss function \cite{williams-peng-1991-function-optimization, mnih-2016-a3c, schulman-2017-ppo}.
+Entropy regularization prevents early collapse to suboptimal policies by encouraging exploration via the addition of an explicit entropy bonus term in the loss function \cite{williams-peng-1991-function-optimization, ahmed2019entropy, mnih-2016-a3c, schulman-2017-ppo}.
 Gradient clipping is frequently used alongside these techniques to stop rare, but large, gradient updates from destabilizing training \cite{pascanu-2013-rnn-clipping}.
 While high variance is unavoidable in deep reinforcement learning, poor performance can often be linked to numerical instability rather than inherent flaws in algorithmic design \cite{bjorck-2022-high-variance};
 simple tweaks like normalizing features before activations can dramatically improve stability.
 
 \subsubsection{Reward Shaping}
-<Do we need a section on reward shaping?>
+For games that have sparse, delayed, or hard-to-reach rewards, reward shaping can be used to improve learning speed and stability.
+Conceptually, reward shaping involves defining a potential function: $\Phi(s)$.
+Environmental rewards are then augmented with the weighted difference in potential between states in a trajectory.
+This has been shown to give practitioners the ability to change learning patterns while keeping the underlying optimal policy invariant \cite{ng-1999-reward-shaping}.
+The potential function can be hand-designed or learned, although a learned potential function could inadvertently change the optimal policy if not done carefully \cite{devlin-2014-potential-based}.
 
 \subsection{Complex Games}
 Typical board and dice games have extreme state complexity or stochasticity; reinforcement learning methods are a natural fit for these problems.
@@ -71,7 +75,7 @@ Later work by \citet{glenn-2006-optimal-yahtzee} optimized the DP approach via s
 
 However, adversarial \textit{Yahtzee} remains an open problem.
 While \citet{pawlewicz-2011-multiplayer-yahtzee} showed that DP techniques can be expanded to 2-player adversarial \textit{Yahtzee}, they do not scale to more players due to the exponential growth of the state space.
-Approximation methods must be utilized for larger player counts.
+Approximation methods must be utilized for larger player counts. Achieving a near DP optimal score in solitaire \textit{Yahtzee} is a necessary first step towards solving this setting.
 
 \subsection{Reinforcement Learning for Yahtzee}
 Some prior attempts have been made to apply reinforcement learning to \textit{Yahtzee}.
@@ -83,6 +87,3 @@ Later, \cite{yuan-2023-two-player-yahtzee} applied Deep-Q networks to the advers
 Additionally, some recent informal work has reported success using RL methods for \textit{Yahtzee}.
 For example, Yahtzotron used heavy supervised pretraining and A2C to achieve an average of $~236$ points \cite{Haefner2021Yahtzotron}.
 Although not a true reinforcement learning approach, \citet{DutschkeYahtzee} reports a statistical agent achieving a score of $241.6 \pm 40.7$ after just 8,000 games, using a combination of heuristics.
-
-No prior work systematically explores policy gradient methods with variance reduction tricks on full-game solitaire \textit{Yahtzee}, attempts transfer learning from single-turn optimization, provides a detailed ablation and failure mode analysis,
-or offers an architecture that is theoretically transferrable to multiplayer settings.

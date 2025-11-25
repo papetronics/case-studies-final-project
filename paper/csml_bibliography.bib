@@ -1,0 +1,770 @@
+% ============================================================================
+% 1. INTRODUCTION
+% ============================================================================
+
+% Official game rules
+@manual{hasbro-2022-yahtzee-rules,
+  title  = {YAHTZEE Game: Instructions},
+  author = {{Hasbro, Inc.}},
+  year   = {2022},
+  note   = {Official rules and instructions},
+  url    = {https://instructions.hasbro.com/en-nz/instruction/yahtzee-game}
+}
+
+% Lunar Lander Gym benchmark
+@article{brockman2016openai,
+  title   = {OpenAI Gym},
+  author  = {Brockman, Greg and Cheung, Vicki and Pettersson, Ludwig and Schneider, Jonas and Schulman, John and Tang, Jie and Zaremba, Wojciech},
+  journal = {arXiv preprint arXiv:1606.01540},
+  year    = {2016},
+  url     = {https://arxiv.org/abs/1606.01540}
+}
+
+% Original AlphaGo paper: deep nets + MCTS, human data + self-play.
+% Cite when introducing deep RL + tree search for board games or "superhuman Go with human data".
+@article{silver2016alphago,
+  title   = {Mastering the Game of Go with Deep Neural Networks and Tree Search},
+  author  = {Silver, David and Huang, Aja and Maddison, Chris J. and Guez, Arthur and Sifre, Laurent and Van Den Driessche, George and Schrittwieser, Julian and Antonoglou, Ioannis and Panneershelvam, Veda and Lanctot, Marc and others},
+  journal = {Nature},
+  volume  = {529},
+  number  = {7587},
+  pages   = {484--489},
+  year    = {2016},
+  doi     = {10.1038/nature16961}
+}
+
+% ============================================================================
+% 2. RELATED WORK
+% ============================================================================
+
+%       --------------------------------------------------
+%       2.1 POLICY GRADIENT METHODS AND VARIANCE REDUCTION
+%       --------------------------------------------------
+
+% Reinforcement Learning textbook
+@book{sutton-2018-reinforcement-book,
+  title     = {Reinforcement Learning: An Introduction},
+  author    = {Sutton, Richard S. and Barto, Andrew G.},
+  year      = {2018},
+  edition   = {2nd},
+  publisher = {MIT Press},
+  address   = {Cambridge, MA},
+  isbn      = {978-0262039246},
+  url       = {https://web.stanford.edu/class/psych209/Readings/SuttonBartoIPRLBook2ndEd.pdf}
+}
+
+% Policy Gradient
+@inproceedings{sutton-2000-policy-gradient,
+  author    = {Richard S. Sutton and David McAllester and Satinder Singh and Yishay Mansour},
+  title     = {Policy Gradient Methods for Reinforcement Learning with Function Approximation},
+  booktitle = {Advances in Neural Information Processing Systems 12 (NIPS 1999)},
+  year      = {2000},
+  pages     = {1057--1063},
+  url       = {https://dl.acm.org/doi/10.5555/3009657.3009806}
+}
+
+%             --------------------------------------------------
+%             2.1.1 RETURN ESTIMATION
+%             --------------------------------------------------
+
+% DP
+@book{bertsekas1996neuro,
+  title     = {Neuro-Dynamic Programming},
+  author    = {Bertsekas, D. and Tsitsiklis, J.N.},
+  isbn      = {9781886529106},
+  lccn      = {lc96085338},
+  url       = {https://web.mit.edu/dimitrib/www/NDP.pdf},
+  year      = {1996},
+  publisher = {Athena Scientific}
+}
+
+%             --------------------------------------------------
+%             2.1.2 POLICY GRADIENT METHODS
+%             --------------------------------------------------
+
+% REINFORCE
+@article{williams-1992-reinforce,
+  author  = {Ronald J. Williams},
+  title   = {Simple Statistical Gradient-Following Algorithms for Connectionist Reinforcement Learning},
+  journal = {Machine Learning},
+  year    = {1992},
+  volume  = {8},
+  number  = {3-4},
+  pages   = {229--256},
+  doi     = {10.1007/BF00992696}
+}
+
+% Subtracting a baseline
+@article{weaver2013optimal,
+  title         = {The Optimal Reward Baseline for Gradient-Based Reinforcement Learning},
+  author        = {Weaver, Lex and Tao, Nigel},
+  journal       = {CoRR},
+  volume        = {abs/1301.2315},
+  year          = {2013},
+  url           = {https://arxiv.org/abs/1301.2315},
+  eprint        = {1301.2315},
+  archiveprefix = {arXiv},
+  primaryclass  = {cs.LG}
+}
+
+% Variance reduction in policy gradients
+@article{greensmith-2004-variance-reduction,
+  author  = {Evan Greensmith and Peter L. Bartlett and Jonathan Baxter},
+  title   = {Variance Reduction Techniques for Gradient Estimates in Reinforcement Learning},
+  journal = {Journal of Machine Learning Research},
+  year    = {2004},
+  volume  = {5},
+  pages   = {1471--1530},
+  url     = {https://jmlr.csail.mit.edu/papers/volume5/greensmith04a/greensmith04a.pdf}
+}
+
+% A2C
+@inproceedings{konda-1999-actorcritic,
+  author    = {Konda, Vijay and Tsitsiklis, John},
+  booktitle = {Advances in Neural Information Processing Systems},
+  editor    = {S. Solla and T. Leen and K. M\"{u}ller},
+  pages     = {},
+  publisher = {MIT Press},
+  title     = {Actor-Critic Algorithms},
+  url       = {https://proceedings.neurips.cc/paper_files/paper/1999/file/6449f44a102fde848669bdd9eb6b76fa-Paper.pdf},
+  volume    = {12},
+  year      = {1999}
+}
+
+% A3C
+@inproceedings{mnih-2016-a3c,
+  author    = {Volodymyr Mnih and Adria Puigdom{\`e}nech Badia and Mehdi Mirza and Alex Graves and Timothy Lillicrap and Tim Harley and David Silver and Koray Kavukcuoglu},
+  title     = {Asynchronous Methods for Deep Reinforcement Learning},
+  booktitle = {Proceedings of the 33rd International Conference on Machine Learning (ICML)},
+  year      = {2016},
+  url       = {https://proceedings.mlr.press/v48/mniha16.pdf}
+}
+
+% PPO
+@article{schulman-2017-ppo,
+  author  = {John Schulman and Filip Wolski and Prafulla Dhariwal and Alec Radford and Oleg Klimov},
+  title   = {Proximal Policy Optimization Algorithms},
+  journal = {arXiv preprint arXiv:1707.06347},
+  year    = {2017},
+  url     = {https://arxiv.org/abs/1707.06347}
+}
+
+% GAE (Generalized Advantage Estimation)
+@article{schulman-2016-gae,
+  author  = {John Schulman and Philipp Moritz and Sergey Levine and Michael I. Jordan and Pieter Abbeel},
+  title   = {High-Dimensional Continuous Control Using Generalized Advantage Estimation},
+  journal = {arXiv preprint arXiv:1506.02438},
+  year    = {2016},
+  url     = {https://arxiv.org/abs/1506.02438}
+}
+
+%             --------------------------------------------------
+%             2.1.3 OTHER VARIANCE REDUCTION TECHNIQUES
+%             --------------------------------------------------
+
+% TRPO & Normalized Advantage
+@inproceedings{schulman2015trpo,
+  title     = {Trust Region Policy Optimization},
+  author    = {Schulman, John and Levine, Sergey and Abbeel, Pieter and Jordan, Michael and Moritz, Philipp},
+  booktitle = {Proceedings of the 32nd International Conference on Machine Learning},
+  pages     = {1889--1897},
+  year      = {2015},
+  url       = {https://arxiv.org/abs/1502.05477}
+}
+
+% adds entropy to REINFORCE
+@article{williams-peng-1991-function-optimization,
+  author  = {Williams, Ronald J. and Peng, Jing},
+  title   = {Function Optimization using Connectionist Reinforcement Learning Algorithms},
+  journal = {Connection Science},
+  volume  = {3},
+  number  = {3},
+  pages   = {241--268},
+  year    = {1991},
+  doi     = {10.1080/09540099108946587},
+  url     = {https://doi.org/10.1080/09540099108946587}
+}
+
+% Entropy
+@inproceedings{ahmed2019entropy,
+  title     = {Understanding the Impact of Entropy on Policy Optimization},
+  author    = {Ahmed, Zafarali and Le Roux, Nicolas and Norouzi, Mohammad and Schuurmans, Dale},
+  booktitle = {Proceedings of the 36th International Conference on Machine Learning},
+  series    = {Proceedings of Machine Learning Research},
+  volume    = {97},
+  pages     = {151--160},
+  publisher = {PMLR},
+  year      = {2019},
+  url       = {https://arxiv.org/abs/1811.11214}
+}
+
+% Gradient clipping for RNN stability
+@article{pascanu-2013-rnn-clipping,
+  author  = {Razvan Pascanu and Tomas Mikolov and Yoshua Bengio},
+  title   = {On the Difficulty of Training Recurrent Neural Networks},
+  journal = {arXiv preprint arXiv:1211.5063},
+  year    = {2013},
+  url     = {https://arxiv.org/abs/1211.5063}
+}
+
+% High variance is unavoidable in RL
+@article{bjorck-2022-high-variance,
+  title         = {Is High Variance Unavoidable in RL? A Case Study in Continuous Control},
+  author        = {Bjorck, Johan and Gomes, Carla P. and Weinberger, Kilian Q.},
+  journal       = {arXiv preprint arXiv:2110.11222},
+  year          = {2022},
+  eprint        = {2110.11222},
+  archiveprefix = {arXiv},
+  primaryclass  = {cs.LG},
+  url           = {https://arxiv.org/abs/2110.11222}
+}
+
+%             --------------------------------------------------
+%             2.1.4 REWARD SHAPING
+%             --------------------------------------------------
+
+% Reward Shaping
+@inproceedings{ng-1999-reward-shaping,
+  author    = {Ng, Andrew Y. and Harada, Daishi and Russell, Stuart J.},
+  title     = {Policy Invariance Under Reward Transformations: Theory and Application to Reward Shaping},
+  year      = {1999},
+  isbn      = {1558606122},
+  publisher = {Morgan Kaufmann Publishers Inc.},
+  address   = {San Francisco, CA, USA},
+  booktitle = {Proceedings of the Sixteenth International Conference on Machine Learning},
+  pages     = {278–287},
+  numpages  = {10},
+  series    = {ICML '99},
+  url       = {https://ai.stanford.edu/~ang/papers/shaping-icml99.pdf}
+}
+
+% Learned potential-based shaping
+@inproceedings{devlin-2014-potential-based,
+  author    = {Devlin, Sam and Yliniemi, Logan and Kudenko, Daniel and Tumer, Kagan},
+  title     = {Potential-based difference rewards for multiagent reinforcement learning},
+  year      = {2014},
+  isbn      = {9781450327381},
+  publisher = {International Foundation for Autonomous Agents and Multiagent Systems},
+  address   = {Richland, SC},
+  abstract  = {Difference rewards and potential-based reward shaping can both significantly improve the joint policy learnt by multiple reinforcement learning agents acting simultaneously in the same environment. Difference rewards capture an agent's contribution to the system's performance. Potential-based reward shaping has been proven to not alter the Nash equilibria of the system but requires domain-specific knowledge. This paper introduces two novel reward functions that combine these methods to leverage the benefits of both.Using the difference reward's Counterfactual as Potential (CaP) allows the application of potential-based reward shaping to a wide range of multiagent systems without the need for domain specific knowledge whilst still maintaining the theoretical guarantee of consistent Nash equilibria.Alternatively, Difference Rewards incorporating Potential-Based Reward Shaping (DRiP) uses potential-based reward shaping to further shape difference rewards. By exploiting prior knowledge of a problem domain, this paper demonstrates agents using this approach can converge either up to 23.8 times faster than or to joint policies up to 196\% better than agents using difference rewards alone.},
+  booktitle = {Proceedings of the 2014 International Conference on Autonomous Agents and Multi-Agent Systems},
+  pages     = {165–172},
+  numpages  = {8},
+  keywords  = {multiagent reinforcement learning, reward shaping},
+  location  = {Paris, France},
+  series    = {AAMAS '14},
+  url       = {https://www.ifaamas.org/Proceedings/aamas2014/aamas/p165.pdf}
+}
+
+%       --------------------------------------------------
+%       2.1 COMPLEX GAMES
+%       --------------------------------------------------
+
+% Classic case study of TD learning beating humans in a highly stochastic board game (backgammon).
+% Cite when motivating self-play + value function approximation in stochastic environments.
+@article{tesauro1995tdgammon,
+  title   = {Temporal Difference Learning and TD-Gammon},
+  author  = {Tesauro, Gerald},
+  journal = {Communications of the ACM},
+  volume  = {38},
+  number  = {3},
+  pages   = {58--68},
+  year    = {1995},
+  doi     = {10.1145/203330.203343}
+}
+
+% Early ADP/TD work on Tetris.
+% Cite when talking about approximate dynamic programming on huge, stochastic MDPs (e.g., Tetris as a benchmark for instability/difficulty).
+@techreport{bertsekas1996tetris,
+  title       = {Temporal Differences-Based Policy Iteration and Applications in Neuro-Dynamic Programming},
+  author      = {Bertsekas, Dimitri P. and Ioffe, Sergey},
+  institution = {Laboratory for Information and Decision Systems, MIT},
+  number      = {LIDS-P-2349},
+  year        = {1996},
+  url         = {https://web.mit.edu/dimitrib/www/Tempdif.pdf}
+}
+
+% "Tetris is actually hard but ADP can work" paper.
+% Cite when you want a modern-ish RL/ADP reference on stochastic combinatorial games beyond Go/Atari (e.g., as evidence RL can crack tough puzzle-like domains).
+@inproceedings{gabillon2013tetris,
+  title     = {Approximate Dynamic Programming Finally Performs Well in the Game of Tetris},
+  author    = {Gabillon, Victor and Ghavamzadeh, Mohammad and Lazaric, Alessandro and Scherrer, Bruno},
+  booktitle = {Advances in Neural Information Processing Systems},
+  volume    = {26},
+  year      = {2013},
+  url       = {https://proceedings.neurips.cc/paper/2013/hash/7504adad8bb96320eb3afdd4df6e1f60-Abstract.html}
+}
+
+% DeepStack poker AI.
+% Cite when discussing RL + search + value networks in high-variance, imperfect-information games (No-Limit Texas Hold'em).
+@article{moravcik2017deepstack,
+  title   = {DeepStack: Expert-Level Artificial Intelligence in Heads-Up No-Limit Poker},
+  author  = {Morav{\v{c}}{\'\i}k, Matej and Schmid, Martin and Burch, Neil and Lis{\'y}, Viliam and Morrill, Dustin and Bard, Nolan and Davis, Trevor and Waugh, Kevin and Johanson, Michael and Bowling, Michael},
+  journal = {Science},
+  volume  = {356},
+  number  = {6337},
+  pages   = {508--513},
+  year    = {2017},
+  doi     = {10.1126/science.aam6960}
+}
+
+% Bootstrapped DQN for deep exploration.
+% Cite when you need a canonical "exploration in deep RL" reference or when arguing about handling high stochasticity via better exploration.
+@inproceedings{osband2016bootstrappeddqn,
+  title     = {Deep Exploration via Bootstrapped {DQN}},
+  author    = {Osband, Ian and Blundell, Charles and Pritzel, Alexander and Van Roy, Benjamin},
+  booktitle = {Advances in Neural Information Processing Systems},
+  volume    = {29},
+  year      = {2016},
+  url       = {https://arxiv.org/abs/1602.04621}
+}
+
+% AlphaGo Zero: no human data, pure self-play, massive compute.
+% Cite when emphasizing "learning from scratch" and strong self-play training regimes.
+@article{silver2017alphagozero,
+  title   = {Mastering the Game of Go without Human Knowledge},
+  author  = {Silver, David and Schrittwieser, Julian and Simonyan, Karen and Antonoglou, Ioannis and Huang, Aja and Guez, Arthur and Hubert, Thomas and Baker, Lucas and Lai, Matthew and Bolton, Adrian and others},
+  journal = {Nature},
+  volume  = {550},
+  number  = {7676},
+  pages   = {354--359},
+  year    = {2017},
+  doi     = {10.1038/nature24270}
+}
+
+%       --------------------------------------------------
+%       2.1 DP METHODS FOR YAHTZEE
+%       --------------------------------------------------
+
+@misc{verhoeff-1999-solitaire-yahtzee,
+  author = {Tom Verhoeff},
+  title  = {Optimal Solitaire Yahtzee Strategies},
+  year   = {1999},
+  url    = {https://www-set.win.tue.nl/~wstomv/misc/yahtzee/}
+}
+
+% DP optimal strategy for Yahtzee
+@techreport{glenn-2006-optimal-yahtzee,
+  author      = {Jeffrey R. Glenn},
+  title       = {An Optimal Strategy for Yahtzee},
+  institution = {Loyola College in Maryland, Department of Computer Science},
+  number      = {CS-TR-0002},
+  year        = {2006},
+  url         = {https://gunpowder.cs.loyola.edu/~jglenn/research/optimal_yahtzee.pdf}
+}
+
+@inproceedings{glenn-2007-solitaire-yahtzee,
+  author    = {Jeffrey R. Glenn},
+  title     = {Computer Strategies for Solitaire Yahtzee},
+  booktitle = {2007 IEEE Symposium on Computational Intelligence and Games (CIG)},
+  year      = {2007},
+  pages     = {132--139},
+  doi       = {10.1109/CIG.2007.368085},
+  url       = {http://vigir.missouri.edu/~gdesouza/Research/Conference_CDs/IEEE_SSCI_2007/CI%20and%20Games%20-%20CIG%202007/data/papers/CIG/S001P018.pdf}
+}
+
+% Multiplayer Yahtzee complexity
+@inproceedings{pawlewicz-2011-multiplayer-yahtzee,
+  author    = {Pawlewicz, Jakub},
+  editor    = {van den Herik, H. Jaap and Iida, Hiroyuki and Plaat, Aske},
+  title     = {Nearly Optimal Computer Play in Multi-player Yahtzee},
+  booktitle = {Computers and Games},
+  year      = {2011},
+  publisher = {Springer Berlin Heidelberg},
+  address   = {Berlin, Heidelberg},
+  pages     = {250--262},
+  isbn      = {978-3-642-17928-0},
+  url       = {https://link.springer.com/chapter/10.1007/978-3-642-17928-0_23}
+}
+
+%       --------------------------------------------------
+%       2.1 REINFORCEMENT LEARNING FOR YAHTZEE
+%       --------------------------------------------------
+
+@misc{belaich-2024-yams,
+  author = {Belaich, Alae},
+  title  = {{YAMS: Reinforcement Learning Project}},
+  year   = {2024},
+  url    = {https://github.com/abelaich/YAMS-Reinforcement-Learning-Project},
+  note   = {GitHub repository, accessed 2025-11-16}
+}
+
+@unpublished{kang-2018-yahtzee-rl,
+  author = {Kang, Minhyung and Schroeder, Luca},
+  title  = {Reinforcement Learning for Solving Yahtzee},
+  year   = {2018},
+  note   = {AA228: Decision Making under Uncertainty, Stanford University, class project report},
+  url    = {https://web.stanford.edu/class/aa228/reports/2018/final75.pdf}
+}
+
+@unpublished{vasseur-2019-strategy-ladders,
+  author       = {Vasseur, Philip},
+  title        = {Using Deep Q-Learning to Compare Strategy Ladders of Yahtzee},
+  school       = {Yale University},
+  type         = {Undergraduate thesis, Department of Computer Science},
+  address      = {New Haven, CT},
+  year         = {2019},
+  howpublished = {GitHub repository},
+  url          = {https://raw.githubusercontent.com/philvasseur/Yahtzee-DQN-Thesis/dcf2bfe15c3b8c0ff3256f02dd3c0aabdbcbc9bb/webpage/final_report.pdf}
+}
+
+@unpublished{yuan-2023-two-player-yahtzee,
+  author      = {Yuan, Max},
+  title       = {Using Deep Q-Learning to Play Two-Player Yahtzee},
+  note        = {Senior essay, Computer Science and Economics},
+  institution = {Yale University},
+  address     = {New Haven, CT, USA},
+  year        = {2023},
+  month       = {12},
+  advisor     = {James R. Glenn},
+  url         = {https://csec.yale.edu/senior-essays/fall-2023/using-deep-q-learning-play-two-player-yahtzee}
+}
+
+@misc{Haefner2021Yahtzotron,
+  author = {Dion H{\"a}fner},
+  title  = {Learning to Play Yahtzee with Advantage Actor-Critic (A2C)},
+  url    = {https://dionhaefner.github.io/2021/04/yahtzotron-learning-to-play-yahtzee-with-advantage-actor-critic/},
+  year   = {2021}
+}
+
+@misc{DutschkeYahtzee,
+  author       = {Markus Dutschke},
+  title        = {A Yahtzee/Kniffel Simulation Making Use of Machine Learning Techniques},
+  url          = {https://github.com/markusdutschke/yahtzee},
+  howpublished = {GitHub repository}
+}
+
+
+% ============================================================================
+% 3. PROBLEM STATEMENT
+% ============================================================================
+
+% MDP's
+@book{Puterman1994MDP,
+  author    = {Martin L. Puterman},
+  title     = {Markov Decision Processes: Discrete Stochastic Dynamic Programming},
+  publisher = {Wiley},
+  series    = {Wiley Series in Probability and Statistics},
+  year      = {1994},
+  isbn      = {978-0-471-61977-2},
+  doi       = {10.1002/9780470316887},
+  url       = {https://doi.org/10.1002/9780470316887}
+}
+
+% ============================================================================
+% 4. METHODOLOGY
+% ============================================================================
+
+%       --------------------------------------------------
+%       4.2 ACTION REPRESENTATION
+%       --------------------------------------------------
+
+@inproceedings{tijsma2016comparing_exploration,
+  title     = {Comparing Exploration Strategies for {Q}-Learning in Random Stochastic Mazes},
+  author    = {Tijsma, Arryon and Drugan, Madalina M. and Wiering, Marco A.},
+  booktitle = {2016 IEEE Symposium Series on Computational Intelligence (SSCI)},
+  pages     = {1--8},
+  year      = {2016},
+  publisher = {IEEE},
+  url       = {https://ieeexplore.ieee.org/document/7849366}
+}
+
+%       --------------------------------------------------
+%       4.3 NEURAL NETWORK ARCHITECTURE
+%       --------------------------------------------------
+
+@inproceedings{paszke2019pytorch,
+  title     = {PyTorch: An Imperative Style, High-Performance Deep Learning Library},
+  author    = {Paszke, Adam and Gross, Sam and Massa, Francisco and Lerer, Adam
+               and Bradbury, James and Chanan, Gregory and Killeen, Trevor
+               and Lin, Zeming and Gimelshein, Natalia and Antiga, Luca
+               and Desmaison, Alban and Kopf, Andreas and Yang, Edward
+               and DeVito, Zachary and Raison, Martin and Tejani, Alykhan
+               and Chilamkurthy, Sasank and Steiner, Benoit and Fang, Lu
+               and Bai, Junjie and Chintala, Soumith},
+  booktitle = {Advances in Neural Information Processing Systems 32},
+  year      = {2019},
+  url       = {https://arxiv.org/abs/1912.01703}
+}
+
+@article{falcon2019pytorchlightning,
+  title   = {{PyTorch Lightning}},
+  author  = {Falcon, William A.},
+  journal = {GitHub repository},
+  year    = {2019},
+  url     = {https://github.com/Lightning-AI/lightning}
+}
+
+%             --------------------------------------------------
+%             4.3.1 TRUNK
+%             --------------------------------------------------
+
+% Talks about minimum and lower bounds on neural network size given game space.
+@inproceedings{horne-1994-bounds-rnn-fsm,
+  author    = {Horne, Bill G. and Hush, Don R.},
+  title     = {Bounds on the Complexity of Recurrent Neural Network Implementations of Finite State Machines},
+  booktitle = {Advances in Neural Information Processing Systems 6},
+  editor    = {Cowan, Jack D. and Tesauro, Gerald and Alspector, Joshua},
+  pages     = {359--366},
+  year      = {1994},
+  publisher = {Morgan Kaufmann},
+  address   = {San Francisco, CA},
+  url       = {https://proceedings.neurips.cc/paper/1993/file/afda332245e2af431fb7b672a68b659d-Paper.pdf}
+}
+
+@article{hanin-2017-bounded-width-relu,
+  author       = {Boris Hanin},
+  title        = {Universal Function Approximation by Deep Neural Nets with Bounded Width and ReLU Activations},
+  year         = {2017},
+  eprint       = {arXiv:1708.02691},
+  howpublished = {Mathematics 2019, 7(10), 992},
+  doi          = {10.3390/math7100992}
+}
+
+% Layer Normalization
+@article{ba-2016-layernorm,
+  author  = {Jimmy Lei Ba and Jamie Ryan Kiros and Geoffrey E. Hinton},
+  title   = {Layer Normalization},
+  journal = {arXiv preprint arXiv:1607.06450},
+  year    = {2016},
+  url     = {https://arxiv.org/abs/1607.06450}
+}
+
+@article{srivastava2014dropout,
+  title   = {Dropout: A Simple Way to Prevent Neural Networks from Overfitting},
+  author  = {Srivastava, Nitish and Hinton, Geoffrey E. and Krizhevsky, Alex
+             and Sutskever, Ilya and Salakhutdinov, Ruslan},
+  journal = {Journal of Machine Learning Research},
+  volume  = {15},
+  number  = {56},
+  pages   = {1929--1958},
+  year    = {2014},
+  url     = {https://jmlr.org/papers/v15/srivastava14a.html}
+}
+
+% Swish activation function
+@article{ramachandran-2017-swish,
+  author  = {Prajit Ramachandran and Barret Zoph and Quoc V. Le},
+  title   = {Searching for Activation Functions},
+  journal = {arXiv preprint arXiv:1710.05941},
+  year    = {2017},
+  url     = {https://arxiv.org/abs/1710.05941}
+}
+
+%             --------------------------------------------------
+%             4.3.2 POLICY AND VALUE HEADS
+%             --------------------------------------------------
+
+@inproceedings{tavakoli2018actionbranching,
+  title     = {Action Branching Architectures for Deep Reinforcement Learning},
+  author    = {Tavakoli, Arash and Pardo, Fabio and Kormushev, Petar},
+  booktitle = {Proceedings of the AAAI Conference on Artificial Intelligence},
+  volume    = {32},
+  number    = {1},
+  year      = {2018},
+  url       = {https://arxiv.org/abs/1711.08946}
+}
+
+@inproceedings{hausknecht2016parameterized,
+  title     = {Deep Reinforcement Learning in Parameterized Action Space},
+  author    = {Hausknecht, Matthew and Stone, Peter},
+  booktitle = {Proceedings of the International Conference on Learning Representations (Workshop Track)},
+  year      = {2016},
+  note      = {arXiv:1511.04143},
+  url       = {https://arxiv.org/abs/1511.04143}
+}
+
+@inproceedings{clevert2016elu,
+  title     = {Fast and Accurate Deep Network Learning by Exponential Linear Units ({ELUs})},
+  author    = {Clevert, Djork-Arn{\'e} and Unterthiner, Thomas and Hochreiter, Sepp},
+  booktitle = {Proceedings of the International Conference on Learning Representations},
+  year      = {2016},
+  note      = {arXiv:1511.07289},
+  url       = {https://arxiv.org/abs/1511.07289}
+}
+
+%             --------------------------------------------------
+%             4.3.3 OPTIMIZATION AND SCHEDULES
+%             --------------------------------------------------
+
+% Adam optimizer
+@article{kingma2014adam,
+  title         = {Adam: A Method for Stochastic Optimization},
+  author        = {Kingma, Diederik P. and Ba, Jimmy},
+  journal       = {arXiv preprint arXiv:1412.6980},
+  year          = {2014},
+  url           = {https://arxiv.org/abs/1412.6980},
+  eprint        = {1412.6980},
+  archiveprefix = {arXiv},
+  primaryclass  = {cs.LG},
+  note          = {Published as a conference paper at ICLR 2015}
+}
+
+% Theoretical analysis of learning rate warmup
+@article{liu-2025-warmup-theory,
+  title         = {Theoretical Analysis on how Learning Rate Warmup Accelerates Convergence},
+  author        = {Liu, Yuxing and Ge, Yuze and Pan, Rui and Kang, An and Zhang, Tong},
+  journal       = {arXiv preprint arXiv:2509.07972},
+  year          = {2025},
+  eprint        = {2509.07972},
+  archiveprefix = {arXiv},
+  primaryclass  = {cs.LG},
+  url           = {https://arxiv.org/abs/2509.07972}
+}
+
+% Learning rate warmup mechanisms
+@article{kalra-2024-warmup,
+  title         = {Why Warmup the Learning Rate? Underlying Mechanisms and Improvements},
+  author        = {Kalra, Dayal Singh and Barkeshli, Maissam},
+  journal       = {arXiv preprint arXiv:2406.09405},
+  year          = {2024},
+  eprint        = {2406.09405},
+  archiveprefix = {arXiv},
+  primaryclass  = {cs.LG},
+  url           = {https://arxiv.org/abs/2406.09405}
+}
+
+% decay theory
+@article{defazio2023optimal,
+  title   = {Optimal Linear Decay Learning Rate Schedules and Further Refinements},
+  author  = {Defazio, Aaron and Cutkosky, Ashok and Mehta, Harsh and Mishchenko, Konstantin},
+  journal = {arXiv preprint arXiv:2310.07831},
+  year    = {2023},
+  url     = {https://arxiv.org/abs/2310.07831}
+}
+
+% decay in PPO
+@inproceedings{lyle2024normalization,
+  title     = {Normalization and Effective Learning Rates in Reinforcement Learning},
+  author    = {Lyle, Clare and Zheng, Zeyu and Khetarpal, Khimya and Martens, James and van Hasselt, Hado and Pascanu, Razvan and Dabney, Will},
+  booktitle = {Advances in Neural Information Processing Systems},
+  year      = {2024},
+  url       = {https://arxiv.org/abs/2407.01800}
+}
+
+%             --------------------------------------------------
+%             4.3.4 TRAINING METRICS
+%             --------------------------------------------------
+
+@misc{schulman2016nutsbolts,
+  author       = {John Schulman},
+  title        = {The Nuts and Bolts of Deep {RL} Research},
+  howpublished = {NIPS 2016 Deep Reinforcement Learning Workshop},
+  year         = {2016},
+  note         = {Slides},
+  url          = {https://joschu.net/docs/nuts-and-bolts.pdf}
+}
+
+% Mask diversity
+@article{Hubara2021MaskDiversity,
+  title   = {Accelerated Sparse Neural Training: A Provable and Efficient Method to Find N:M Transposable Masks},
+  author  = {Hubara, Itay and Chmiel, Brian and Island, Moshe and Banner, Ron and Naor, Seffi and Soudry, Daniel},
+  journal = {Advances in Neural Information Processing Systems},
+  volume  = {34},
+  pages   = {21099--21111},
+  year    = {2021},
+  note    = {Introduces the mask-diversity metric},
+  url     = {https://arxiv.org/abs/2102.08124}
+}
+
+% top k analysis
+@inproceedings{sun-etal-2025-curiosity,
+  title     = {Curiosity-Driven Reinforcement Learning from Human Feedback},
+  author    = {Sun, Haoran and Chai, Yekun and Wang, Shuohuan and Sun, Yu and Wu, Hua and Wang, Haifeng},
+  booktitle = {Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)},
+  month     = jul,
+  year      = {2025},
+  address   = {Vienna, Austria},
+  publisher = {Association for Computational Linguistics},
+  pages     = {23517--23534},
+  doi       = {10.18653/v1/2025.acl-long.1146},
+  url       = {https://aclanthology.org/2025.acl-long.1146/}
+}
+
+@inproceedings{Engstrom2020ImplementationMatters,
+  title     = {Implementation Matters in Deep Policy Gradients: A Case Study on {PPO} and {TRPO}},
+  author    = {Engstrom, Logan and Ilyas, Andrew and Santurkar, Shibani and Tsipras, Dimitris and Janoos, Federico and Rudolph, Larry and Madry, Aleksander},
+  booktitle = {International Conference on Learning Representations (ICLR)},
+  year      = {2020},
+  url       = {https://openreview.net/forum?id=r1etN1rtPB}
+}
+
+@misc{Achiam2018SpinningUp,
+  author       = {Joshua Achiam},
+  title        = {Spinning Up in Deep Reinforcement Learning},
+  howpublished = {Technical report},
+  year         = {2018},
+  note         = {OpenAI educational resource},
+  url          = {https://spinningup.openai.com}
+}
+
+@misc{biewald2020wandb,
+  author = {Biewald, Lukas},
+  title  = {Experiment Tracking with Weights and Biases},
+  year   = {2020},
+  url    = {https://www.wandb.com/}
+}
+
+% ============================================================================
+% 5. RESULTS
+% ============================================================================
+
+@misc{elfwing2017sigmoidweightedlinearunitsneural,
+  title         = {Sigmoid-Weighted Linear Units for Neural Network Function Approximation in Reinforcement Learning},
+  author        = {Stefan Elfwing and Eiji Uchibe and Kenji Doya},
+  year          = {2017},
+  eprint        = {1702.03118},
+  archiveprefix = {arXiv},
+  primaryclass  = {cs.LG},
+  url           = {https://arxiv.org/abs/1702.03118}
+}
+
+% ============================================================================
+% 6. ANALYSIS
+% ============================================================================
+
+% ============================================================================
+% 7. CONCLUSION
+% ============================================================================
+
+% Hierarchical RL
+@article{Barto2003,
+  author  = {Barto, Andrew G. and Mahadevan, Sridhar},
+  title   = {Recent Advances in Hierarchical Reinforcement Learning},
+  journal = {Discrete Event Dynamic Systems},
+  year    = {2003},
+  volume  = {13},
+  number  = {4},
+  pages   = {341--379},
+  doi     = {10.1023/A:1025696116075},
+  url     = {https://doi.org/10.1023/A:1025696116075}
+}
+
+
+% Deep Sets
+@misc{zaheer2018deepsets,
+  title         = {Deep Sets},
+  author        = {Manzil Zaheer and Satwik Kottur and Siamak Ravanbakhsh and Barnabas Poczos and Ruslan Salakhutdinov and Alexander Smola},
+  year          = {2018},
+  eprint        = {1703.06114},
+  archiveprefix = {arXiv},
+  primaryclass  = {cs.LG},
+  url           = {https://arxiv.org/abs/1703.06114}
+}
+
+% Attention mechanism
+@inproceedings{vaswani-2017-attention,
+  title     = {Attention {I}s {A}ll {Y}ou {N}eed},
+  author    = {Vaswani, Ashish and Shazeer, Noam and Parmar, Niki and Uszkoreit, Jakob
+               and Jones, Llion and Gomez, Aidan N. and Kaiser, {\L}ukasz and Polosukhin, Illia},
+  booktitle = {Advances in Neural Information Processing Systems},
+  editor    = {Guyon, I. and Luxburg, U. V. and Bengio, S. and Wallach, H. and Fergus, R.
+               and Vishwanathan, S. and Garnett, R.},
+  volume    = {30},
+  year      = {2017},
+  url       = {https://arxiv.org/abs/1706.03762}
+}
+
+% ============================================================================
+% APPENDIX
+% ============================================================================

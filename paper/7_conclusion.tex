@@ -14,12 +14,12 @@ For example, curriculum learning approaches, where the agent is gradually expose
 We found that \textrm{Yahtzee} is trivially broken into several a heirarchy of interesting sub-problems.
 It was fairly expensive to train a full-game agent from scratch, but training a single-turn agent was much more efficient.
 Transfer learning could be explored further to see if knowledge from single-turn optimization could be effectively transferred to full-game, multiplayer Yahtzee, or other variants of the game.
-Additionally, \textrm{Yahtzee} could also be considered as a candidate environment for research into hierarchical reinforcement learning (HRL) methods.
+Additionally, \textrm{Yahtzee} could also be considered as a candidate environment for research into hierarchical reinforcement learning methods \cite{Barto2003}.
 
 Perhaps most interestingly, we showed that an architecture that is, in theory, applicable to the multiplayer setting can be effectively trained to play Solitaire \textit{Yahtzee} at a high level.
 This opens the door to future research into adversarial formulations of the game, which are intractable using analytic methods.
 Our agent tries only to achieve the best game score, but in a multiplayer setting, it would need to reason about opponents' strategies and scorecards and adapt accordingly to maximize its chances of winning.
-Likewise, the use of self-attention and other permutation-invariant architectures could be applicable to many games or scenarios involving multiple agents in a shared environment.
+<Future work could explore permutation-invariant architectures such as Deep Sets \cite{zaheer2018deepsets} or embeddings with self-attention to handle unsorted dice> \cite{vaswani-2017-attention}
 
 
 
