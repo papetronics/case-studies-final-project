@@ -524,7 +524,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
                     shaped_rewards = rewards_flat
 
                 # A2C / Actor-Critic branch: TD(0) or GAE
-                use_gae = getattr(self, "gae_lambda", None) is not None and self.gae_lambda > 0.0
+                use_gae = self.gae_lambda > 0.0
                 if use_gae:
                     lam = self.gae_lambda
                     # GAE per episode
