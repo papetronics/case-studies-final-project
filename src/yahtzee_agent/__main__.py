@@ -373,7 +373,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
         ppo_batch_size = games_per_batch * num_steps_per_episode
         ppo_minibatch_size = ppo_games_per_minibatch * num_steps_per_episode
         if ppo_batch_size % ppo_minibatch_size != 0:
-            raise PPOBatchNotDivisibleError(ppo_minibatch_size, ppo_batch_size)
+            raise PPOBatchNotDivisibleError(ppo_games_per_minibatch, games_per_batch)
 
     # Validate that games_per_epoch divides evenly by games_per_batch
     if games_per_epoch % games_per_batch != 0:
