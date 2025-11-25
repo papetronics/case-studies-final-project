@@ -21,9 +21,11 @@
         "entropy_coeff_scoring_min": 0.01,
         "entropy_hold_period": 0.1,
         "entropy_anneal_period": 0.8,
-        "critic_coeff": 0.005,
+        "critic_coeff": 0.01,
         "gradient_clip_val": 1.0,
         "clip_epsilon": 0.2,
+        "ppo_games_per_minibatch": 4,
+        "ppo_epochs": 3,
         "phi_features": "dice_onehot,dice_counts,rolls_used,phase,has_earned_yahtzee,available_categories,percent_progress_towards_bonus,potential_scoring_opportunities,game_progress",
         "rolling_action_representation": "categorical"
     }

@@ -7,6 +7,7 @@ import gymnasium as gym
 import numpy as np
 import pytorch_lightning as lightning
 import torch
+from pytorch_lightning.core.optimizer import LightningOptimizer
 
 from environments.full_yahtzee_env import Action, Observation
 from utilities.activation_functions import ActivationFunctionName
@@ -77,6 +78,9 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         he_kaiming_initialization: bool,
         algorithm: Algorithm,
         clip_epsilon: float,
+        ppo_games_per_minibatch: int,
+        ppo_epochs: int,
+        gradient_clip_val: float,
     ):
         super().__init__()
 
@@ -110,8 +114,15 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         self.critic_coeff: float = critic_coeff
         self.num_steps_per_episode: int = num_steps_per_episode
         self.clip_epsilon: float = clip_epsilon
+        self._gradient_clip_val: float = gradient_clip_val  # manual clipping for PPO
 
         self.validation_envs: list[gym.Env[Observation, Action]] = []  # Created on demand
+
+        # for PPO style minibatching we need to turn off Lightning's automatic updating
+        if self.algorithm == Algorithm.PPO:
+            self.automatic_optimization = False
+            self.ppo_games_per_minibatch: int = ppo_games_per_minibatch
+            self.ppo_epochs: int = ppo_epochs
 
     def run_batched_validation_games(  # noqa: C901, PLR0912, PLR0915
         self, num_games: int, run_deterministic: bool = True, run_stochastic: bool = False
@@ -371,7 +382,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
 
         return rolling_coef, scoring_coef
 
-    def training_step(self, batch: EpisodeBatch, batch_idx: int) -> torch.Tensor:  # noqa: ARG002
+    def training_step(self, batch: EpisodeBatch, batch_idx: int) -> torch.Tensor:  # noqa: ARG002, PLR0915
         """Perform a training step using REINFORCE, A2C, or PPO algorithm with vectorized operations."""
         # batch is an EpisodeBatch dict with pre-flattened tensors:
         # - "states": (BATCH_SIZE*39, state_size) float32
@@ -381,6 +392,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         # - "next_states": (BATCH_SIZE*39, state_size) float32
         # - "phases": (BATCH_SIZE*39,) int
         # - "next_v_baseline": (BATCH_SIZE*39,) float32 - for TD(0)
+        # - "v_baseline": (BATCH_SIZE*39,) float32 - for advantage calculation in PPO
         # - "old_log_probs": (BATCH_SIZE*39,) float32 - for PPO
 
         # Dataset pre-flattens, so we just extract directly
@@ -388,6 +400,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         rolling_actions_flat = batch["rolling_actions"]
         scoring_actions_flat = batch["scoring_actions"]
         rewards_flat = batch["rewards"]
+        v_baseline = batch["v_baseline"]
         next_v_baseline = batch["next_v_baseline"]
         phases_flat = batch["phases"]
         old_log_probs = batch["old_log_probs"]
@@ -399,31 +412,116 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         steps_per_episode = self.num_steps_per_episode
         num_episodes = total_steps // steps_per_episode
 
-        # Forward pass through current policy to get probabilities and value estimates
-        rolling_probs, scoring_probs, v_ests = self.policy_net.forward(states_flat)
+        loss: torch.Tensor
 
-        normalized_advantage, returns = self.get_advantage(
-            num_episodes, steps_per_episode, rewards_flat, next_v_baseline, v_ests, phases_flat
-        )
+        if self.algorithm == Algorithm.PPO:
+            optimizer = cast("LightningOptimizer", self.optimizers())
 
-        policy_loss, entropy_loss = self.get_policy_loss(
-            rolling_probs,
-            rolling_actions_flat,
-            scoring_probs,
-            scoring_actions_flat,
-            phases_flat,
-            normalized_advantage,
-            old_log_probs,
-        )
+            # 1) Compute advantages & returns for the whole batch, respecting episode boundaries
+            normalized_advantages, returns_full = self.get_advantage(
+                num_episodes,
+                steps_per_episode,
+                rewards_flat,
+                next_v_baseline,
+                v_baseline,
+                phases_flat,
+            )
 
-        loss: torch.Tensor = (
-            policy_loss + self.critic_coeff * self.get_value_loss(v_ests, returns) + entropy_loss
-        )
+            batch_size = self.ppo_games_per_minibatch * steps_per_episode
+            assert total_steps % batch_size == 0
+            num_minibatches = total_steps // batch_size
+
+            ppo_epochs = self.ppo_epochs  # e.g. 3
+
+            last_loss: torch.Tensor = torch.tensor(0.0, device=states_flat.device)
+
+            for _ in range(ppo_epochs):
+                # 2) Shuffle indices each epoch
+                perm = torch.randperm(total_steps, device=states_flat.device)
+
+                for minibatch_idx in range(num_minibatches):
+                    start_idx = minibatch_idx * batch_size
+                    end_idx = start_idx + batch_size
+                    idx = perm[start_idx:end_idx]
+
+                    mb_states = states_flat[idx]
+                    mb_rolling_actions = rolling_actions_flat[idx]
+                    mb_scoring_actions = scoring_actions_flat[idx]
+                    mb_phases = phases_flat[idx]
+                    mb_old_log_probs = old_log_probs[idx]
+                    mb_advantages = normalized_advantages[idx]
+                    mb_returns = returns_full[idx]
+
+                    # Forward pass on minibatch
+                    mb_rolling_probs, mb_scoring_probs, mb_v_ests = self.policy_net.forward(
+                        mb_states
+                    )
+
+                    mb_policy_loss, mb_entropy_loss = self.get_policy_loss(
+                        mb_rolling_probs,
+                        mb_rolling_actions,
+                        mb_scoring_probs,
+                        mb_scoring_actions,
+                        mb_phases,
+                        mb_advantages,
+                        mb_old_log_probs,
+                    )
+
+                    value_loss = self.get_value_loss(mb_v_ests, mb_returns)
+
+                    mb_loss: torch.Tensor = (
+                        mb_policy_loss + self.critic_coeff * value_loss + mb_entropy_loss
+                    )
+
+                    # unwrap to real torch optimizer
+                    assert isinstance(optimizer, LightningOptimizer)
+                    t_optimizer: torch.optim.Optimizer = optimizer.optimizer
+
+                    optimizer.zero_grad()
+                    self.manual_backward(mb_loss)
+
+                    # gradient clipping if you want it
+                    self.configure_gradient_clipping(
+                        t_optimizer,
+                        gradient_clip_val=self._gradient_clip_val,
+                        gradient_clip_algorithm="norm",
+                    )
+
+                    optimizer.step()
+
+                    last_loss = mb_loss.detach()
+
+            loss = last_loss
+        else:
+            # Forward pass through current policy to get probabilities and value estimates
+            rolling_probs, scoring_probs, v_ests = self.policy_net.forward(states_flat)
+
+            normalized_advantage, returns = self.get_advantage(
+                num_episodes, steps_per_episode, rewards_flat, next_v_baseline, v_ests, phases_flat
+            )
+
+            policy_loss, entropy_loss = self.get_policy_loss(
+                rolling_probs,
+                rolling_actions_flat,
+                scoring_probs,
+                scoring_actions_flat,
+                phases_flat,
+                normalized_advantage,
+                old_log_probs,
+            )
+
+            loss = (
+                policy_loss
+                + self.critic_coeff * self.get_value_loss(v_ests, returns)
+                + entropy_loss
+            )
 
         self.log("train/total_loss", loss, prog_bar=True)
         self.log("lr", self.trainer.optimizers[0].param_groups[0]["lr"], prog_bar=False)
         self.log("train/frac_roll_steps", compute_phase_balance(phases_flat), prog_bar=False)
-        self.log_kl_diagnostics(scoring_probs, rolling_probs, phases_flat)
+
+        if self.algorithm != Algorithm.PPO:
+            self.log_kl_diagnostics(scoring_probs, rolling_probs, phases_flat)
 
         return loss
 
