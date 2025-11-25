@@ -602,7 +602,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
                         == RollingActionRepresentation.CATEGORICAL
                     ):
                         rolling_dist = torch.distributions.Categorical(logits=mb_rolling_logits)
-                        new_rolling_log_probs = rolling_dist.log_prob(mb_rolling_actions.float())
+                        new_rolling_log_probs = rolling_dist.log_prob(mb_rolling_actions)
                     else:  # BERNOULLI
                         rolling_dist = torch.distributions.Bernoulli(logits=mb_rolling_logits)
                         new_rolling_log_probs = rolling_dist.log_prob(
