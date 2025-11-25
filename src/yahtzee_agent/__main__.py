@@ -58,7 +58,21 @@ class MissingPhiFeaturesError(InvalidTrainingConfigurationError):
         super().__init__(f"phi_features must be specified. Available features: {features_str}")
 
 
-def main() -> None:  # noqa: PLR0915
+class PPOBatchNotDivisibleError(InvalidTrainingConfigurationError):
+    """Exception raised when PPO batch size is not divisible by number of minibatches."""
+
+    def __init__(
+        self,
+        ppo_games_per_minibatch: int,
+        ppo_batch_size: int,
+    ) -> None:
+        super().__init__(
+            f"ppo_batch_size ({ppo_batch_size}) must be divisible by ppo_games_per_minibatch ({ppo_games_per_minibatch}). "
+            f"Current ratio: {ppo_batch_size}/{ppo_games_per_minibatch} = {ppo_batch_size/ppo_games_per_minibatch}"
+        )
+
+
+def main() -> None:  # noqa: C901, PLR0912, PLR0915
     """Run training or testing for single-turn Yahtzee score maximization."""
     # Define configuration schema
     config_params = [
@@ -236,8 +250,8 @@ def main() -> None:  # noqa: PLR0915
             "algorithm",
             str,
             "reinforce",
-            "Training algorithm: 'reinforce' (REINFORCE with Monte Carlo returns) or 'a2c' (Advantage Actor-Critic with TD(0) bootstrapping)",
-            choices=["reinforce", "a2c"],
+            "Training algorithm: 'reinforce' (REINFORCE with Monte Carlo returns), 'a2c' (Advantage Actor-Critic with TD(0) bootstrapping), or 'ppo' (Proximal Policy Optimization)",
+            choices=["reinforce", "a2c", "ppo"],
             display_name="Algorithm",
         ),
         ConfigParam(
@@ -259,6 +273,27 @@ def main() -> None:  # noqa: PLR0915
             0.1,
             "Weight for the upper score regression shaping loss term",
             display_name="Upper score regression shaping weight",
+        ),
+        ConfigParam(
+            "clip_epsilon",
+            float,
+            0.2,
+            "PPO clipping parameter (epsilon) for clipped surrogate objective",
+            display_name="Clip epsilon",
+        ),
+        ConfigParam(
+            "ppo_games_per_minibatch",
+            int,
+            4,
+            "Number of games per PPO minibatch (batch is split into multiple minibatches).",
+            display_name="PPO games per minibatch",
+        ),
+        ConfigParam(
+            "ppo_epochs",
+            int,
+            3,
+            "Number of epochs to train over each PPO batch.",
+            display_name="PPO epochs",
         ),
     ]
 
@@ -299,6 +334,9 @@ def main() -> None:  # noqa: PLR0915
     gae_lambda = config["gae_lambda"]
     upper_score_regression_loss_weight = config["upper_score_regression_loss_weight"]
     upper_score_shaping_weight = config["upper_score_shaping_weight"]
+    clip_epsilon = config["clip_epsilon"]
+    ppo_games_per_minibatch = config["ppo_games_per_minibatch"]
+    ppo_epochs = config["ppo_epochs"]
 
     torch.set_float32_matmul_precision("medium")
 
@@ -329,6 +367,13 @@ def main() -> None:  # noqa: PLR0915
 
     # Calculate games_per_epoch from total_train_games and epochs
     games_per_epoch = total_train_games // epochs
+
+    # check that PPO minibatches evenly divide the batch size
+    if algorithm == "ppo":
+        ppo_batch_size = games_per_batch * num_steps_per_episode
+        ppo_minibatch_size = ppo_games_per_minibatch * num_steps_per_episode
+        if ppo_batch_size % ppo_minibatch_size != 0:
+            raise PPOBatchNotDivisibleError(ppo_games_per_minibatch, games_per_batch)
 
     # Validate that games_per_epoch divides evenly by games_per_batch
     if games_per_epoch % games_per_batch != 0:
@@ -378,6 +423,9 @@ def main() -> None:  # noqa: PLR0915
         if algorithm == "a2c":
             algorithm = Algorithm.A2C
             log.info("Using A2C (Advantage Actor-Critic) with TD(0) bootstrapping")
+        elif algorithm == "ppo":
+            algorithm = Algorithm.PPO
+            log.info("Using PPO (Proximal Policy Optimization) with clipped surrogate objective")
         else:  # reinforce
             algorithm = Algorithm.REINFORCE
             log.info("Using REINFORCE with Monte Carlo returns")
@@ -409,6 +457,10 @@ def main() -> None:  # noqa: PLR0915
             gae_lambda=gae_lambda,
             upper_score_regression_loss_weight=upper_score_regression_loss_weight,
             upper_score_shaping_weight=upper_score_shaping_weight,
+            clip_epsilon=clip_epsilon,
+            ppo_games_per_minibatch=ppo_games_per_minibatch,
+            ppo_epochs=ppo_epochs,
+            gradient_clip_val=gradient_clip_val,
         )
 
         # Save hyperparameters explicitly
@@ -441,6 +493,9 @@ def main() -> None:  # noqa: PLR0915
                 "gae_lambda": gae_lambda,
                 "upper_score_regression_loss_weight": upper_score_regression_loss_weight,
                 "upper_score_shaping_weight": upper_score_shaping_weight,
+                "clip_epsilon": clip_epsilon,
+                "ppo_games_per_minibatch": ppo_games_per_minibatch,
+                "ppo_epochs": ppo_epochs,
             }
         )
 
@@ -478,8 +533,12 @@ def main() -> None:  # noqa: PLR0915
             devices="auto",
             check_val_every_n_epoch=5,  # Run validation every 5 epochs
             callbacks=[ckpt_cb],
-            gradient_clip_val=gradient_clip_val,  # or 1.0, etc.
-            gradient_clip_algorithm="norm",  # L2 norm clipping
+            gradient_clip_val=gradient_clip_val
+            if algorithm != Algorithm.PPO
+            else None,  # or 1.0, etc.
+            gradient_clip_algorithm="norm"
+            if algorithm != Algorithm.PPO
+            else None,  # L2 norm clipping
         )
 
         # Create self-play dataset that collects episodes using the policy

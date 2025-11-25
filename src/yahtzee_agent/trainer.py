@@ -7,6 +7,7 @@ import gymnasium as gym
 import numpy as np
 import pytorch_lightning as lightning
 import torch
+from pytorch_lightning.core.optimizer import LightningOptimizer
 
 from environments.full_yahtzee_env import Action, Observation
 from utilities.activation_functions import ActivationFunctionName
@@ -47,6 +48,7 @@ class Algorithm(Enum):
 
     REINFORCE = "reinforce"  # Monte Carlo policy gradient (REINFORCE)
     A2C = "a2c"  # Advantage Actor-Critic (A2C) with TD(0)
+    PPO = "ppo"  # Proximal Policy Optimization (PPO) with clipped surrogate objective
 
 
 class YahtzeeAgentTrainer(lightning.LightningModule):
@@ -79,6 +81,10 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         upper_score_regression_loss_weight: float,
         upper_score_shaping_weight: float,
         gae_lambda: float,
+        clip_epsilon: float,
+        ppo_games_per_minibatch: int,
+        ppo_epochs: int,
+        gradient_clip_val: float,
     ):
         super().__init__()
 
@@ -115,9 +121,17 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         self.upper_score_regression_loss_weight: float = upper_score_regression_loss_weight
         self.upper_score_shaping_weight: float = upper_score_shaping_weight
         self.gae_lambda: float = gae_lambda
+        self.clip_epsilon: float = clip_epsilon
+        self._gradient_clip_val: float = gradient_clip_val  # manual clipping for PPO
 
         self.validation_envs: list[gym.Env[Observation, Action]] = []  # Created on demand
 
+        # Always set PPO-specific attributes, regardless of algorithm
+        self.ppo_games_per_minibatch: int = ppo_games_per_minibatch
+        self.ppo_epochs: int = ppo_epochs
+        # for PPO style minibatching we need to turn off Lightning's automatic updating
+        if self.algorithm == Algorithm.PPO:
+            self.automatic_optimization = False
     def run_batched_validation_games(  # noqa: C901, PLR0912, PLR0915
         self, num_games: int, run_deterministic: bool = True, run_stochastic: bool = False
     ) -> tuple[list[float], list[float], dict[str, Any], dict[str, Any]]:
@@ -387,7 +401,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         return rolling_coef, scoring_coef
 
     def training_step(self, batch: EpisodeBatch, batch_idx: int) -> torch.Tensor:  # noqa: ARG002
-        """Perform a training step using REINFORCE algorithm with vectorized operations."""
+        """Perform a training step using REINFORCE, A2C, or PPO algorithm with vectorized operations."""
         # batch is an EpisodeBatch dict with pre-flattened tensors:
         # - "states": (BATCH_SIZE*39, state_size) float32
         # - "rolling_actions": (BATCH_SIZE*39, 5) int
@@ -396,16 +410,20 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         # - "next_states": (BATCH_SIZE*39, state_size) float32
         # - "phases": (BATCH_SIZE*39,) int
         # - "next_v_baseline": (BATCH_SIZE*39,) float32 - for TD(0)
+        # - "v_baseline": (BATCH_SIZE*39,) float32 - for advantage calculation in PPO
+        # - "old_log_probs": (BATCH_SIZE*39,) float32 - for PPO
 
         # Dataset pre-flattens, so we just extract directly
         states_flat = batch["states"]
         rolling_actions_flat = batch["rolling_actions"]
         scoring_actions_flat = batch["scoring_actions"]
         rewards_flat = batch["rewards"]
+        v_baseline = batch["v_baseline"]
         next_v_baseline = batch["next_v_baseline"]
         phases_flat = batch["phases"]
         upper_score_actual = batch["upper_score_actual"]
         next_upper_score_actual = batch["next_upper_score_actual"]
+        old_log_probs = batch["old_log_probs"]
 
         # Calculate num_episodes and steps_per_episode from flattened shape
         # single_turn: 338 episodes x 3 steps = 1014 total
@@ -414,34 +432,56 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         steps_per_episode = self.num_steps_per_episode
         num_episodes = total_steps // steps_per_episode
 
-        # Forward pass through current policy to get probabilities and value estimates
-        rolling_probs, scoring_probs, v_ests, upper_score_logit = self.policy_net.forward(
-            states_flat
-        )
+        loss: torch.Tensor
 
-        normalized_advantage, returns = self.get_advantage(
-            num_episodes,
-            steps_per_episode,
-            rewards_flat,
-            next_v_baseline,
-            v_ests,
-            phases_flat,
-            upper_score_actual,
-            next_upper_score_actual,
-        )
+        if self.algorithm == Algorithm.PPO:
+            loss = self.run_ppo_minibatching(
+                states_flat,
+                rolling_actions_flat,
+                scoring_actions_flat,
+                rewards_flat,
+                v_baseline,
+                next_v_baseline,
+                phases_flat,
+                upper_score_actual,
+                next_upper_score_actual,
+                old_log_probs,
+                total_steps,
+                steps_per_episode,
+                num_episodes,
+            )
+        else:
+            # Forward pass through current policy to get probabilities and value estimates
+            rolling_probs, scoring_probs, v_ests, upper_score_logit = self.policy_net.forward(
+                states_flat
+            )
 
-        policy_loss, entropy_loss = self.get_policy_loss(
-            rolling_probs,
-            rolling_actions_flat,
-            scoring_probs,
-            scoring_actions_flat,
-            phases_flat,
-            normalized_advantage,
-        )
+            normalized_advantage, returns = self.get_advantage(
+                num_episodes,
+                steps_per_episode,
+                rewards_flat,
+                next_v_baseline,
+                v_ests,
+                phases_flat,
+                upper_score_actual,
+                next_upper_score_actual,
+            )
 
-        loss: torch.Tensor = (
-            policy_loss + self.critic_coeff * self.get_value_loss(v_ests, returns) + entropy_loss
-        )
+            policy_loss, entropy_loss = self.get_policy_loss(
+                rolling_probs,
+                rolling_actions_flat,
+                scoring_probs,
+                scoring_actions_flat,
+                phases_flat,
+                normalized_advantage,
+                old_log_probs,
+            )
+
+            loss = (
+                policy_loss
+                + self.critic_coeff * self.get_value_loss(v_ests, returns)
+                + entropy_loss
+            )
 
         ## Standard regression loss for upper score prediction
         if self.algorithm == Algorithm.A2C:
@@ -472,7 +512,143 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         self.log("train/total_loss", loss, prog_bar=True)
         self.log("lr", self.trainer.optimizers[0].param_groups[0]["lr"], prog_bar=False)
         self.log("train/frac_roll_steps", compute_phase_balance(phases_flat), prog_bar=False)
-        self.log_kl_diagnostics(scoring_probs, rolling_probs, phases_flat)
+
+        if self.algorithm != Algorithm.PPO:
+            self.log_kl_diagnostics(scoring_probs, rolling_probs, phases_flat)
+
+        return loss
+
+    def run_ppo_minibatching(  # noqa: PLR0913
+        self,
+        states_flat: torch.Tensor,
+        rolling_actions_flat: torch.Tensor,
+        scoring_actions_flat: torch.Tensor,
+        rewards_flat: torch.Tensor,
+        v_baseline: torch.Tensor,
+        next_v_baseline: torch.Tensor,
+        phases_flat: torch.Tensor,
+        upper_score_actual: torch.Tensor,
+        next_upper_score_actual: torch.Tensor,
+        old_log_probs: torch.Tensor,
+        total_steps: int,
+        steps_per_episode: int,
+        num_episodes: int,
+    ) -> torch.Tensor:
+        """Run PPO training with minibatching and multiple epochs per batch."""
+        optimizer = cast("LightningOptimizer", self.optimizers())
+
+        # 1) Compute advantages & returns for the whole batch, respecting episode boundaries
+        normalized_advantages, returns_full = self.get_advantage(
+            num_episodes,
+            steps_per_episode,
+            rewards_flat,
+            next_v_baseline,
+            v_baseline,
+            phases_flat,
+            upper_score_actual,
+            next_upper_score_actual,
+        )
+
+        batch_size = self.ppo_games_per_minibatch * steps_per_episode
+        assert total_steps % batch_size == 0
+        num_minibatches = total_steps // batch_size
+
+        ppo_epochs = self.ppo_epochs  # e.g. 3
+
+        total_loss_sum = torch.tensor(0.0, device=states_flat.device)
+
+        # Track KL divergence for PPO diagnostics (comparing old vs new policy)
+        kl_sum = torch.tensor(0.0, device=states_flat.device)
+
+        for _ in range(ppo_epochs):
+            # 2) Shuffle indices each epoch
+            perm = torch.randperm(total_steps, device=states_flat.device)
+
+            for minibatch_idx in range(num_minibatches):
+                start_idx = minibatch_idx * batch_size
+                end_idx = start_idx + batch_size
+                idx = perm[start_idx:end_idx]
+
+                mb_states = states_flat[idx]
+                mb_rolling_actions = rolling_actions_flat[idx]
+                mb_scoring_actions = scoring_actions_flat[idx]
+                mb_phases = phases_flat[idx]
+                mb_old_log_probs = old_log_probs[idx]
+                mb_advantages = normalized_advantages[idx]
+                mb_returns = returns_full[idx]
+
+                # Forward pass on minibatch
+                # PPO does not use upper_score_logit (upper score regression loss), unlike A2C.
+                mb_rolling_logits, mb_scoring_probs, mb_v_ests, _ = self.policy_net.forward(
+                    mb_states
+                )
+
+                mb_policy_loss, mb_entropy_loss = self.get_policy_loss(
+                    mb_rolling_logits,
+                    mb_rolling_actions,
+                    mb_scoring_probs,
+                    mb_scoring_actions,
+                    mb_phases,
+                    mb_advantages,
+                    mb_old_log_probs,
+                )
+
+                # Compute KL divergence between old and new policy for PPO diagnostics
+                with torch.no_grad():
+                    # Get new log probs
+                    rolling_dist: torch.distributions.Distribution
+                    if (
+                        self.rolling_action_representation
+                        == RollingActionRepresentation.CATEGORICAL
+                    ):
+                        rolling_dist = torch.distributions.Categorical(logits=mb_rolling_logits)
+                        new_rolling_log_probs = rolling_dist.log_prob(mb_rolling_actions)
+                    else:  # BERNOULLI
+                        rolling_dist = torch.distributions.Bernoulli(logits=mb_rolling_logits)
+                        new_rolling_log_probs = rolling_dist.log_prob(
+                            mb_rolling_actions.float()
+                        ).sum(dim=1)
+
+                    scoring_dist = torch.distributions.Categorical(mb_scoring_probs)
+                    new_scoring_log_probs = scoring_dist.log_prob(mb_scoring_actions)
+
+                    new_log_probs = torch.where(
+                        mb_phases == 0, new_rolling_log_probs, new_scoring_log_probs
+                    )
+
+                    # KL(old || new) ≈ old_log_prob - new_log_prob for same action
+                    mb_kl = (mb_old_log_probs - new_log_probs).mean()
+                    kl_sum += mb_kl
+
+                value_loss = self.get_value_loss(mb_v_ests, mb_returns)
+
+                mb_loss: torch.Tensor = (
+                    mb_policy_loss + self.critic_coeff * value_loss + mb_entropy_loss
+                )
+
+                # unwrap to real torch optimizer
+                assert isinstance(optimizer, LightningOptimizer)
+                t_optimizer: torch.optim.Optimizer = optimizer.optimizer
+
+                optimizer.zero_grad()
+                self.manual_backward(mb_loss)
+
+                # gradient clipping if you want it
+                self.configure_gradient_clipping(
+                    t_optimizer,
+                    gradient_clip_val=self._gradient_clip_val,
+                    gradient_clip_algorithm="norm",
+                )
+
+                optimizer.step()
+
+                total_loss_sum += mb_loss.detach()
+
+        loss = total_loss_sum / (ppo_epochs * num_minibatches)
+
+        # Log average KL divergence across all updates
+        avg_kl = kl_sum / (ppo_epochs * num_minibatches)
+        self.log("train/ppo_kl_divergence", avg_kl, prog_bar=False)
 
         return loss
 
@@ -498,6 +674,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         assert v_flat.numel() == B
         assert next_v_flat.numel() == B
 
+        # Calculate returns without gradients, since they are just targets for the critic / multipliers for the actor loss
         with torch.no_grad():
             returns = torch.zeros_like(rewards_flat)
             advantages = torch.zeros_like(rewards_flat)
@@ -514,7 +691,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
 
                 # Advantages = returns - V(s)
                 advantages = returns - v_flat
-            else:  # A2C
+            else:  # A2C or PPO
                 # Apply reward shaping if bonus potential is provided
                 if upper_score_actual is not None and next_upper_score_actual is not None:
                     shaped_rewards = self.shaped_reward(
@@ -616,7 +793,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
 
         return shaped_rewards
 
-    def get_policy_loss(
+    def get_policy_loss(  # noqa: PLR0913
         self,
         rolling_logits: torch.Tensor,
         rolling_actions_flat: torch.Tensor,
@@ -624,6 +801,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         scoring_actions_flat: torch.Tensor,
         phases_flat: torch.Tensor,
         normalized_advantages: torch.Tensor,
+        old_log_probs: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Calculate policy loss using log probabilities and advantages."""
         rolling_dist: torch.distributions.Distribution
@@ -653,7 +831,33 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
             phases_flat == 0, rolling_log_probs, scoring_log_probs
         )  # (BATCH_SIZE * 39,)
 
-        policy_loss: torch.Tensor = -(log_probs * normalized_advantages).mean()
+        # Calculate policy loss based on algorithm
+        if self.algorithm == Algorithm.PPO:
+            # PPO: clipped surrogate objective
+            # ratio = π_new(a|s) / π_old(a|s) = exp(log π_new - log π_old)
+            ratio = torch.exp(log_probs - old_log_probs)
+
+            # Clipped objective: L^CLIP = E[min(ratio * A, clip(ratio, 1-ε, 1+ε) * A)]
+            clipped_ratio = torch.clamp(ratio, 1.0 - self.clip_epsilon, 1.0 + self.clip_epsilon)
+            policy_loss_unclipped = ratio * normalized_advantages
+            policy_loss_clipped = clipped_ratio * normalized_advantages
+            policy_loss = -torch.min(policy_loss_unclipped, policy_loss_clipped).mean()
+
+            # Log PPO-specific metrics
+            with torch.no_grad():
+                # Fraction of steps where clipping was active
+                clip_fraction = (
+                    ((ratio < 1.0 - self.clip_epsilon) | (ratio > 1.0 + self.clip_epsilon))
+                    .float()
+                    .mean()
+                )
+                self.log("train/ppo_clip_fraction", clip_fraction, prog_bar=False)
+                # Average ratio (should stay near 1.0)
+                self.log("train/ppo_ratio_mean", ratio.mean(), prog_bar=False)
+                self.log("train/ppo_ratio_std", ratio.std(), prog_bar=False)
+        else:
+            # REINFORCE or A2C: standard policy gradient
+            policy_loss = -(log_probs * normalized_advantages).mean()
 
         ## =========================================================================================
         ## Diagnostics
