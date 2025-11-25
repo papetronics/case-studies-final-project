@@ -43,7 +43,7 @@ PPO uses the Generalized Advantage Estimate (GAE), which is closely related to $
 Aside from return estimation, there is a host of other variance reduction techniques which can be employed for policy gradient methods.
 
 Normalizing advantages across a batch improves gradient conditioning and is common practice \cite{schulman2015trpo}.
-Entropy regularization prevents early collapse to suboptimal policies by encouraging exploration via the addition of an explicit entropy bonus term in the loss function \cite{williams-peng-1991-function-optimization, mnih-2016-a3c, schulman-2017-ppo}.
+Entropy regularization prevents early collapse to suboptimal policies by encouraging exploration via the addition of an explicit entropy bonus term in the loss function \cite{williams-peng-1991-function-optimization, ahmed2019entropy, mnih-2016-a3c, schulman-2017-ppo}.
 Gradient clipping is frequently used alongside these techniques to stop rare, but large, gradient updates from destabilizing training \cite{pascanu-2013-rnn-clipping}.
 While high variance is unavoidable in deep reinforcement learning, poor performance can often be linked to numerical instability rather than inherent flaws in algorithmic design \cite{bjorck-2022-high-variance};
 simple tweaks like normalizing features before activations can dramatically improve stability.

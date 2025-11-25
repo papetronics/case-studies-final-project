@@ -447,7 +447,6 @@ While a number of additional representational choices were explored, one of the 
 One important thing to note is that our environment always sorts the dice in ascending order before passing them to the agent.
 If this was not done, the network would be forced to waste capacity on understanding permutations of the same dice configuration,
 which we found early on was a significant impediment to learning.
-<Future work could explore permutation-invariant architectures such as Deep Sets \cite{zaheer-2017-deep-sets} or embeddings with self-attention to handle unsorted dice.>
 
 We wanted to highlight the importance of using a combined representation of both one-hot encodings and counts-based encodings of the dice.
 While the network could theoretically learn to reconstruct either representation from the other, in practice we found that using both improved performance.
@@ -731,7 +730,7 @@ so this is not a pure ablation of depth vs. width.
     \label{fig:architecture-heatmap}
 \end{figure}
 
-Based on \cite{bjorck-2022-high-variance}, we hypothesized that Layer Normalization \cite{ba-2016-layer-norm} would improve training stability and performance
+Based on \cite{bjorck-2022-high-variance}, we hypothesized that layer normalization \cite{ba-2016-layernorm} would improve training stability and performance
 and used it in all of our main experiments. This was ablated to understand its true impact.
 
 \begin{figure}[H]
@@ -871,7 +870,7 @@ and used it in all of our main experiments. This was ablated to understand its t
     \label{fig:layernorm-value}
 \end{figure}
 
-Lastly, we used SILU activation functions in our network for all of our main experiments, as it had been reported to work well in RL settings \cite{henderson-2021-silu-rl}.
+Lastly, we used Swish activation functions in our network for all of our main experiments, as it had been reported to work well in RL settings \cite{elfwing2017sigmoidweightedlinearunitsneural}.
 We ablated this to ReLU to understand its true impact.
 
 \begin{figure}[H]
@@ -883,7 +882,7 @@ We ablated this to ReLU to understand its true impact.
                 height=5cm,
                 xlabel={Activation Function},
                 ylabel={Mean Full-Game Score},
-                symbolic x coords={SILU, ReLU},
+                symbolic x coords={Swish, ReLU},
                 xtick=data,
                 xticklabel style={font=\small},
                 ylabel style={font=\small},
@@ -905,13 +904,13 @@ We ablated this to ReLU to understand its true impact.
                 y dir=both,
                 y explicit
             ] coordinates {
-                    (SILU, 240) +- (0, 5)
+                    (Swish, 240) +- (0, 5)
                     (ReLU, 235) +- (0, 5)
                 };
 
         \end{axis}
     \end{tikzpicture}
-    \caption{Performance comparison: SILU vs ReLU activation (placeholder data)}
+    \caption{Performance comparison: Swish vs ReLU activation (placeholder data)}
     \label{fig:silu-vs-relu}
 \end{figure}
 

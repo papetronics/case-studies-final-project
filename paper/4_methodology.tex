@@ -69,16 +69,20 @@ The scoring action is always a categorical distribution over the 13 scoring cate
     a_{\mathrm{score}} \sim \mathrm{Categorical}\!\left(\mathrm{softmax}\!\left(f_\theta(\phi(x))\right)\right)
 \]
 
+During training, we mask out invalid scoring actions by setting their logits to $-\infty$ before applying the softmax function.
+To help with exploration \cite{tijsma2016comparing_exploration}, during training we sample from these distributions; during inference we take the argmax action.
+
 \subsection{Neural Network Architecture}
 The neural network uses a unique architecture designed to handle the specific challenges of \textit{Yahtzee}.
 The architecture consists of a trunk, followed by heads for the policy and value functions.
+We created the network using PyTorch \cite{paszke2019pytorch}, and the training loop is implemented using \texttt{pytorch-lightning} \cite{falcon2019pytorchlightning}.
 
 \subsubsection{Trunk}
 The trunk of the network is a standard feedforward architecture with $L$ (typically 2 or 3) fully connected hidden layers.
 The width of each layer (hidden size $d_h$) is 600 neurons, found through empirical hyperparameter tuning,
 but aligning our model capacity with theoretical maximums \cite{horne-1994-bounds-rnn-fsm} and minimums \cite{hanin-2017-bounded-width-relu}.
 We utilize layer normalization for improved training stability \cite{ba-2016-layernorm, bjorck-2022-high-variance},
-dropout with rate $p_d$ for regularization,
+dropout with rate $p_d$ for regularization \cite{srivastava2014dropout},
 and Swish activations \cite{ramachandran-2017-swish} to introduce stable non-linearities.
 
 \begin{figure}[tb]
@@ -248,7 +252,7 @@ For the value head, we use a single linear output, constrained with ELU activati
 
 \subsubsection{Optimization \& Schedules}
 We utilize the Adam optimizer \cite{kingma2014adam} with maximum learning rate $\alpha$, typically between $1\times 10^{-4}$ and $5\times 10^{-4}$.
-To improve training stability, we utilize a warmup schedule over the first 5\% of training \cite{kalra-2024-warmup},
+To improve training stability \cite{liu-2025-warmup-theory, kalra-2024-warmup}, we utilize a warmup schedule over the first 5\% of training,
 plateau for 70\% of training, and then linearly decay over the final 25\% of training steps to a minimum ratio $r_{\alpha}$ of the maximum \cite{defazio2023optimal, lyle2024normalization}.
 
 \subsubsection{Training Metrics}
@@ -261,6 +265,7 @@ To monitor for learning stability, we track gradient norms and clip rate \cite{p
 Gradient clipping is applied with threshold $\tau_{\mathrm{clip}}$ to prevent destabilizing updates.
 To ensure advantages are well-conditioned, we track advantage mean and standard deviation \cite{Achiam2018SpinningUp}.
 We also monitor standard training metrics such as average reward and loss values.
+All metrics were logged to Weights \& Biases \cite{biewald2020wandb}.
 
 \subsection{Reinforcement Learning}
 \subsubsection{Reward Shaping}
