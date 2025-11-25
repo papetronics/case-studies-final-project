@@ -400,7 +400,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
 
         return rolling_coef, scoring_coef
 
-    def training_step(self, batch: EpisodeBatch, batch_idx: int) -> torch.Tensor:  # noqa: ARG002, PLR0915
+    def training_step(self, batch: EpisodeBatch, batch_idx: int) -> torch.Tensor:  # noqa: ARG002
         """Perform a training step using REINFORCE, A2C, or PPO algorithm with vectorized operations."""
         # batch is an EpisodeBatch dict with pre-flattened tensors:
         # - "states": (BATCH_SIZE*39, state_size) float32
@@ -435,86 +435,21 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         loss: torch.Tensor
 
         if self.algorithm == Algorithm.PPO:
-            optimizer = cast("LightningOptimizer", self.optimizers())
-
-            # 1) Compute advantages & returns for the whole batch, respecting episode boundaries
-            normalized_advantages, returns_full = self.get_advantage(
-                num_episodes,
-                steps_per_episode,
+            loss = self.run_ppo_minibatching(
+                states_flat,
+                rolling_actions_flat,
+                scoring_actions_flat,
                 rewards_flat,
-                next_v_baseline,
                 v_baseline,
+                next_v_baseline,
                 phases_flat,
                 upper_score_actual,
                 next_upper_score_actual,
+                old_log_probs,
+                total_steps,
+                steps_per_episode,
+                num_episodes,
             )
-
-            batch_size = self.ppo_games_per_minibatch * steps_per_episode
-            assert total_steps % batch_size == 0
-            num_minibatches = total_steps // batch_size
-
-            ppo_epochs = self.ppo_epochs  # e.g. 3
-
-            last_loss: torch.Tensor = torch.tensor(0.0, device=states_flat.device)
-
-            for _ in range(ppo_epochs):
-                # 2) Shuffle indices each epoch
-                perm = torch.randperm(total_steps, device=states_flat.device)
-
-                for minibatch_idx in range(num_minibatches):
-                    start_idx = minibatch_idx * batch_size
-                    end_idx = start_idx + batch_size
-                    idx = perm[start_idx:end_idx]
-
-                    mb_states = states_flat[idx]
-                    mb_rolling_actions = rolling_actions_flat[idx]
-                    mb_scoring_actions = scoring_actions_flat[idx]
-                    mb_phases = phases_flat[idx]
-                    mb_old_log_probs = old_log_probs[idx]
-                    mb_advantages = normalized_advantages[idx]
-                    mb_returns = returns_full[idx]
-
-                    # Forward pass on minibatch
-                    # PPO does not use upper_score_logit (upper score regression loss), unlike A2C.
-                    mb_rolling_probs, mb_scoring_probs, mb_v_ests, _ = (
-                        self.policy_net.forward(mb_states)
-                    )
-
-                    mb_policy_loss, mb_entropy_loss = self.get_policy_loss(
-                        mb_rolling_probs,
-                        mb_rolling_actions,
-                        mb_scoring_probs,
-                        mb_scoring_actions,
-                        mb_phases,
-                        mb_advantages,
-                        mb_old_log_probs,
-                    )
-
-                    value_loss = self.get_value_loss(mb_v_ests, mb_returns)
-
-                    mb_loss: torch.Tensor = (
-                        mb_policy_loss + self.critic_coeff * value_loss + mb_entropy_loss
-                    )
-
-                    # unwrap to real torch optimizer
-                    assert isinstance(optimizer, LightningOptimizer)
-                    t_optimizer: torch.optim.Optimizer = optimizer.optimizer
-
-                    optimizer.zero_grad()
-                    self.manual_backward(mb_loss)
-
-                    # gradient clipping if you want it
-                    self.configure_gradient_clipping(
-                        t_optimizer,
-                        gradient_clip_val=self._gradient_clip_val,
-                        gradient_clip_algorithm="norm",
-                    )
-
-                    optimizer.step()
-
-                    last_loss = mb_loss.detach()
-
-            loss = last_loss
         else:
             # Forward pass through current policy to get probabilities and value estimates
             rolling_probs, scoring_probs, v_ests, upper_score_logit = self.policy_net.forward(
@@ -582,6 +517,103 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
             self.log_kl_diagnostics(scoring_probs, rolling_probs, phases_flat)
 
         return loss
+
+    def run_ppo_minibatching(  # noqa: PLR0913
+        self,
+        states_flat: torch.Tensor,
+        rolling_actions_flat: torch.Tensor,
+        scoring_actions_flat: torch.Tensor,
+        rewards_flat: torch.Tensor,
+        v_baseline: torch.Tensor,
+        next_v_baseline: torch.Tensor,
+        phases_flat: torch.Tensor,
+        upper_score_actual: torch.Tensor,
+        next_upper_score_actual: torch.Tensor,
+        old_log_probs: torch.Tensor,
+        total_steps: int,
+        steps_per_episode: int,
+        num_episodes: int,
+    ) -> torch.Tensor:
+        """Run PPO training with minibatching and multiple epochs per batch."""
+        optimizer = cast("LightningOptimizer", self.optimizers())
+
+        # 1) Compute advantages & returns for the whole batch, respecting episode boundaries
+        normalized_advantages, returns_full = self.get_advantage(
+            num_episodes,
+            steps_per_episode,
+            rewards_flat,
+            next_v_baseline,
+            v_baseline,
+            phases_flat,
+            upper_score_actual,
+            next_upper_score_actual,
+        )
+
+        batch_size = self.ppo_games_per_minibatch * steps_per_episode
+        assert total_steps % batch_size == 0
+        num_minibatches = total_steps // batch_size
+
+        ppo_epochs = self.ppo_epochs  # e.g. 3
+
+        last_loss: torch.Tensor = torch.tensor(0.0, device=states_flat.device)
+
+        for _ in range(ppo_epochs):
+            # 2) Shuffle indices each epoch
+            perm = torch.randperm(total_steps, device=states_flat.device)
+
+            for minibatch_idx in range(num_minibatches):
+                start_idx = minibatch_idx * batch_size
+                end_idx = start_idx + batch_size
+                idx = perm[start_idx:end_idx]
+
+                mb_states = states_flat[idx]
+                mb_rolling_actions = rolling_actions_flat[idx]
+                mb_scoring_actions = scoring_actions_flat[idx]
+                mb_phases = phases_flat[idx]
+                mb_old_log_probs = old_log_probs[idx]
+                mb_advantages = normalized_advantages[idx]
+                mb_returns = returns_full[idx]
+
+                # Forward pass on minibatch
+                # PPO does not use upper_score_logit (upper score regression loss), unlike A2C.
+                mb_rolling_probs, mb_scoring_probs, mb_v_ests, _ = self.policy_net.forward(
+                    mb_states
+                )
+
+                mb_policy_loss, mb_entropy_loss = self.get_policy_loss(
+                    mb_rolling_probs,
+                    mb_rolling_actions,
+                    mb_scoring_probs,
+                    mb_scoring_actions,
+                    mb_phases,
+                    mb_advantages,
+                    mb_old_log_probs,
+                )
+
+                value_loss = self.get_value_loss(mb_v_ests, mb_returns)
+
+                mb_loss: torch.Tensor = (
+                    mb_policy_loss + self.critic_coeff * value_loss + mb_entropy_loss
+                )
+
+                # unwrap to real torch optimizer
+                assert isinstance(optimizer, LightningOptimizer)
+                t_optimizer: torch.optim.Optimizer = optimizer.optimizer
+
+                optimizer.zero_grad()
+                self.manual_backward(mb_loss)
+
+                # gradient clipping if you want it
+                self.configure_gradient_clipping(
+                    t_optimizer,
+                    gradient_clip_val=self._gradient_clip_val,
+                    gradient_clip_algorithm="norm",
+                )
+
+                optimizer.step()
+
+                last_loss = mb_loss.detach()
+        return last_loss
 
     def get_advantage(  # noqa: PLR0913
         self,
