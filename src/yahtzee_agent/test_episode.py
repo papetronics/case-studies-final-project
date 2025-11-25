@@ -70,7 +70,7 @@ def run_episode(
     with torch.no_grad():
         while True:
             input_tensor = phi(obs, model.features, model.device).unsqueeze(0)
-            rolling_probs, scoring_probs, v_est = model.forward(input_tensor)
+            rolling_probs, scoring_probs, v_est, upper_est = model.forward(input_tensor)
             actions, _, v_est = sample_action(
                 rolling_probs, scoring_probs, v_est, model.rolling_action_representation
             )
@@ -86,6 +86,7 @@ def run_episode(
             }
 
             print(f"\nValue Estimate of Current State: {v_est.item():.2f}")
+            print(f"Estimate for Upper score: {upper_est.item():.2f}")
 
             # Track dice state for display
             if obs["phase"] == 0:
