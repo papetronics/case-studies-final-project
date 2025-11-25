@@ -22,6 +22,7 @@ from yahtzee_agent.model import (
     phi,
     select_action,
 )
+from yahtzee_agent.trainer import Algorithm
 
 
 def create_env() -> gym.Env[Observation, Action]:
@@ -31,6 +32,7 @@ def create_env() -> gym.Env[Observation, Action]:
 
 def load_model(checkpoint_path: str) -> YahtzeeAgent:
     """Load a trained model from a checkpoint."""
+    torch.serialization.add_safe_globals([Algorithm])
     checkpoint = torch.load(checkpoint_path, map_location="cpu")
     hparams = checkpoint["hyper_parameters"]
     features = create_features(hparams["phi_features"].split(","))
@@ -83,7 +85,7 @@ def run_batch_games(
                 ]
             )
 
-            rolling_probs, scoring_probs, _ = model.forward(input_tensors)
+            rolling_probs, scoring_probs, _, _ = model.forward(input_tensors)
             rolling_actions, scoring_actions = select_action(
                 rolling_probs, scoring_probs, model.rolling_action_representation
             )
