@@ -67,8 +67,9 @@ class PPOBatchNotDivisibleError(InvalidTrainingConfigurationError):
         ppo_batch_size: int,
     ) -> None:
         super().__init__(
-            f"PPO minibatch size ({ppo_games_per_minibatch}) does not evenly divide "
-            f"the PPO batch size ({ppo_batch_size}). Please adjust games_per_batch or ppo_games_per_minibatch."
+            f"`ppo_games_per_minibatch` ({ppo_games_per_minibatch}) refers to the number of games per PPO minibatch, "
+            f"not the total minibatch size. The total PPO batch size in steps ({ppo_batch_size}) must be divisible by "
+            f"`ppo_games_per_minibatch * steps_per_episode`. Please adjust `games_per_batch`, `ppo_games_per_minibatch`, or `steps_per_episode` accordingly."
         )
 
 
@@ -340,8 +341,9 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
     # check that PPO minibatches evenly divide the batch size
     if algorithm == "ppo":
         ppo_batch_size = games_per_batch * num_steps_per_episode
-        if ppo_batch_size % ppo_games_per_minibatch != 0:
-            raise PPOBatchNotDivisibleError(ppo_games_per_minibatch, ppo_batch_size)
+        ppo_minibatch_size = ppo_games_per_minibatch * num_steps_per_episode
+        if ppo_batch_size % ppo_minibatch_size != 0:
+            raise PPOBatchNotDivisibleError(ppo_minibatch_size, ppo_batch_size)
 
     # Validate that games_per_epoch divides evenly by games_per_batch
     if games_per_epoch % games_per_batch != 0:

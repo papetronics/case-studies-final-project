@@ -433,10 +433,10 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
 
             ppo_epochs = self.ppo_epochs  # e.g. 3
 
-            last_loss: torch.Tensor
+            last_loss: torch.Tensor = torch.tensor(0.0, device=states_flat.device)
 
             for _ in range(ppo_epochs):
-                # 3) Shuffle indices each epoch
+                # 2) Shuffle indices each epoch
                 perm = torch.randperm(total_steps, device=states_flat.device)
 
                 for minibatch_idx in range(num_minibatches):
@@ -484,6 +484,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
                     self.configure_gradient_clipping(
                         t_optimizer,
                         gradient_clip_val=self._gradient_clip_val,
+                        gradient_clip_algorithm="norm",
                     )
 
                     optimizer.step()
