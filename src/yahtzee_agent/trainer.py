@@ -126,12 +126,12 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
 
         self.validation_envs: list[gym.Env[Observation, Action]] = []  # Created on demand
 
+        # Always set PPO-specific attributes, regardless of algorithm
+        self.ppo_games_per_minibatch: int = ppo_games_per_minibatch
+        self.ppo_epochs: int = ppo_epochs
         # for PPO style minibatching we need to turn off Lightning's automatic updating
         if self.algorithm == Algorithm.PPO:
             self.automatic_optimization = False
-            self.ppo_games_per_minibatch: int = ppo_games_per_minibatch
-            self.ppo_epochs: int = ppo_epochs
-
     def run_batched_validation_games(  # noqa: C901, PLR0912, PLR0915
         self, num_games: int, run_deterministic: bool = True, run_stochastic: bool = False
     ) -> tuple[list[float], list[float], dict[str, Any], dict[str, Any]]:
