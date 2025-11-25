@@ -557,6 +557,9 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
 
         total_loss_sum = torch.tensor(0.0, device=states_flat.device)
 
+        # Track KL divergence for PPO diagnostics (comparing old vs new policy)
+        kl_sum = torch.tensor(0.0, device=states_flat.device)
+
         for _ in range(ppo_epochs):
             # 2) Shuffle indices each epoch
             perm = torch.randperm(total_steps, device=states_flat.device)
@@ -576,12 +579,12 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
 
                 # Forward pass on minibatch
                 # PPO does not use upper_score_logit (upper score regression loss), unlike A2C.
-                mb_rolling_probs, mb_scoring_probs, mb_v_ests, _ = self.policy_net.forward(
+                mb_rolling_logits, mb_scoring_probs, mb_v_ests, _ = self.policy_net.forward(
                     mb_states
                 )
 
                 mb_policy_loss, mb_entropy_loss = self.get_policy_loss(
-                    mb_rolling_probs,
+                    mb_rolling_logits,
                     mb_rolling_actions,
                     mb_scoring_probs,
                     mb_scoring_actions,
@@ -589,6 +592,33 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
                     mb_advantages,
                     mb_old_log_probs,
                 )
+
+                # Compute KL divergence between old and new policy for PPO diagnostics
+                with torch.no_grad():
+                    # Get new log probs
+                    rolling_dist: torch.distributions.Distribution
+                    if (
+                        self.rolling_action_representation
+                        == RollingActionRepresentation.CATEGORICAL
+                    ):
+                        rolling_dist = torch.distributions.Categorical(logits=mb_rolling_logits)
+                        new_rolling_log_probs = rolling_dist.log_prob(mb_rolling_actions.float())
+                    else:  # BERNOULLI
+                        rolling_dist = torch.distributions.Bernoulli(logits=mb_rolling_logits)
+                        new_rolling_log_probs = rolling_dist.log_prob(
+                            mb_rolling_actions.float()
+                        ).sum(dim=1)
+
+                    scoring_dist = torch.distributions.Categorical(mb_scoring_probs)
+                    new_scoring_log_probs = scoring_dist.log_prob(mb_scoring_actions)
+
+                    new_log_probs = torch.where(
+                        mb_phases == 0, new_rolling_log_probs, new_scoring_log_probs
+                    )
+
+                    # KL(old || new) ≈ old_log_prob - new_log_prob for same action
+                    mb_kl = (mb_old_log_probs - new_log_probs).mean()
+                    kl_sum += mb_kl
 
                 value_loss = self.get_value_loss(mb_v_ests, mb_returns)
 
@@ -615,6 +645,11 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
                 total_loss_sum += mb_loss.detach()
 
         loss = total_loss_sum / (ppo_epochs * num_minibatches)
+
+        # Log average KL divergence across all updates
+        avg_kl = kl_sum / (ppo_epochs * num_minibatches)
+        self.log("train/ppo_kl_divergence", avg_kl, prog_bar=False)
+
         return loss
 
     def get_advantage(  # noqa: PLR0913
