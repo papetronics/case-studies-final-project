@@ -214,7 +214,7 @@ We also found that REINFORCE simply required more training data to converge at a
 However, after optimization we were able to achieve reasonable performance, scoring a mean of <X> points on average over 10,000 full games.
 
 Our most successful algorithm was TD(0)-style Actor-Critic (A2C). We found is easiest to tune and with an immediate performance boost over REINFORCE.
-This was the algorithm we use for ablation studies in Section~\ref{sec:ablation-studies}. With a fixed training budget of 1 million full-games,
+This was the algorithm we use for the ablation studies. With a fixed training budget of 1 million full-games,
 A2C was able to approach DP-optimal performance.
 
 We also attempted to use Proximal Policy Optimization (PPO) with TD(0), but found it difficult to tune effectively within our computational budget. Each PPO rollout requires
@@ -677,24 +677,20 @@ To understand the importance of each, they were ablated individually.
 
 \subsubsection{Architectural Ablations}
 
-<Discuss network architecture choices and their impact>
+We performed a simple grid search ablation to understand if our chosen architecture of 3 hidden layers of 600 units each was optimal.
+Yahtzee is a fairly complex game, so we expected shorter, but wider networks to perform best. Note that each of these has a different number of total parameters,
+so this is not a pure ablation of depth vs. width.
 
 \begin{figure}[H]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
                 width=\columnwidth,
-                height=0.6\textwidth,
+                height=0.5\textwidth,
                 xlabel={Network Width (Hidden Units)},
                 ylabel={Network Depth (Hidden Layers)},
-                title={Final Full-Game Score by Network Architecture},
+                title={Score by Network Architecture},
                 colormap/viridis,
-                colorbar,
-                colorbar style={
-                        ylabel={Mean Score},
-                        ylabel style={font=\small},
-                        ticklabel style={font=\small}
-                    },
                 xlabel style={font=\small},
                 ylabel style={font=\small},
                 title style={font=\small},
@@ -735,7 +731,8 @@ To understand the importance of each, they were ablated individually.
     \label{fig:architecture-heatmap}
 \end{figure}
 
-<Discuss LayerNorm's impact on training stability and performance>
+Based on \cite{bjorck-2022-high-variance}, we hypothesized that Layer Normalization \cite{ba-2016-layer-norm} would improve training stability and performance
+and used it in all of our main experiments. This was ablated to understand its true impact.
 
 \begin{figure}[H]
     \centering
@@ -874,9 +871,59 @@ To understand the importance of each, they were ablated individually.
     \label{fig:layernorm-value}
 \end{figure}
 
+Lastly, we used SILU activation functions in our network for all of our main experiments, as it had been reported to work well in RL settings \cite{henderson-2021-silu-rl}.
+We ablated this to ReLU to understand its true impact.
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+                ybar,
+                width=\columnwidth,
+                height=5cm,
+                xlabel={Activation Function},
+                ylabel={Mean Full-Game Score},
+                symbolic x coords={SILU, ReLU},
+                xtick=data,
+                xticklabel style={font=\small},
+                ylabel style={font=\small},
+                xlabel style={font=\small},
+                bar width=40pt,
+                ymin=220, ymax=250,
+                grid=both,
+                grid style={dotted},
+                tick align=outside,
+                nodes near coords,
+                nodes near coords style={font=\footnotesize, anchor=south},
+                enlarge x limits=0.5,
+            ]
+
+            \addplot[
+                fill=blue!70!white,
+                draw=blue!80,
+                error bars/.cd,
+                y dir=both,
+                y explicit
+            ] coordinates {
+                    (SILU, 240) +- (0, 5)
+                    (ReLU, 235) +- (0, 5)
+                };
+
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Performance comparison: SILU vs ReLU activation (placeholder data)}
+    \label{fig:silu-vs-relu}
+\end{figure}
+
 \subsubsection{Credit Assignment: TD(0) vs GAE}
 
-<Discuss the effect of GAE lambda on performance and training dynamics>
+Later in this research, we noticed the main issue with our network was that it was struggling to earn the bonus, learning it very slowly.
+We first hypothesized that this was due to high variance in REINFORCE, so we switched to A2C with TD(0) targets. However, the issue
+persisted. We then hypothesized that the TD(0) targets were not providing sufficient credit assignment for the long-term bonus reward,
+so we switched to GAE with various $\lambda$ values to understand if this would help.
+
+Unfortunately, we found that GAE did not improve performance over TD(0), and values that were too high ($\lambda \geq 0.8$)
+significantly degraded performance.
 
 \begin{figure}[H]
     \centering
@@ -968,8 +1015,10 @@ To understand the importance of each, they were ablated individually.
 \end{figure}
 
 \subsubsection{Entropy Sensitivity}
-
-<Discuss the importance of entropy scheduling for exploration and policy collapse prevention>
+During experimentation, we noticed that the entropy regularization coefficients had a significant impact on training stability and final performance.
+With no regularization, the policy quickly converges to a deterministic policy that fails to explore sufficiently.
+With too much regularization, the policy would not perform well enough to quickly learn strategies for earning Yahtzee's and the bonus.
+To better understand this sensitivity, we trained models under three different entropy regimes: Low Entropy, Baseline, and High Entropy.
 
 \begin{table}[H]
     \centering
@@ -1183,9 +1232,9 @@ To understand the importance of each, they were ablated individually.
     \end{tabular}
 \end{table}
 
-<Discuss how low entropy causes early policy collapse (lower scores and bonus rates), baseline achieves best performance, and high entropy maintains exploration but slows learning>
-
 \subsubsection{Summary}
+In summary, we found that A2C with TD(0) targets, a combined dice representation, Layer Normalization, SILU activations,
+and carefully tuned entropy regularization produced the best results.
 
 \begin{table*}[t]
     \centering
@@ -1194,17 +1243,21 @@ To understand the importance of each, they were ablated individually.
     \label{tab:full-game-summary}
     \begin{tabular}{lcccccc}
         \hline
-        \textbf{Algorithm}               & \textbf{Training Budget} & \textbf{Mean Score} & \textbf{Std Dev} & \textbf{Bonus Rate (\%)} & \textbf{Yahtzee Rate (\%)} & \textbf{$\geq$250 (\%)} \\
+        \textbf{Algorithm}         & \textbf{Training Budget} & \textbf{Mean Score} & \textbf{Std Dev} & \textbf{Bonus Rate (\%)} & \textbf{Yahtzee Rate (\%)} & \textbf{$\geq$250 (\%)} \\
         \hline
-        DP Optimal                       & --                       & $<X>$               & --               & $<X>$                    & $<Y>$                      & $<Z>$                   \\
-        A2C (TD(0), best config)         & 1M games                 & $<X>$               & $<Y>$            & $<X>$                    & $<Y>$                      & $<Z>$                   \\
-        PPO ($\lambda=0.5$, best config) & 1M games                 & $<X>$               & $<Y>$            & $<X>$                    & $<Y>$                      & $<Z>$                   \\
-        REINFORCE (full-game)            & 1M games                 & $<X>$               & $<Y>$            & $<X>$                    & $<Y>$                      & $<Z>$                   \\
-        Single-Turn REINFORCE (rollout)  & 500K games               & $<X>$               & $<Y>$            & $<X>$                    & $<Y>$                      & $<Z>$                   \\
+        DP Optimal                 & --                       & $<X>$               & --               & $<X>$                    & $<Y>$                      & $<Z>$                   \\
+        A2C                        & 250K games               & $<X>$               & $<Y>$            & $<X>$                    & $<Y>$                      & $<Z>$                   \\
+        A2C                        & 1M games                 & $<X>$               & $<Y>$            & $<X>$                    & $<Y>$                      & $<Z>$                   \\
+        A2C (lower entropy floor)  & 5M games                 & $<X>$               & $<Y>$            & $<X>$                    & $<Y>$                      & $<Z>$                   \\
+        PPO ($\lambda=0.3$, $k=3$) & 250K games               & $<X>$               & $<Y>$            & $<X>$                    & $<Y>$                      & $<Z>$                   \\
+        REINFORCE (full-game)      & 250K games               & $<X>$               & $<Y>$            & $<X>$                    & $<Y>$                      & $<Z>$                   \\
+        REINFORCE (full-game)      & 1M games                 & $<X>$               & $<Y>$            & $<X>$                    & $<Y>$                      & $<Z>$                   \\
+        REINFORCE (single-turn)    & 500K games               & $<X>$               & $<Y>$            & $<X>$                    & $<Y>$                      & $<Z>$                   \\
         \hline
     \end{tabular}
 \end{table*}
 
+For our best configuration, A2C trained over 5,000,000 games, the final score distribution is compared to DP-optimal in Table \ref{tab:dp-score-distribution}.
 \begin{table}[H]
     \centering
     \small
@@ -1230,14 +1283,20 @@ To understand the importance of each, they were ablated individually.
     \end{tabular}
 \end{table}
 
-<Summarize full-game results and key findings>
-
 \subsection{Policy Analysis}
 % <300-500 words>
 \subsubsection{Category Usage}
-<Bar chart showing average score per category for different agents>
+To understand the overall performance of the agents, we compare their average scores in each category as a percentage of the DP-optimal score for that category
+in figures \ref{fig:category-upper} and \ref{fig:category-lower}.
 
-<Summarize full-game results and key findings>
+The primary differentiators between our RL agents and the DP optimal solution are in the upper section (and bonus), four-of-a-kind and Yahtzee.
+Performance in the upper section is critical to achieving a high overall score, as it enables the bonus however it appears to be traded off against
+the four-of-a-kind; it seems the agents prefer to take the immediate points from the 5th die rather than place themselves in a safer position to earn the bonus later.
+
+Yahtzee's high performance was interesting; it requires agents to be performing at a competent level across a single turn in order to earn. We contrast the learning
+curve of the Yahtzee category with that of the upper bonus in Figure <INSERT A FIGURE FOR THIS>. The interesting takeaway here is that agents appear to
+exhibit a "mode shift" in their strategy once they figure out Yahtzee, whereas the bonus is learned more gradually over time.
+
 \begin{figure}[H]
     \centering
     \begin{tikzpicture}
@@ -1360,9 +1419,10 @@ To understand the importance of each, they were ablated individually.
     \label{fig:category-lower}
 \end{figure}
 
-<table comparison against DP optimal solutions>
-
 \subsubsection{Strategy Comparison Across Agents}
+We also compared some high-level strategy metrics across our different agents to understand how their learned policies differed.
+First, we analyzed the distribution of the first category choice made by each agent in Figure \ref{fig:strategy-first-category}.
+Next, we analyzed each category to understand at what point in the game the agent typically filled it, shown in Figure \ref{fig:strategy-fill-turn}.
 
 \begin{figure}[H]
     \centering
@@ -1470,6 +1530,3 @@ To understand the importance of each, they were ablated individually.
     \caption{Median fill turn for key categories (placeholder data)}
     \label{fig:strategy-fill-turn}
 \end{figure}
-
-<Compare strategies learned by different agents>
-
