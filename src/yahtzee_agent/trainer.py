@@ -555,7 +555,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
 
         ppo_epochs = self.ppo_epochs  # e.g. 3
 
-        last_loss: torch.Tensor = torch.tensor(0.0, device=states_flat.device)
+        total_loss_sum = torch.tensor(0.0, device=states_flat.device)
 
         for _ in range(ppo_epochs):
             # 2) Shuffle indices each epoch
@@ -612,8 +612,10 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
 
                 optimizer.step()
 
-                last_loss = mb_loss.detach()
-        return last_loss
+                total_loss_sum += mb_loss.detach()
+
+        loss = total_loss_sum / (ppo_epochs * num_minibatches)
+        return loss
 
     def get_advantage(  # noqa: PLR0913
         self,
