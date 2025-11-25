@@ -21,7 +21,7 @@ from utilities.diagnostics import (
     compute_rolling_mask_diversity,
     compute_training_health_score,
 )
-from utilities.scoring_helper import MINIMUM_UPPER_SCORE_FOR_BONUS, YAHTZEE_SCORE
+from utilities.scoring_helper import BONUS_POINTS, MINIMUM_UPPER_SCORE_FOR_BONUS, YAHTZEE_SCORE
 from yahtzee_agent.features import PhiFeature
 
 from .model import (
@@ -76,6 +76,8 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         rolling_action_representation: str,
         he_kaiming_initialization: bool,
         algorithm: Algorithm,
+        upper_score_regression_loss_weight: float,
+        upper_score_shaping_weight: float,
         gae_lambda: float,
     ):
         super().__init__()
@@ -110,6 +112,8 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         self.entropy_anneal_period: float = entropy_anneal_period
         self.critic_coeff: float = critic_coeff
         self.num_steps_per_episode: int = num_steps_per_episode
+        self.upper_score_regression_loss_weight: float = upper_score_regression_loss_weight
+        self.upper_score_shaping_weight: float = upper_score_shaping_weight
         self.gae_lambda: float = gae_lambda
 
         self.validation_envs: list[gym.Env[Observation, Action]] = []  # Created on demand
@@ -165,7 +169,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
                 )  # (num_active, state_size)
 
                 # Single batched forward pass
-                rolling_probs, scoring_probs, v_ests = self.policy_net.forward(state_tensors)
+                rolling_probs, scoring_probs, v_ests, _ = self.policy_net.forward(state_tensors)
 
                 # Separate deterministic and stochastic actions
                 # Deterministic for first num_det, stochastic for remaining
@@ -300,7 +304,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
                     )
 
                 self.log("val/pct_yahtzee", det_metrics["pct_yahtzee"], prog_bar=False)
-                self.log("val/pct_bonus", det_metrics["pct_bonus"], prog_bar=False)
+                self.log("val/pct_bonus", det_metrics["pct_bonus"], prog_bar=True)
         else:
             det_mean = 0.0
 
@@ -400,6 +404,8 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         rewards_flat = batch["rewards"]
         next_v_baseline = batch["next_v_baseline"]
         phases_flat = batch["phases"]
+        upper_score_actual = batch["upper_score_actual"]
+        next_upper_score_actual = batch["next_upper_score_actual"]
 
         # Calculate num_episodes and steps_per_episode from flattened shape
         # single_turn: 338 episodes x 3 steps = 1014 total
@@ -409,10 +415,19 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         num_episodes = total_steps // steps_per_episode
 
         # Forward pass through current policy to get probabilities and value estimates
-        rolling_probs, scoring_probs, v_ests = self.policy_net.forward(states_flat)
+        rolling_probs, scoring_probs, v_ests, upper_score_logit = self.policy_net.forward(
+            states_flat
+        )
 
         normalized_advantage, returns = self.get_advantage(
-            num_episodes, steps_per_episode, rewards_flat, next_v_baseline, v_ests, phases_flat
+            num_episodes,
+            steps_per_episode,
+            rewards_flat,
+            next_v_baseline,
+            v_ests,
+            phases_flat,
+            upper_score_actual,
+            next_upper_score_actual,
         )
 
         policy_loss, entropy_loss = self.get_policy_loss(
@@ -428,6 +443,32 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
             policy_loss + self.critic_coeff * self.get_value_loss(v_ests, returns) + entropy_loss
         )
 
+        ## Standard regression loss for upper score prediction
+        if self.algorithm == Algorithm.A2C:
+            upper_score_loss = torch.nn.functional.mse_loss(
+                upper_score_logit.squeeze(), upper_score_actual.float()
+            )
+            loss += self.upper_score_regression_loss_weight * upper_score_loss
+            self.log(
+                "train/upper_score_loss",
+                self.upper_score_regression_loss_weight * upper_score_loss,
+                prog_bar=False,
+            )
+
+            self.log("train/upper_score_loss_raw", upper_score_loss, prog_bar=False)
+            self.log(
+                "train/pred_upper",
+                upper_score_logit.mean().item() * MINIMUM_UPPER_SCORE_FOR_BONUS
+                + MINIMUM_UPPER_SCORE_FOR_BONUS,
+                prog_bar=False,
+            )
+            self.log(
+                "train/target_upper",
+                upper_score_actual.mean().item() * MINIMUM_UPPER_SCORE_FOR_BONUS
+                + MINIMUM_UPPER_SCORE_FOR_BONUS,
+                prog_bar=False,
+            )
+
         self.log("train/total_loss", loss, prog_bar=True)
         self.log("lr", self.trainer.optimizers[0].param_groups[0]["lr"], prog_bar=False)
         self.log("train/frac_roll_steps", compute_phase_balance(phases_flat), prog_bar=False)
@@ -435,7 +476,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
 
         return loss
 
-    def get_advantage(
+    def get_advantage(  # noqa: PLR0913
         self,
         num_episodes: int,
         steps_per_episode: int,
@@ -443,6 +484,8 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         next_v_baseline: torch.Tensor,  # [B], V(s_{t+1})
         v_ests: torch.Tensor,  # [B] or [B, 1], V(s_t)
         phases_flat: torch.Tensor,
+        upper_score_actual: torch.Tensor | None,
+        next_upper_score_actual: torch.Tensor | None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Calculate advantages using REINFORCE, A2C TD(0), or A2C+GAE, and log diagnostics."""
         gamma = self.get_gamma()
@@ -468,10 +511,18 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
                         idx = base + t
                         g = rewards_flat[idx] + gamma * g
                         returns[idx] = g
+
                 # Advantages = returns - V(s)
                 advantages = returns - v_flat
+            else:  # A2C
+                # Apply reward shaping if bonus potential is provided
+                if upper_score_actual is not None and next_upper_score_actual is not None:
+                    shaped_rewards = self.shaped_reward(
+                        rewards_flat, upper_score_actual, next_upper_score_actual
+                    )
+                else:
+                    shaped_rewards = rewards_flat
 
-            else:
                 # A2C / Actor-Critic branch: TD(0) or GAE
                 use_gae = getattr(self, "gae_lambda", None) is not None and self.gae_lambda > 0.0
                 if use_gae:
@@ -479,18 +530,18 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
                     # GAE per episode
                     for episode_idx in range(num_episodes):
                         base = episode_idx * steps_per_episode
-                        gae = torch.tensor(0.0, device=rewards_flat.device)
+                        gae = torch.tensor(0.0, device=shaped_rewards.device)
                         for t in reversed(range(steps_per_episode)):
                             idx = base + t
                             # δ_t = r_t + γ V(s_{t+1}) - V(s_t)  # noqa: RUF003
-                            delta = rewards_flat[idx] + gamma * next_v_flat[idx] - v_flat[idx]
+                            delta = shaped_rewards[idx] + gamma * next_v_flat[idx] - v_flat[idx]
                             gae = delta + gamma * lam * gae
                             advantages[idx] = gae
                             # Return target: V_target = A + V(s_t)
                             returns[idx] = gae + v_flat[idx]
                 else:
                     # Plain A2C TD(0): r_t + γ V(s_{t+1})  # noqa: RUF003
-                    returns = rewards_flat + gamma * next_v_flat
+                    returns = shaped_rewards + gamma * next_v_flat
                     advantages = returns - v_flat
 
         # -------------------------------------------------------
@@ -513,9 +564,61 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
 
         return normalized_advantages, returns
 
+    def shaped_reward(
+        self,
+        rewards_flat: torch.Tensor,
+        current_potential_raw: torch.Tensor,
+        next_potential_raw: torch.Tensor,
+    ) -> torch.Tensor:
+        """Calculate shaped rewards using potential-based shaping.
+
+        Converts normalized potential back to raw score, clamps to [0, 63],
+        and computes potential difference scaled by BONUS_POINTS.
+        """
+        # Convert normalized potential back to raw score: potential * 63 + 63
+        # Then clamp to [0, 63]
+        next_score = torch.clamp(
+            next_potential_raw.squeeze() * MINIMUM_UPPER_SCORE_FOR_BONUS
+            + MINIMUM_UPPER_SCORE_FOR_BONUS,
+            min=0.0,
+            max=float(MINIMUM_UPPER_SCORE_FOR_BONUS),
+        )
+        current_score = torch.clamp(
+            current_potential_raw.squeeze() * MINIMUM_UPPER_SCORE_FOR_BONUS
+            + MINIMUM_UPPER_SCORE_FOR_BONUS,
+            min=0.0,
+            max=float(MINIMUM_UPPER_SCORE_FOR_BONUS),
+        )
+
+        # Compute potential: (score / 63) * BONUS_POINTS
+        next_potential = (next_score / MINIMUM_UPPER_SCORE_FOR_BONUS) * BONUS_POINTS
+        current_potential = (current_score / MINIMUM_UPPER_SCORE_FOR_BONUS) * BONUS_POINTS
+
+        # Calculate potential difference using Ng's formula
+        potential_diff = self.get_gamma() * next_potential - current_potential
+        shaping_bonus = self.upper_score_shaping_weight * potential_diff
+
+        # Shaped reward = r + weight * (Phi(s') - Phi(s))
+        shaped_rewards: torch.Tensor = rewards_flat + shaping_bonus
+
+        ## =========================================================================================
+        ## Diagnostics
+        self.log("train/shaping_weight", self.upper_score_shaping_weight, prog_bar=False)
+        self.log("train/current_potential_mean", current_potential.mean(), prog_bar=False)
+        self.log("train/next_potential_mean", next_potential.mean(), prog_bar=False)
+        self.log("train/potential_diff_mean", potential_diff.mean(), prog_bar=False)
+        self.log("train/potential_diff_abs_mean", potential_diff.abs().mean(), prog_bar=False)
+        self.log("train/shaping_bonus_mean", shaping_bonus.mean(), prog_bar=True)
+        self.log("train/shaping_bonus_abs_mean", shaping_bonus.abs().mean(), prog_bar=False)
+        self.log("train/raw_reward_mean", rewards_flat.mean(), prog_bar=False)
+        self.log("train/shaped_reward_mean", shaped_rewards.mean(), prog_bar=False)
+        ## =========================================================================================
+
+        return shaped_rewards
+
     def get_policy_loss(
         self,
-        rolling_probs: torch.Tensor,
+        rolling_logits: torch.Tensor,
         rolling_actions_flat: torch.Tensor,
         scoring_probs: torch.Tensor,
         scoring_actions_flat: torch.Tensor,
@@ -524,13 +627,20 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Calculate policy loss using log probabilities and advantages."""
         rolling_dist: torch.distributions.Distribution
+
+        rolling_probs = (
+            torch.nn.functional.sigmoid(rolling_logits)
+            if self.rolling_action_representation == RollingActionRepresentation.BERNOULLI
+            else torch.nn.functional.softmax(rolling_logits, dim=-1)
+        )
+
         if self.rolling_action_representation == RollingActionRepresentation.CATEGORICAL:
-            rolling_dist = torch.distributions.Categorical(rolling_probs)
+            rolling_dist = torch.distributions.Categorical(probs=rolling_probs)
             rolling_log_probs = rolling_dist.log_prob(
                 rolling_actions_flat.float()
             )  # (BATCH_SIZE * 39,)
         else:  # BERNOULLI
-            rolling_dist = torch.distributions.Bernoulli(rolling_probs)
+            rolling_dist = torch.distributions.Bernoulli(probs=rolling_probs)
             rolling_log_probs = rolling_dist.log_prob(rolling_actions_flat.float()).sum(
                 dim=1
             )  # (BATCH_SIZE * 39,)
@@ -547,7 +657,12 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
 
         ## =========================================================================================
         ## Diagnostics
-        entropy_stats = compute_entropy_stats(rolling_probs, scoring_probs, phases_flat)
+        entropy_stats = compute_entropy_stats(
+            rolling_probs,
+            scoring_probs,
+            phases_flat,
+            self.rolling_action_representation == RollingActionRepresentation.BERNOULLI,
+        )
         if hasattr(self, "_epoch_metrics"):
             self._epoch_metrics["entropy_roll"].append(float(entropy_stats["entropy_roll"].item()))
             self._epoch_metrics["entropy_score"].append(

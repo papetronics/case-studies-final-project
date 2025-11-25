@@ -246,6 +246,20 @@ def main() -> None:  # noqa: PLR0915
             0.90,
             "GAE lambda parameter (for A2C algorithm only)",
         ),
+        ConfigParam(
+            "upper_score_regression_loss_weight",
+            float,
+            0.1,
+            "Weight for the upper score regression loss term",
+            display_name="Upper score regression loss weight",
+        ),
+        ConfigParam(
+            "upper_score_shaping_weight",
+            float,
+            0.1,
+            "Weight for the upper score regression shaping loss term",
+            display_name="Upper score regression shaping weight",
+        ),
     ]
 
     # Initialize project with configuration
@@ -283,6 +297,8 @@ def main() -> None:  # noqa: PLR0915
     rolling_action_representation = config["rolling_action_representation"]
     algorithm = config["algorithm"]
     gae_lambda = config["gae_lambda"]
+    upper_score_regression_loss_weight = config["upper_score_regression_loss_weight"]
+    upper_score_shaping_weight = config["upper_score_shaping_weight"]
 
     torch.set_float32_matmul_precision("medium")
 
@@ -391,6 +407,8 @@ def main() -> None:  # noqa: PLR0915
             rolling_action_representation=rolling_action_representation,
             he_kaiming_initialization=he_kaiming_initialization,
             gae_lambda=gae_lambda,
+            upper_score_regression_loss_weight=upper_score_regression_loss_weight,
+            upper_score_shaping_weight=upper_score_shaping_weight,
         )
 
         # Save hyperparameters explicitly
@@ -421,6 +439,8 @@ def main() -> None:  # noqa: PLR0915
                 "rolling_action_representation": rolling_action_representation,
                 "algorithm": algorithm,
                 "gae_lambda": gae_lambda,
+                "upper_score_regression_loss_weight": upper_score_regression_loss_weight,
+                "upper_score_shaping_weight": upper_score_shaping_weight,
             }
         )
 

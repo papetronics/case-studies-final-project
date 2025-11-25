@@ -1,0 +1,29 @@
+\section{Introduction}
+% <600-900 words>
+% 342 words
+\subsection{Yahtzee as a Reinforcement Learning Benchmark}
+While on the surface \textit{Yahtzee} appears to be a trivial dice game \cite{hasbro-2022-yahtzee-rules}, it is actually a complex stochastic optimization problem with combinatorial complexity.
+
+Although there are methods for computing optimal play in \textit{Yahtzee} using dynamic programming, these are computationally expensive and do not scale well to multiplayer settings.
+\textit{Yahtzee} offers a rich environment for testing reinforcement learning (RL) solutions due to its combination of a large but manageable state space, randomness, ease of simulation, subtle strategic considerations, and easily identifiable subproblems.
+While there have been a small number of efforts to create RL agents for \textit{Yahtzee}, a comprehensive approach using self-play has yet to be published.
+It remains an open question of whether deep RL methods can approach optimal performance in full-game \textit{Yahtzee}, and which architectural and training choices most affect learning efficiency and final performance.
+Similarly, a robust RL-based solution for multiplayer \textit{Yahtzee} using RL methods has yet to be demonstrated.
+
+\textit{Yahtzee} is an ideal candidate to serve as a bridge between simple toy problems such as \textit{Lunar Lander} \cite{brockman2016openai} and extremely complex games like Go \cite{silver2016alphago}.
+Typical small benchmarks often offer low stochasticity and simple combinatorics whereas complex games have intractable state spaces and require massive computational resources and heavy engineering to solve.
+\textit{Yahtzee} sits in a middle ground where an analytic optimum exists, but reaching it with RL methods is non-trivial.
+These factors make it a challenging yet feasible benchmark for RL research.
+
+\subsection{Objectives}
+
+In this paper we aim to methodically study whether a deep RL agent can achieve near DP-optimal performance in full-game solitaire \textit{Yahtzee} using only self-play,
+and how architectural and training choices affect learning efficiency.
+
+Concretely, we ask: \begin{enumerate*}[label=(\roman*)]
+    \item How does the trade-off between maximizing single-turn expected score and full-game performance behave?
+    \item Can an agent reach optimal performance under a fixed training budget, using only self-play?
+    \item Which design choices (state and action encodings, credit assignment, variance controls, baselines, entropy, etc) most affect final performance?
+    \item What failure modes exist in learned policies and how can they be addressed?
+    \item Can we find a successful architecture which could be adapted to multiplayer \textit{Yahtzee}?
+\end{enumerate*}

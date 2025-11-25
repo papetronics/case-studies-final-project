@@ -25,6 +25,8 @@
         "critic_coeff": 0.025,
         "gradient_clip_val": 0.0,
         "phi_features": "dice_onehot,dice_counts,rolls_used,phase,has_earned_yahtzee,available_categories,percent_progress_towards_bonus,potential_scoring_opportunities,game_progress",
-        "rolling_action_representation": "categorical"
+        "rolling_action_representation": "categorical",
+        "upper_score_regression_loss_weight": 0,
+        "upper_score_shaping_weight": 0
     }
 }

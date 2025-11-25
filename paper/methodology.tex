@@ -1,0 +1,402 @@
+\section{Methodology}
+% <1400-1700 words>
+% 1076 words so far
+\subsection{State Representation \& Input Features}
+The design of $\mathbf{\phi}(\mathbf{s}) \rightarrow \mathbf{x}$ is one of the most critical components to the performance of a model \cite{sutton-2018-reinforcement-book}.
+
+Formally, we define the state representation function as
+\begin{equation}
+    \mathbf{x} = \mathbf{\phi}(\mathbf{s})
+\end{equation}
+where $\mathbf{s}$ is the raw MDP state (e.g., dice configuration, scorecard, roll index, turn index), and $\mathbf{x}$ is the feature vector or tensor provided as input to the model. The choice of $\mathbf{\phi}$ determines how information from the environment is encoded for learning and inference.
+As such, several different representations were tested to evaluate their impact on learning efficiency and final performance.
+
+\subsubsection{Dice Representation}
+The dice representation can be encoded in several ways, depending on if we want to preserve permutation invariance or not.
+Preserving ordering information (and implicitly, ranking) gives the model the benefit of being able to directly output actions corresponding to dice indices,
+however, it comes at the cost of implicitly biasing the model to specific dice orderings; in other words, towards a local optima of keeping the highest ranking dice.
+However, eliminating ordering information requires the model to either waste capacity learning permutation invariance or be inherently supportive of invariance (e.g. with self-attention).
+It also requires a different action representation, since actions can no longer correspond to specific dice indices. We attempted 5 different dice representations:
+
+\begin{align*}
+     & \phi_{\mathrm{dice}}^{\mathrm{onehot}}(\mathbf{d})   &  & = \bigl[\mathrm{onehot}(d_1), \ldots, \mathrm{onehot}(d_5)\bigr]                                                  \\[4pt]
+     & \phi_{\mathrm{dice}}^{\mathrm{bin}}(\mathbf{d})      &  & = \mathbf{n}(\mathbf{d})                                                                                          \\[4pt]
+     & \phi_{\mathrm{dice}}^{\mathrm{combined}}(\mathbf{d}) &  & = \bigl[\phi_{\mathrm{dice}}^{\mathrm{onehot}}(\mathbf{d}), \phi_{\mathrm{dice}}^{\mathrm{bin}}(\mathbf{d})\bigr] \\[4pt]
+     & \phi_{\mathrm{dice}}^{\mathrm{emb}}(\mathbf{d})      &  & = \bigl[\mathbf{E}[d_1], \ldots, \mathbf{E}[d_5]\bigr]                                                            \\[4pt]
+     & \phi_{\mathrm{dice}}^{\mathrm{pos\_emb}}(\mathbf{d}) &  & = \bigl[\mathbf{E}[d_1], \ldots, \mathbf{E}[d_5]\bigr] + \mathbf{PE}
+\end{align*}
+where $\mathbf{E} \in \mathbb{R}^{6 \times d_{\mathrm{emb}}}$ is a learnable embedding matrix and $\mathbf{PE}$ is a sinusoidal positional encodings.
+
+\subsubsection{Scorecard Representation}
+There are two important pieces of information $\mathbf{\phi}$ must encode about the scorecard: whether a category is open or closed,
+and some form of progress towards the upper bonus.
+$$\phi_{\mathrm{cat}}(\mathbf{c}) = \mathbf{u}(\mathbf{c})$$
+
+We experimented with several ways of encoding the bonus progress, but settled on a simple normalized, clamped sum of the upper section scores:
+$$\phi_{\mathrm{bonus}}(\mathbf{c}) = \min\biggl(\frac{1}{63} \sum_{i=1}^{6} c_{i}, 1\biggr)$$
+
+\subsubsection{Computed Features}
+There are some key features that can be computed from the raw state, providing these can allow the model to focus on higher-level patterns.
+
+\begin{align*}
+    \phi_{\mathrm{progress}}(t)       & = \frac{t}{12}                                          \\[4pt]
+    \phi_{\mathrm{rolls}}(r)          & \in \{0,1\}^3, \quad \|\phi_{\mathrm{rolls}}(r)\|_1 = 1 \\[4pt]
+    \phi_{\mathrm{joker}}(\mathbf{c}) & \in \{0,1\}, \quad \text{(Joker rule active)}
+\end{align*}
+
+We also defined a lock-in feature to indicate whether scoring in a given upper category would secure the upper bonus:
+\begin{align*}
+    \phi_{\mathrm{lockin}}(\mathbf{d}, \mathbf{c})   & \in \{0,1\}^{6},                                                                                      \\
+    \phi_{\mathrm{lockin},k}(\mathbf{d}, \mathbf{c}) & = \mathbb{I}\Bigl\{\sum_{i=1}^{6} \mathbf{u}(\mathbf{c})_i \cdot c_i + f_k(\mathbf{d}) \geq 63\Bigr\}
+\end{align*}
+
+\subsection{Action Representation}
+\subsubsection{Rolling Action}
+We experiment with two different rolling action representations.
+The first is a Bernoulli representation, where each die has an individual binary decision to be re-rolled or held.
+The second is a categorical representation, where each of the 32 possible combination of dice to keep is represented as a unique action.
+
+\[
+    a_{\mathrm{roll}} \sim
+    \begin{cases}
+        \mathrm{Bernoulli}\!\left(\sigma\!\left(f_\theta(\phi(x))\right)\right) \\
+        \mathrm{Categorical}\!\left(\mathrm{softmax}\!\left(f_\theta(\phi(x))\right)\right)
+    \end{cases}
+\]
+
+\subsubsection{Scoring Action}
+The scoring action is always a categorical distribution over the 13 scoring categories.
+\[
+    a_{\mathrm{score}} \sim \mathrm{Categorical}\!\left(\mathrm{softmax}\!\left(f_\theta(\phi(x))\right)\right)
+\]
+
+\subsubsection{Rewards}
+<TODO: This might need updating>
+We intentionally do not use any reward shaping or extra rewards beyond the change in score after each action.
+While this poses a greater challenge for the model, it ensures that the learned policy is not biased by hand-crafted rewards,
+and allows us to better focus on other aspects of the learning process.
+
+\subsection{Neural Network Architecture}
+The neural network uses a unique architecture designed to handle the specific challenges of \textit{Yahtzee}.
+The architecture consists of a trunk, followed by heads for the policy and value functions.
+
+\subsubsection{Trunk}
+The trunk of the network is a standard feedforward architecture with $L$ (typically 2 or 3) fully connected hidden layers.
+The width of each layer (hidden size $d_h$) is 600 neurons, found through empirical hyperparameter tuning,
+but aligning our model capacity with theoretical maximums \cite{horne-1994-bounds-rnn-fsm} and minimums \cite{hanin-2017-bounded-width-relu}.
+We utilize layer normalization for improved training stability \cite{ba-2016-layernorm, bjorck-2022-high-variance},
+dropout with rate $p_d$ for regularization,
+and Swish activations \cite{ramachandran-2017-swish} to introduce stable non-linearities.
+
+\begin{figure}[tb]
+    \centering
+    \scalebox{0.70}{
+        \begin{tikzpicture}[
+                node distance=0.8cm,
+                layer/.style={rectangle, draw, minimum width=2.2cm, minimum height=0.5cm, align=center, rounded corners=3pt},
+                linear/.style={layer, fill=orange!15, draw=orange!45},
+                norm/.style={layer, fill=purple!12, draw=purple!40},
+                activation/.style={layer, fill=blue!15, draw=blue!45},
+                dropout/.style={layer, fill=gray!8, draw=gray!50, dashed},
+            ]
+
+            % Input (outside the box)
+            \node (input) {$\underbrace{\phi(\mathbf{s})}_{\text{State Features}}$};
+
+            % ===== TRUNK BLOCK 1 =====
+            \node[linear, below=0.6cm of input] (trunk1_linear) {Linear};
+            \node[activation, below of=trunk1_linear] (trunk1_swish) {Swish};
+            \node[norm, below of=trunk1_swish] (trunk1_ln) {LayerNorm};
+            \node[dropout, below of=trunk1_ln] (trunk1_dropout) {Dropout};
+
+            % ===== TRUNK BLOCK 2 =====
+            \node[linear, below=0.8cm of trunk1_dropout] (trunk2_linear) {Linear};
+            \node[activation, below of=trunk2_linear] (trunk2_swish) {Swish};
+            \node[norm, below of=trunk2_swish] (trunk2_ln) {LayerNorm};
+            \node[dropout, below of=trunk2_ln] (trunk2_dropout) {Dropout};
+
+            % ===== TRUNK BLOCK 3 =====
+            \node[linear, below=0.8cm of trunk2_dropout] (trunk3_linear) {Linear};
+            \node[activation, below of=trunk3_linear] (trunk3_swish) {Swish};
+            \node[norm, below of=trunk3_swish] (trunk3_ln) {LayerNorm};
+            \node[dropout, below of=trunk3_ln] (trunk3_dropout) {Dropout};
+
+            % ===== ROLL HEAD =====
+            \node[linear, below left=1.0cm and 1.4cm of trunk3_dropout] (roll_linear) {Linear};
+            \node[activation, below of=roll_linear] (roll_swish) {Swish};
+            \node[norm, below of=roll_swish] (roll_ln) {LayerNorm};
+            \node[dropout, below of=roll_ln] (roll_dropout) {Dropout};
+
+            % ===== SCORE HEAD =====
+            \node[linear, below=1.0cm of trunk3_dropout] (score_linear) {Linear};
+            \node[activation, below of=score_linear] (score_swish) {Swish};
+            \node[norm, below of=score_swish] (score_ln) {LayerNorm};
+            \node[dropout, below of=score_ln] (score_dropout) {Dropout};
+
+            % ===== VALUE HEAD =====
+            \node[linear, below right=1.0cm and 1.4cm of trunk3_dropout] (value_linear) {Linear};
+            \node[activation, below of=value_linear] (value_swish) {Swish};
+            \node[norm, below of=value_swish] (value_ln) {LayerNorm};
+
+            % ===== ROLL OUTPUT =====
+            \node[linear, below=0.6cm of roll_dropout] (roll_out_linear) {Linear};
+            \node[activation, below=0.7cm of roll_out_linear] (roll_out_softmax) {Softmax};
+            \node[below=0.4cm of roll_out_softmax] (roll_out) {$\underbrace{a_{\mathrm{roll}}}_{\text{Rolling Action}}$};
+
+            % ===== SCORE OUTPUT =====
+            \node[linear, below=0.6cm of score_dropout] (score_out_linear) {Linear};
+            \node[activation, below=0.7cm of score_out_linear] (score_out_softmax) {Masked\\Softmax};
+            \node[below=0.4cm of score_out_softmax] (score_out) {$\underbrace{a_{\mathrm{score}}}_{\text{Scoring Action}}$};
+
+            % ===== VALUE OUTPUT =====
+            \node[linear, below=0.6cm of value_ln] (value_out_linear) {Linear};
+            \node[activation, below=0.7cm of value_out_linear] (value_out_elu) {ELU};
+            \node[below=0.4cm of value_out_elu] (value_out) {$\underbrace{\hat{V}(s)}_{\text{Value Est.}}$};
+
+            % Surrounding boxes (drawn on background layer)
+            \begin{scope}[on background layer]
+                % Big trunk box (draw first, in background)
+                \node[draw=blue!50, very thick, rectangle, rounded corners=8pt, fit={(trunk1_linear) (trunk1_swish) (trunk1_ln) (trunk1_dropout) (trunk2_linear) (trunk2_swish) (trunk2_ln) (trunk2_dropout) (trunk3_linear) (trunk3_swish) (trunk3_ln) (trunk3_dropout)}, inner sep=0.35cm, fill=blue!5] (trunk_box) {};
+
+                % Roll head box (exclude output softmax)
+                \node[draw=green!50, very thick, rectangle, rounded corners=8pt, fit={(roll_linear) (roll_swish) (roll_ln) (roll_dropout) (roll_out_linear)}, inner sep=0.35cm, fill=green!5] (roll_box) {};
+
+                % Score head box (exclude output softmax)
+                \node[draw=purple!50, very thick, rectangle, rounded corners=8pt, fit={(score_linear) (score_swish) (score_ln) (score_dropout) (score_out_linear)}, inner sep=0.35cm, fill=purple!5] (score_box) {};
+
+                % Value head box (include output layers)
+                \node[draw=orange!50, very thick, rectangle, rounded corners=8pt, fit={(value_linear) (value_swish) (value_ln) (value_out_linear)}, inner sep=0.35cm, fill=orange!5] (value_box) {};
+            \end{scope}
+
+            % Individual blocks with dashed grey outline (drawn on top)
+            % Trunk Block 1
+            \node[draw=gray!50, dashed, rectangle, rounded corners=5pt, fit={(trunk1_linear) (trunk1_swish) (trunk1_ln) (trunk1_dropout)}, inner sep=0.25cm, fill=none] {};
+
+            % Trunk Block 2
+            \node[draw=gray!50, dashed, rectangle, rounded corners=5pt, fit={(trunk2_linear) (trunk2_swish) (trunk2_ln) (trunk2_dropout)}, inner sep=0.25cm, fill=none] {};
+
+            % Trunk Block 3
+            \node[draw=gray!50, dashed, rectangle, rounded corners=5pt, fit={(trunk3_linear) (trunk3_swish) (trunk3_ln) (trunk3_dropout)}, inner sep=0.25cm, fill=none] {};
+
+            % Roll Head inner block
+            \node[draw=gray!50, dashed, rectangle, rounded corners=5pt, fit={(roll_linear) (roll_swish) (roll_ln) (roll_dropout)}, inner sep=0.25cm, fill=none] {};
+
+            % Score Head inner block
+            \node[draw=gray!50, dashed, rectangle, rounded corners=5pt, fit={(score_linear) (score_swish) (score_ln) (score_dropout)}, inner sep=0.25cm, fill=none] {};
+
+            % Value Head inner block
+            \node[draw=gray!50, dashed, rectangle, rounded corners=5pt, fit={(value_linear) (value_swish) (value_ln)}, inner sep=0.25cm, fill=none] {};
+
+            % Labels for large boxes
+            \node[left=0.05cm of trunk_box.west, rotate=90, anchor=south, font=\small\bfseries] {Trunk};
+            \node[left=0.05cm of roll_box.west, rotate=90, anchor=south, font=\small\bfseries] {Roll Head};
+            \node[left=0.05cm of score_box.west, rotate=90, anchor=south, font=\small\bfseries] {Score Head};
+            \node[left=0.05cm of value_box.west, rotate=90, anchor=south, font=\small\bfseries] {Value Head};
+
+            % Arrows - Trunk
+            \draw[->, thick] (input) -- (trunk1_linear);
+            \draw[->, thick] (trunk1_linear) -- (trunk1_swish);
+            \draw[->, thick] (trunk1_swish) -- (trunk1_ln);
+            \draw[->, thick] (trunk1_ln) -- (trunk1_dropout);
+            \draw[->, thick] (trunk1_dropout) -- (trunk2_linear);
+            \draw[->, thick] (trunk2_linear) -- (trunk2_swish);
+            \draw[->, thick] (trunk2_swish) -- (trunk2_ln);
+            \draw[->, thick] (trunk2_ln) -- (trunk2_dropout);
+            \draw[->, thick] (trunk2_dropout) -- (trunk3_linear);
+            \draw[->, thick] (trunk3_linear) -- (trunk3_swish);
+            \draw[->, thick] (trunk3_swish) -- (trunk3_ln);
+            \draw[->, thick] (trunk3_ln) -- (trunk3_dropout);
+
+            % Arrows - Split to heads
+            \draw[->, thick] (trunk3_dropout) -- (roll_linear);
+            \draw[->, thick] (trunk3_dropout) -- (score_linear);
+            \draw[->, thick] (trunk3_dropout) -- (value_linear);
+
+            % Arrows - Roll head
+            \draw[->, thick] (roll_linear) -- (roll_swish);
+            \draw[->, thick] (roll_swish) -- (roll_ln);
+            \draw[->, thick] (roll_ln) -- (roll_dropout);
+            \draw[->, thick] (roll_dropout) -- (roll_out_linear);
+            \draw[->, thick] (roll_out_linear) -- (roll_out_softmax);
+            \draw[->, thick] (roll_out_softmax) -- (roll_out);
+
+            % Arrows - Score head
+            \draw[->, thick] (score_linear) -- (score_swish);
+            \draw[->, thick] (score_swish) -- (score_ln);
+            \draw[->, thick] (score_ln) -- (score_dropout);
+            \draw[->, thick] (score_dropout) -- (score_out_linear);
+            \draw[->, thick] (score_out_linear) -- (score_out_softmax);
+            \draw[->, thick] (score_out_softmax) -- (score_out);
+
+            % Arrows - Value head
+            \draw[->, thick] (value_linear) -- (value_swish);
+            \draw[->, thick] (value_swish) -- (value_ln);
+            \draw[->, thick] (value_ln) -- (value_out_linear);
+            \draw[->, thick] (value_out_linear) -- (value_out_elu);
+            \draw[->, thick] (value_out_elu) -- (value_out);
+
+        \end{tikzpicture}
+    }
+    \caption{Overall network architecture with shared trunk and three specialized heads}
+    \label{fig:network-architecture}
+\end{figure}
+
+\subsubsection{Policy and Value Heads}
+We utilize two distinct heads for the rolling and scoring actions, allowing the model to specialize in
+each task \cite{tavakoli2018actionbranching, hausknecht2016parameterized}.
+We also implement a value head. This outputs a scalar which is used as the baseline for REINFORCE and the value estimate for actor-critic methods.
+Each of these networks has a fully connected hidden layer before the final output layer.
+
+In the rolling action head, we use either 5 outputs with sigmoid activations for Bernoulli representation, or 32 outputs with softmax activations for the categorical representation.
+
+In the scoring action head, we use 13 outputs with softmax activations for the categorical distribution over scoring categories.
+
+For the value head, we use a single linear output, constrained with ELU activation to clamp negative value estimates \cite{clevert2016elu}, since negative rewards are not possible in \textit{Yahtzee}.
+
+\subsubsection{Optimization \& Schedules}
+We utilize the Adam optimizer \cite{kingma2014adam} with maximum learning rate $\alpha$, typically between $1\times 10^{-4}$ and $5\times 10^{-4}$.
+To improve training stability, we utilize a warmup schedule over the first 5\% of training \cite{kalra-2024-warmup},
+plateau for 70\% of training, and then linearly decay over the final 25\% of training steps to a minimum ratio $r_{\alpha}$ of the maximum \cite{defazio2023optimal, lyle2024normalization}.
+
+\subsection{Entropy}
+To encourage exploration, we also add an entropy bonus to the loss function  \cite{williams-peng-1991-function-optimization}. These are held
+constant at the start of training then linearly decayed to a final value near the end of training. Different entropy bonuses were used for rolling and scoring actions,
+as rolling actions had a tendency to collapse early in training.
+Exploration is particularly important for Yahtzee, there are many stable suboptimal policies (e.g., exclusively going for the upper bonus, always going for Yahtzees, etc).
+Once the model has figured out how to play the game, it quickly converges and won't explore other strategies as they often trade off short-term rewards for long-term gains.
+
+We can define the entropy bonus as:
+\begin{align}
+    \mathcal{L}_{\mathrm{entropy}}(\theta)
+    = &
+    \underbrace{
+        \overbrace{\beta_{\mathrm{roll}}}^{\text{weight}}
+        \,
+        \mathcal{H}\big[\pi_{\theta,\mathrm{roll}}(\cdot \mid s_t)\big]
+    }_{\text{rolling action entropy}} \nonumber \\
+      & +
+    \underbrace{
+        \overbrace{\beta_{\mathrm{score}}}^{\text{weight}}
+        \,
+        \mathcal{H}\big[\pi_{\theta,\mathrm{score}}(\cdot \mid s_t)\big]
+    }_{\text{scoring action entropy}}
+\end{align}
+
+\subsubsection{Training Metrics}
+To better understand training dynamics, we log several metrics during training.
+To monitor the quality of the value network, we monitor explained variance \cite{schulman2016nutsbolts, schulman-2016-gae}.
+To monitor for policy collapse, we track the policy entropy and KL divergence between policy updates \cite{schulman2016nutsbolts,schulman-2017-ppo},
+mask diversity \cite{Hubara2021MaskDiversity},
+and the top-k action frequency \cite{sun-etal-2025-curiosity}.
+To monitor for learning stability, we track gradient norms and clip rate \cite{pascanu-2013-rnn-clipping, Engstrom2020ImplementationMatters}.
+Gradient clipping is applied with threshold $\tau_{\mathrm{clip}}$ to prevent destabilizing updates.
+To ensure advantages are well-conditioned, we track advantage mean and standard deviation \cite{Achiam2018SpinningUp}.
+We also monitor standard training metrics such as average reward and loss values.
+
+\subsection{Reinforcement Learning Algorithms}
+\subsubsection{REINFORCE}
+We first implement the REINFORCE algorithm \cite{williams-1992-reinforce} with baseline for single-turn optimization, then attempt to extend it to full-game optimization.
+The baseline is the output of the value head, $V_{\phi}(\mathbf{s})$.
+We collect trajectories in batches of $B$ games before computing gradient updates. Thus, the loss function is:
+
+\begin{align}
+    \mathcal{L}(\theta,\phi)
+    = &
+    \underbrace{
+    \overbrace{- \log \big(\pi_\theta(a_t \mid s_t)\big)}^{\text{negative log likelihood}} \,
+    \overbrace{\big(\hat{R}_t - V_\phi(s_t)\big)}^{\text{advantage }}
+    }_{\text{policy loss}}                 \nonumber \\
+      & +
+    \underbrace{
+    \overbrace{\lambda_V}^{\text{weight}}
+    \|
+    V_\phi(s_t) - \hat{R}_t\big
+    \|_2
+    }_{\text{value loss}}                  \nonumber \\
+      & +
+    \mathcal{L}_{\mathrm{entropy}(\theta)}
+\end{align}
+
+\subsubsection{Advantage Actor-Critic (A2C)}
+
+Second, we utilize an episodic, one-step TD(0) Advantage Actor-Critic (A2C) method. Its loss is:
+
+\begin{align}
+    \delta_t
+     & =
+    \overbrace{r_t}^{\text{reward}}
+    +
+    \overbrace{\gamma V_\phi(s_{t+1})}^{\text{bootstrap}}
+    -
+    \overbrace{V_\phi(s_t)}^{\text{current estimate}}
+\end{align}
+\begin{align}
+    \mathcal{L}_{\text{TD-AC}}(\theta,\phi)
+    = &
+    \underbrace{
+    \overbrace{- \log \big(\pi_\theta(a_t \mid s_t)\big)}^{\text{negative log likelihood}}
+    \,
+    \overbrace{\delta_t}^{\text{TD-error}}
+    }_{\text{policy loss}}                 \nonumber \\
+      & +
+    \underbrace{
+    \overbrace{\lambda_V}^{\text{weight}}
+    \,
+    \big\|
+    \delta_t
+    \big\|_2^2
+    }_{\text{value loss}}                  \nonumber \\
+      & +
+    \mathcal{L}_{\mathrm{entropy}(\theta)}
+\end{align}
+
+\subsubsection{PPO}
+PPO improves on TD by utilizing a "surrogate" objective which clips large policy updates, improving training stability.
+This allows for substantially larger batch sizes and learning rates \cite{schulman-2017-ppo}. The loss we use is:
+
+\begin{align}
+    r_t(\theta)
+     & =
+    \frac{
+    \overbrace{\pi_\theta(a_t \mid s_t)}^{\text{current policy}}
+    }{
+    \underbrace{\pi_{\theta_{\text{old}}}(a_t \mid s_t)}_{\text{behavior policy}}
+    }
+\end{align}
+\begin{align}
+    \mathcal{L}(\theta,\phi)
+    = &
+    \underbrace{
+        - \min \bigg\{
+        \begin{aligned}
+             & r_t(\theta)\,\hat{A}_t,                                                         \\
+             & \operatorname{clip}\big(r_t(\theta), 1 - \epsilon, 1 + \epsilon\big)\,\hat{A}_t
+        \end{aligned}
+        \bigg\}
+    }_{\text{policy loss}}                 \nonumber \\
+      & +
+    \underbrace{
+    \overbrace{\lambda_V}^{\text{weight}}
+    \big\|
+    V_\phi(s_t) - \hat{R}_t
+    \big\|_2^2
+    }_{\text{value loss}}                  \nonumber \\
+      & +
+    \mathcal{L}_{\mathrm{entropy}(\theta)}
+\end{align}
+
+\subsubsection{Training Regimes}
+We analyze several distinct training regimes for \textit{Yahtzee} agents:
+\begin{enumerate*}[label=(\roman*)]
+    \item REINFORCE directly on the single-turn optimization task and evaluating full-game performance
+    \item REINFORCE, TD, and PPO directly on the full-game optimization task
+          % \item transfer learning from single-turn to full-game optimization
+          % \item behavioral cloning from an optimal DP agent
+\end{enumerate*}.
+
+\subsection{Evaluation Protocol}
+During training, we run 1,000 game episodes every 5 epochs (1\% of training) to monitor progress.
+
+For a model's final evaluation, we run 10,000 games, reporting the mean score and standard deviation.
+For a typical variance $\sigma^2 \approx 50$, this generally gives us a standard error $\sigma / \sqrt{10000} = \pm 0.5$.
+Likewise, we compute category statistics to analyze strategic preferences of different agents.
