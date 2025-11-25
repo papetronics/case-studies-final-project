@@ -190,7 +190,7 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
                 states[:, step_idx, :] = state_tensors
 
                 # Single batched forward pass for all envs: π_roll, π_score, V(s_t), Φ(s_t)
-                rolling_probs, scoring_probs, v_ests, bonus_potential = self.policy_net.forward(
+                rolling_logits, scoring_probs, v_ests, bonus_potential = self.policy_net.forward(
                     state_tensors
                 )
                 v_baseline[:, step_idx] = v_ests.squeeze(-1)
@@ -198,7 +198,7 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
 
                 # Sample actions and compute log probabilities for PPO
                 actions, _, _ = sample_action(
-                    rolling_probs,
+                    rolling_logits,
                     scoring_probs,
                     v_ests,
                     rolling_action_representation,
@@ -208,12 +208,12 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
                 # Compute log probabilities for the sampled actions (for PPO)
                 rolling_dist: torch.distributions.Distribution
                 if rolling_action_representation.value == "bernoulli":
-                    rolling_dist = torch.distributions.Bernoulli(rolling_probs)
+                    rolling_dist = torch.distributions.Bernoulli(logits=rolling_logits)
                     rolling_log_probs_step = rolling_dist.log_prob(
                         rolling_action_tensor.float()
                     ).sum(dim=1)
                 else:  # CATEGORICAL
-                    rolling_dist = torch.distributions.Categorical(rolling_probs)
+                    rolling_dist = torch.distributions.Categorical(logits=rolling_logits)
                     rolling_log_probs_step = rolling_dist.log_prob(rolling_action_tensor.float())
 
                 scoring_dist = torch.distributions.Categorical(scoring_probs)
