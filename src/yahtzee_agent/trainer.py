@@ -560,8 +560,8 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         next_potential = (next_score / MINIMUM_UPPER_SCORE_FOR_BONUS) * BONUS_POINTS
         current_potential = (current_score / MINIMUM_UPPER_SCORE_FOR_BONUS) * BONUS_POINTS
 
-        # Calculate potential difference
-        potential_diff = next_potential - current_potential
+        # Calculate potential difference using Ng's formula
+        potential_diff = self.get_gamma() * next_potential - current_potential
         shaping_bonus = self.upper_score_shaping_weight * potential_diff
 
         # Shaped reward = r + weight * (Phi(s') - Phi(s))
