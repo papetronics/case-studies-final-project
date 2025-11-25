@@ -6,10 +6,10 @@ import torch
 from torch import nn
 
 from environments.full_yahtzee_env import ActionType, Observation
+from src.yahtzee_agent.modules.upper_score_head import UpperScoreHead
 from utilities.activation_functions import ActivationFunction, ActivationFunctionName
 from utilities.scoring_helper import NUMBER_OF_DICE
 from utilities.sequential_block import SequentialBlock
-from yahtzee_agent.modules.bonus_likelihood_head import BonusLikelihoodHead
 
 from .features import PhiFeature
 from .modules import Block, RollingHead, ScoringHead, ValueHead
@@ -191,7 +191,7 @@ class YahtzeeAgent(nn.Module):
         ).to(self.device)
         self.value_head = ValueHead(hidden_size, activation).to(self.device)
 
-        self.bonus_likelihood_head = BonusLikelihoodHead(hidden_size, activation).to(self.device)
+        self.bonus_likelihood_head = UpperScoreHead(hidden_size, activation).to(self.device)
 
         # Initialize weights for better behavior at high learning rates
         if he_kaiming_initialization:

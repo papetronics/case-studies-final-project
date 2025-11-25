@@ -8,8 +8,8 @@ from utilities.sequential_block import SequentialBlock
 from .block import Block
 
 
-class BonusLikelihoodHead(nn.Module):
-    """Head for bonus likelihood estimation."""
+class UpperScoreHead(nn.Module):
+    """Head for upper score estimation."""
 
     def __init__(
         self,
@@ -28,5 +28,5 @@ class BonusLikelihoodHead(nn.Module):
         return self.forward(x)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward pass through the value head."""
+        """Estimate the final score of the upper section."""
         return cast("torch.Tensor", self.network(x))

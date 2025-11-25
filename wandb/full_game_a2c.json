@@ -4,8 +4,6 @@
     "run_config": {
         "activation_function": "Swish",
         "algorithm": "a2c",
-        "bonus_regression_loss_weight": 1.0,
-        "bonus_regression_shaping_weight": 0.1,
         "critic_coeff": 0.005,
         "dropout_rate": 0.1,
         "entropy_anneal_period": 0.6,
@@ -27,6 +25,8 @@
         "num_hidden": 3,
         "phi_features": "dice_onehot,dice_counts,rolls_used,phase,has_earned_yahtzee,available_categories,percent_progress_towards_bonus,potential_scoring_opportunities,game_progress,will_receive_bonus_if_chosen",
         "rolling_action_representation": "categorical",
-        "total_train_games": 250000
+        "total_train_games": 250000,
+        "upper_score_regression_loss_weight": 1.0,
+        "upper_score_shaping_weight": 0.1
     }
 }

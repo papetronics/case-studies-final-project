@@ -76,8 +76,8 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         rolling_action_representation: str,
         he_kaiming_initialization: bool,
         algorithm: Algorithm,
-        bonus_regression_loss_weight: float,
-        bonus_regression_shaping_weight: float,
+        upper_score_regression_loss_weight: float,
+        upper_score_shaping_weight: float,
     ):
         super().__init__()
 
@@ -111,8 +111,8 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         self.entropy_anneal_period: float = entropy_anneal_period
         self.critic_coeff: float = critic_coeff
         self.num_steps_per_episode: int = num_steps_per_episode
-        self.bonus_regression_loss_weight: float = bonus_regression_loss_weight
-        self.bonus_regression_shaping_weight: float = bonus_regression_shaping_weight
+        self.upper_score_regression_loss_weight: float = upper_score_regression_loss_weight
+        self.upper_score_shaping_weight: float = upper_score_shaping_weight
 
         self.validation_envs: list[gym.Env[Observation, Action]] = []  # Created on demand
 
@@ -402,9 +402,8 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         rewards_flat = batch["rewards"]
         next_v_baseline = batch["next_v_baseline"]
         phases_flat = batch["phases"]
-        received_bonus = batch["received_bonus"]
-        current_upper_potential = batch.get("current_upper_potential")
-        next_upper_potential = batch.get("next_upper_potential")
+        upper_score_actual = batch["upper_score_actual"]
+        next_upper_score_actual = batch["next_upper_score_actual"]
 
         # Calculate num_episodes and steps_per_episode from flattened shape
         # single_turn: 338 episodes x 3 steps = 1014 total
@@ -414,7 +413,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         num_episodes = total_steps // steps_per_episode
 
         # Forward pass through current policy to get probabilities and value estimates
-        rolling_probs, scoring_probs, v_ests, bonus_likelihood_logit = self.policy_net.forward(
+        rolling_probs, scoring_probs, v_ests, upper_score_logit = self.policy_net.forward(
             states_flat
         )
 
@@ -425,8 +424,8 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
             next_v_baseline,
             v_ests,
             phases_flat,
-            current_upper_potential,
-            next_upper_potential,
+            upper_score_actual,
+            next_upper_score_actual,
         )
 
         policy_loss, entropy_loss = self.get_policy_loss(
@@ -442,27 +441,28 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
             policy_loss + self.critic_coeff * self.get_value_loss(v_ests, returns) + entropy_loss
         )
 
+        ## Standard regression loss for upper score prediction
         if self.algorithm == Algorithm.A2C:
-            bonus_likelihood_loss = torch.nn.functional.mse_loss(
-                bonus_likelihood_logit.squeeze(), received_bonus.float()
+            upper_score_loss = torch.nn.functional.mse_loss(
+                upper_score_logit.squeeze(), upper_score_actual.float()
             )
-            loss += self.bonus_regression_loss_weight * bonus_likelihood_loss
+            loss += self.upper_score_regression_loss_weight * upper_score_loss
             self.log(
-                "train/bonus_likelihood_loss",
-                self.bonus_regression_loss_weight * bonus_likelihood_loss,
+                "train/upper_score_loss",
+                self.upper_score_regression_loss_weight * upper_score_loss,
                 prog_bar=False,
             )
 
-            self.log("train/bonus_likelihood_loss_raw", bonus_likelihood_loss, prog_bar=False)
+            self.log("train/upper_score_loss_raw", upper_score_loss, prog_bar=False)
             self.log(
                 "train/pred_upper",
-                bonus_likelihood_logit.mean().item() * MINIMUM_UPPER_SCORE_FOR_BONUS
+                upper_score_logit.mean().item() * MINIMUM_UPPER_SCORE_FOR_BONUS
                 + MINIMUM_UPPER_SCORE_FOR_BONUS,
                 prog_bar=False,
             )
             self.log(
                 "train/target_upper",
-                received_bonus.mean().item() * MINIMUM_UPPER_SCORE_FOR_BONUS
+                upper_score_actual.mean().item() * MINIMUM_UPPER_SCORE_FOR_BONUS
                 + MINIMUM_UPPER_SCORE_FOR_BONUS,
                 prog_bar=False,
             )
@@ -482,8 +482,8 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         next_v_baseline: torch.Tensor,
         v_ests: torch.Tensor,
         phases_flat: torch.Tensor,
-        current_upper_potential: torch.Tensor | None,
-        next_upper_potential: torch.Tensor | None,
+        upper_score_actual: torch.Tensor | None,
+        next_upper_score_actual: torch.Tensor | None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Calculate advantages using either REINFORCE or A2C method."""
         gamma = self.get_gamma()
@@ -500,9 +500,9 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
                         returns[flat_idx] = g
             else:  # A2C
                 # Apply reward shaping if bonus potential is provided
-                if current_upper_potential is not None and next_upper_potential is not None:
+                if upper_score_actual is not None and next_upper_score_actual is not None:
                     shaped_rewards = self.shaped_reward(
-                        rewards_flat, current_upper_potential, next_upper_potential
+                        rewards_flat, upper_score_actual, next_upper_score_actual
                     )
                 else:
                     shaped_rewards = rewards_flat
@@ -562,14 +562,14 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
 
         # Calculate potential difference
         potential_diff = next_potential - current_potential
-        shaping_bonus = self.bonus_regression_shaping_weight * potential_diff
+        shaping_bonus = self.upper_score_shaping_weight * potential_diff
 
         # Shaped reward = r + weight * (Phi(s') - Phi(s))
         shaped_rewards: torch.Tensor = rewards_flat + shaping_bonus
 
         ## =========================================================================================
         ## Diagnostics
-        self.log("train/shaping_weight", self.bonus_regression_shaping_weight, prog_bar=False)
+        self.log("train/shaping_weight", self.upper_score_shaping_weight, prog_bar=False)
         self.log("train/current_potential_mean", current_potential.mean(), prog_bar=False)
         self.log("train/next_potential_mean", next_potential.mean(), prog_bar=False)
         self.log("train/potential_diff_mean", potential_diff.mean(), prog_bar=False)
