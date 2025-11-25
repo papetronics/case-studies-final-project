@@ -231,7 +231,7 @@ class PercentProgressTowardsBonusFeature(PhiFeature):
     def compute(self, observation: Observation) -> NDArray[np.floating]:
         """Compute percent progress towards bonus."""
         total_upper_score = observation["score_sheet"][:6].sum()
-        percent_progress = min(1.0, total_upper_score / UPPER_SCORE_THRESHOLD)
+        percent_progress = total_upper_score / UPPER_SCORE_THRESHOLD
         return np.array([percent_progress], dtype=np.float64)
 
 

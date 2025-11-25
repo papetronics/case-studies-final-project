@@ -240,6 +240,20 @@ def main() -> None:  # noqa: PLR0915
             choices=["reinforce", "a2c"],
             display_name="Algorithm",
         ),
+        ConfigParam(
+            "upper_score_regression_loss_weight",
+            float,
+            0.1,
+            "Weight for the upper score regression loss term",
+            display_name="Upper score regression loss weight",
+        ),
+        ConfigParam(
+            "upper_score_shaping_weight",
+            float,
+            0.1,
+            "Weight for the upper score regression shaping loss term",
+            display_name="Upper score regression shaping weight",
+        ),
     ]
 
     # Initialize project with configuration
@@ -276,6 +290,8 @@ def main() -> None:  # noqa: PLR0915
     critic_coeff = config["critic_coeff"]
     rolling_action_representation = config["rolling_action_representation"]
     algorithm = config["algorithm"]
+    upper_score_regression_loss_weight = config["upper_score_regression_loss_weight"]
+    upper_score_shaping_weight = config["upper_score_shaping_weight"]
 
     torch.set_float32_matmul_precision("medium")
 
@@ -383,6 +399,8 @@ def main() -> None:  # noqa: PLR0915
             features=phi_features,
             rolling_action_representation=rolling_action_representation,
             he_kaiming_initialization=he_kaiming_initialization,
+            upper_score_regression_loss_weight=upper_score_regression_loss_weight,
+            upper_score_shaping_weight=upper_score_shaping_weight,
         )
 
         # Save hyperparameters explicitly
@@ -412,6 +430,8 @@ def main() -> None:  # noqa: PLR0915
                 "phi_features": phi_features_str,
                 "rolling_action_representation": rolling_action_representation,
                 "algorithm": algorithm,
+                "upper_score_regression_loss_weight": upper_score_regression_loss_weight,
+                "upper_score_shaping_weight": upper_score_shaping_weight,
             }
         )
 
