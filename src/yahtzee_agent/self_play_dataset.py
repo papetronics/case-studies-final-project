@@ -214,7 +214,7 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
                     ).sum(dim=1)
                 else:  # CATEGORICAL
                     rolling_dist = torch.distributions.Categorical(logits=rolling_logits)
-                    rolling_log_probs_step = rolling_dist.log_prob(rolling_action_tensor.float())
+                    rolling_log_probs_step = rolling_dist.log_prob(rolling_action_tensor)
 
                 scoring_dist = torch.distributions.Categorical(scoring_probs)
                 scoring_log_probs_step = scoring_dist.log_prob(scoring_action_tensors)

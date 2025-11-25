@@ -475,7 +475,8 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
                     mb_returns = returns_full[idx]
 
                     # Forward pass on minibatch
-                    mb_rolling_probs, mb_scoring_probs, mb_v_ests, upper_score_logit = (
+                    # PPO does not use upper_score_logit (upper score regression loss), unlike A2C.
+                    mb_rolling_probs, mb_scoring_probs, mb_v_ests, _ = (
                         self.policy_net.forward(mb_states)
                     )
 

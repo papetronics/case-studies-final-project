@@ -67,9 +67,8 @@ class PPOBatchNotDivisibleError(InvalidTrainingConfigurationError):
         ppo_batch_size: int,
     ) -> None:
         super().__init__(
-            f"`ppo_games_per_minibatch` ({ppo_games_per_minibatch}) refers to the number of games per PPO minibatch, "
-            f"not the total minibatch size. The total PPO batch size in steps ({ppo_batch_size}) must be divisible by "
-            f"`ppo_games_per_minibatch * steps_per_episode`. Please adjust `games_per_batch`, `ppo_games_per_minibatch`, or `steps_per_episode` accordingly."
+            f"ppo_batch_size ({ppo_batch_size}) must be divisible by ppo_games_per_minibatch ({ppo_games_per_minibatch}). "
+            f"Current ratio: {ppo_batch_size}/{ppo_games_per_minibatch} = {ppo_batch_size/ppo_games_per_minibatch}"
         )
 
 
@@ -286,8 +285,8 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
             "ppo_games_per_minibatch",
             int,
             4,
-            "Number of minibatches for PPO training.",
-            display_name="PPO minibatches size",
+            "Number of games per PPO minibatch (batch is split into multiple minibatches).",
+            display_name="PPO games per minibatch",
         ),
         ConfigParam(
             "ppo_epochs",
