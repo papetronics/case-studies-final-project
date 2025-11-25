@@ -1,0 +1,9 @@
+# Pairs with 250k A2C
+program: src/yahtzee_agent/__main__.py
+name: action_representation
+method: grid
+parameters:
+  rolling_action_representation:
+    values:
+      - "categorical"
+      - "bernoulli"

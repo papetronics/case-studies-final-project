@@ -1,0 +1,19 @@
+# Pairs with 250k A2C
+program: src/yahtzee_agent/__main__.py
+name: feature_ablation
+method: grid
+parameters:
+  # Toggle subsets of the feature vector; everything else (dice + core game state) stays fixed.
+  phi_features:
+    values:
+      # All features ON (baseline)
+      - "dice_onehot,dice_counts,rolls_used,phase,has_earned_yahtzee,available_categories,percent_progress_towards_bonus,potential_scoring_opportunities,game_progress,will_receive_bonus_if_chosen"
+
+      # No potential features (drop both potential_scoring_opportunities and will_receive_bonus_if_chosen)
+      - "dice_onehot,dice_counts,rolls_used,phase,has_earned_yahtzee,available_categories,percent_progress_towards_bonus,game_progress"
+
+      # No bonus-progress feature
+      - "dice_onehot,dice_counts,rolls_used,phase,has_earned_yahtzee,available_categories,potential_scoring_opportunities,game_progress,will_receive_bonus_if_chosen"
+
+      # No game-progress feature
+      - "dice_onehot,dice_counts,rolls_used,phase,has_earned_yahtzee,available_categories,percent_progress_towards_bonus,potential_scoring_opportunities,will_receive_bonus_if_chosen"

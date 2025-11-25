@@ -1,0 +1,16 @@
+# Pairs with 250k A2C
+program: src/yahtzee_agent/__main__.py
+name: dice_representation
+method: grid
+parameters:
+  # Baseline: combined representation
+  phi_features:
+    values:
+      # Combined (baseline)
+      - "dice_onehot,dice_counts,rolls_used,phase,has_earned_yahtzee,available_categories,percent_progress_towards_bonus,potential_scoring_opportunities,game_progress,will_receive_bonus_if_chosen"
+
+      # Counts-only (no per-die one-hot)
+      - "dice_counts,rolls_used,phase,has_earned_yahtzee,available_categories,percent_progress_towards_bonus,potential_scoring_opportunities,game_progress,will_receive_bonus_if_chosen"
+
+      # One-hot-only (no aggregate counts)
+      - "dice_onehot,rolls_used,phase,has_earned_yahtzee,available_categories,percent_progress_towards_bonus,potential_scoring_opportunities,game_progress,will_receive_bonus_if_chosen"

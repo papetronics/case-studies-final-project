@@ -1,0 +1,7 @@
+# Pairs with 250k A2C
+program: src/yahtzee_agent/__main__.py
+name: gae_lambda
+method: grid
+parameters:
+  gae_lambda:
+    values: [0.2, 0.4, 0.6, 0.8, 0.9, 0.95]

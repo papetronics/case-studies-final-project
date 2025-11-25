@@ -1,0 +1,7 @@
+# Pairs with 250k A2C
+program: src/yahtzee_agent/__main__.py
+name: layernorm_ablation
+method: grid
+parameters:
+  use_layernorm:
+    values: [true, false]

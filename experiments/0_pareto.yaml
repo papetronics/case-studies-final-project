@@ -1,0 +1,25 @@
+# Pair with single-turn REINFORCE
+
+program: src/yahtzee_agent/__main__.py
+name: single_turn_pareto
+method: random
+parameters:
+  # Lower budget than usual to speed up the search
+  total_train_games:
+    value: 100000
+
+  # Random knobs to get a spread of policies for the Pareto frontier
+  hidden_size:
+    values: [256, 512, 768]
+  num_hidden:
+    values: [3, 4]
+
+  entropy_coeff_scoring_min:
+    values: [0.005, 0.01, 0.02]
+  entropy_coeff_scoring_max:
+    values: [0.02, 0.03, 0.06]
+
+  entropy_coeff_rolling_min:
+    values: [0.01, 0.02]
+  entropy_coeff_rolling_max:
+    values: [0.05, 0.1]

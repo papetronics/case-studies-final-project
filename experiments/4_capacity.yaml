@@ -1,0 +1,9 @@
+# Pairs with 250k A2C
+program: src/yahtzee_agent/__main__.py
+name: capacity_depth_width
+method: grid
+parameters:
+  num_hidden:
+    values: [2, 3, 4]
+  hidden_size:
+    values: [300, 600, 900]
