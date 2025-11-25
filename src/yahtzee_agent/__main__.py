@@ -243,7 +243,7 @@ def main() -> None:  # noqa: PLR0915
         ConfigParam(
             "gae_lambda",
             float,
-            0.90,
+            0.0,
             "GAE lambda parameter (for A2C algorithm only)",
         ),
         ConfigParam(
