@@ -85,6 +85,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         ppo_games_per_minibatch: int,
         ppo_epochs: int,
         gradient_clip_val: float,
+        use_layer_norm: bool = True,
     ):
         super().__init__()
 
@@ -101,6 +102,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
             features=features,
             rolling_action_representation=self.rolling_action_representation,
             he_kaiming_initialization=he_kaiming_initialization,
+            use_layer_norm=use_layer_norm,
         )
 
         self.algorithm = algorithm
@@ -132,6 +134,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         # for PPO style minibatching we need to turn off Lightning's automatic updating
         if self.algorithm == Algorithm.PPO:
             self.automatic_optimization = False
+
     def run_batched_validation_games(  # noqa: C901, PLR0912, PLR0915
         self, num_games: int, run_deterministic: bool = True, run_stochastic: bool = False
     ) -> tuple[list[float], list[float], dict[str, Any], dict[str, Any]]:
@@ -409,8 +412,11 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         # - "rewards": (BATCH_SIZE*39,) float32
         # - "next_states": (BATCH_SIZE*39, state_size) float32
         # - "phases": (BATCH_SIZE*39,) int
+        # - "v_baseline": (BATCH_SIZE*39,) float32 - for advantage calculation
         # - "next_v_baseline": (BATCH_SIZE*39,) float32 - for TD(0)
-        # - "v_baseline": (BATCH_SIZE*39,) float32 - for advantage calculation in PPO
+        # - "current_upper_potential": (BATCH_SIZE*39,) float32 - Φ(s_t) predictions
+        # - "next_upper_potential": (BATCH_SIZE*39,) float32 - Φ(s_{t+1}) predictions
+        # - "upper_score_actual": (BATCH_SIZE*39,) float32 - actual final upper scores
         # - "old_log_probs": (BATCH_SIZE*39,) float32 - for PPO
 
         # Dataset pre-flattens, so we just extract directly
@@ -422,7 +428,8 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         next_v_baseline = batch["next_v_baseline"]
         phases_flat = batch["phases"]
         upper_score_actual = batch["upper_score_actual"]
-        next_upper_score_actual = batch["next_upper_score_actual"]
+        current_upper_potential = batch["current_upper_potential"]
+        next_upper_potential = batch["next_upper_potential"]
         old_log_probs = batch["old_log_probs"]
 
         # Calculate num_episodes and steps_per_episode from flattened shape
@@ -443,13 +450,21 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
                 v_baseline,
                 next_v_baseline,
                 phases_flat,
-                upper_score_actual,
-                next_upper_score_actual,
+                current_upper_potential,
+                next_upper_potential,
                 old_log_probs,
                 total_steps,
                 steps_per_episode,
                 num_episodes,
             )
+
+            # Get upper score predictions for regression loss (if needed)
+            # PPO computes these inside minibatches, but we need them here for the full batch
+            if self.upper_score_regression_loss_weight != 0:
+                with torch.no_grad():
+                    _, _, _, upper_score_logit = self.policy_net.forward(states_flat)
+            else:
+                upper_score_logit = None
         else:
             # Forward pass through current policy to get probabilities and value estimates
             rolling_probs, scoring_probs, v_ests, upper_score_logit = self.policy_net.forward(
@@ -463,8 +478,8 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
                 next_v_baseline,
                 v_ests,
                 phases_flat,
-                upper_score_actual,
-                next_upper_score_actual,
+                current_upper_potential,
+                next_upper_potential,
             )
 
             policy_loss, entropy_loss = self.get_policy_loss(
@@ -484,7 +499,12 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
             )
 
         ## Standard regression loss for upper score prediction
-        if self.algorithm == Algorithm.A2C:
+        # Both A2C and PPO can train the upper score head if the weight is non-zero
+        if (
+            self.algorithm != Algorithm.REINFORCE
+            and self.upper_score_regression_loss_weight != 0
+            and upper_score_logit is not None
+        ):
             upper_score_loss = torch.nn.functional.mse_loss(
                 upper_score_logit.squeeze(), upper_score_actual.float()
             )
@@ -527,8 +547,8 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         v_baseline: torch.Tensor,
         next_v_baseline: torch.Tensor,
         phases_flat: torch.Tensor,
-        upper_score_actual: torch.Tensor,
-        next_upper_score_actual: torch.Tensor,
+        current_upper_potential: torch.Tensor,
+        next_upper_potential: torch.Tensor,
         old_log_probs: torch.Tensor,
         total_steps: int,
         steps_per_episode: int,
@@ -545,8 +565,8 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
             next_v_baseline,
             v_baseline,
             phases_flat,
-            upper_score_actual,
-            next_upper_score_actual,
+            current_upper_potential,
+            next_upper_potential,
         )
 
         batch_size = self.ppo_games_per_minibatch * steps_per_episode
@@ -660,8 +680,8 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         next_v_baseline: torch.Tensor,  # [B], V(s_{t+1})
         v_ests: torch.Tensor,  # [B] or [B, 1], V(s_t)
         phases_flat: torch.Tensor,
-        upper_score_actual: torch.Tensor | None,
-        next_upper_score_actual: torch.Tensor | None,
+        current_upper_potential: torch.Tensor,
+        next_upper_potential: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Calculate advantages using REINFORCE, A2C TD(0), or A2C+GAE, and log diagnostics."""
         gamma = self.get_gamma()
@@ -692,10 +712,10 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
                 # Advantages = returns - V(s)
                 advantages = returns - v_flat
             else:  # A2C or PPO
-                # Apply reward shaping if bonus potential is provided
-                if upper_score_actual is not None and next_upper_score_actual is not None:
+                # Apply reward shaping only if upper_score_shaping_weight is non-zero
+                if self.upper_score_shaping_weight != 0:
                     shaped_rewards = self.shaped_reward(
-                        rewards_flat, upper_score_actual, next_upper_score_actual
+                        rewards_flat, current_upper_potential, next_upper_potential
                     )
                 else:
                     shaped_rewards = rewards_flat
@@ -744,8 +764,8 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
     def shaped_reward(
         self,
         rewards_flat: torch.Tensor,
-        current_potential_raw: torch.Tensor,
-        next_potential_raw: torch.Tensor,
+        current_upper_potential: torch.Tensor,
+        next_upper_potential: torch.Tensor,
     ) -> torch.Tensor:
         """Calculate shaped rewards using potential-based shaping.
 
@@ -755,13 +775,13 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         # Convert normalized potential back to raw score: potential * 63 + 63
         # Then clamp to [0, 63]
         next_score = torch.clamp(
-            next_potential_raw.squeeze() * MINIMUM_UPPER_SCORE_FOR_BONUS
+            next_upper_potential.squeeze() * MINIMUM_UPPER_SCORE_FOR_BONUS
             + MINIMUM_UPPER_SCORE_FOR_BONUS,
             min=0.0,
             max=float(MINIMUM_UPPER_SCORE_FOR_BONUS),
         )
         current_score = torch.clamp(
-            current_potential_raw.squeeze() * MINIMUM_UPPER_SCORE_FOR_BONUS
+            current_upper_potential.squeeze() * MINIMUM_UPPER_SCORE_FOR_BONUS
             + MINIMUM_UPPER_SCORE_FOR_BONUS,
             min=0.0,
             max=float(MINIMUM_UPPER_SCORE_FOR_BONUS),
@@ -772,7 +792,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         current_potential = (current_score / MINIMUM_UPPER_SCORE_FOR_BONUS) * BONUS_POINTS
 
         # Calculate potential difference using Ng's formula
-        potential_diff = self.get_gamma() * next_potential - current_potential
+        potential_diff = next_potential - current_potential
         shaping_bonus = self.upper_score_shaping_weight * potential_diff
 
         # Shaped reward = r + weight * (Phi(s') - Phi(s))
