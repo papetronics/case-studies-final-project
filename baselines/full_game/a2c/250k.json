@@ -28,6 +28,7 @@
         "rolling_action_representation": "categorical",
         "total_train_games": 250000,
         "upper_score_regression_loss_weight": 1.0,
-        "upper_score_shaping_weight": 1.0
+        "upper_score_shaping_weight": 1.0,
+        "use_layer_norm": true
     }
 }
