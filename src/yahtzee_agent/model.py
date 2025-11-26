@@ -138,6 +138,7 @@ class YahtzeeAgent(nn.Module):
         features: list[PhiFeature],
         rolling_action_representation: RollingActionRepresentation | str,
         he_kaiming_initialization: bool,
+        use_layer_norm: bool,
     ):
         super().__init__()
 
@@ -175,23 +176,27 @@ class YahtzeeAgent(nn.Module):
             dice_output_size = len(DICE_MASKS)  # 32 possible masks
         scoring_output_size = 13
 
-        layers = [Block(input_size, hidden_size, dropout_rate, activation)]
+        layers = [Block(input_size, hidden_size, dropout_rate, activation, use_layer_norm)]
         for _ in range(num_hidden - 2):
-            layers.append(Block(hidden_size, hidden_size, dropout_rate, activation))  # noqa: PERF401
+            layers.append(Block(hidden_size, hidden_size, dropout_rate, activation, use_layer_norm))  # noqa: PERF401
 
         self.network = SequentialBlock(*layers)
 
-        self.action_spine = Block(hidden_size, hidden_size, dropout_rate, activation)
+        self.action_spine = Block(
+            hidden_size, hidden_size, dropout_rate, activation, use_layer_norm
+        )
 
-        self.rolling_head = RollingHead(hidden_size, dice_output_size, dropout_rate, activation).to(
+        self.rolling_head = RollingHead(
+            hidden_size, dice_output_size, dropout_rate, activation, use_layer_norm
+        ).to(self.device)
+        self.scoring_head = ScoringHead(
+            hidden_size, scoring_output_size, dropout_rate, activation, use_layer_norm
+        ).to(self.device)
+        self.value_head = ValueHead(hidden_size, activation, use_layer_norm).to(self.device)
+
+        self.bonus_likelihood_head = UpperScoreHead(hidden_size, activation, use_layer_norm).to(
             self.device
         )
-        self.scoring_head = ScoringHead(
-            hidden_size, scoring_output_size, dropout_rate, activation
-        ).to(self.device)
-        self.value_head = ValueHead(hidden_size, activation).to(self.device)
-
-        self.bonus_likelihood_head = UpperScoreHead(hidden_size, activation).to(self.device)
 
         # Initialize weights for better behavior at high learning rates
         if he_kaiming_initialization:
