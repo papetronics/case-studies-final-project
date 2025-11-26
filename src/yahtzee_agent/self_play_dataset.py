@@ -40,15 +40,9 @@ class EpisodeBatch(TypedDict):
     next_v_baseline: (
         torch.Tensor
     )  # (BATCH_SIZE*num_steps,) float32 - value estimates for next states
-    current_upper_potential: (
-        torch.Tensor
-    )  # (BATCH_SIZE*num_steps,) float32 - bonus potential for current states
-    next_upper_score_actual: (
-        torch.Tensor
-    )  # (BATCH_SIZE*num_steps,) float32 - bonus potential for next states
-    upper_score_actual: (
-        torch.Tensor
-    )  # (BATCH_SIZE*num_steps,) int (0 or 1) - whether episode received upper section bonus
+    current_upper_potential: torch.Tensor  # (BATCH_SIZE*num_steps,) float32 - model's prediction of upper score potential Φ(s_t) for current states
+    next_upper_potential: torch.Tensor  # (BATCH_SIZE*num_steps,) float32 - model's prediction of upper score potential Φ(s_{t+1}) for next states (time-shifted from current_upper_potential)
+    upper_score_actual: torch.Tensor  # (BATCH_SIZE*num_steps,) float32 - actual final normalized upper section score for the episode (constant across all steps)
     old_log_probs: (
         torch.Tensor
     )  # (BATCH_SIZE*num_steps,) float32 - log probabilities from behavior policy
@@ -75,7 +69,7 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
       - "v_baseline":      (B*num_steps,)        = V(s_t)
       - "next_v_baseline": (B*num_steps,)        = V(s_{t+1}) for t < T-1, 0 at last step
       - "current_upper_potential": (B*num_steps,) = Φ(s_t) - bonus potential for current state
-      - "next_upper_score_actual":    (B*num_steps,) = Φ(s_{t+1}) - bonus potential for next state
+      - "next_upper_potential":    (B*num_steps,) = Φ(s_{t+1}) - bonus potential for next state
     """
 
     def __init__(
@@ -267,15 +261,16 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
                         next_obs, _ = env.reset()
                     observations[env_idx] = next_obs
 
-        # ---- Build next_v_baseline and next_upper_score_actual via time-shift (no second forward) ----
-        # v_baseline[e, t] = V(s_t), current_upper_potential[e, t] = Φ(s_t)
-        # We want next_v_baseline[e, t] = V(s_{t+1}) and next_upper_score_actual[e, t] = Φ(s_{t+1})
+        # ---- Build next_v_baseline and next_upper_potential via time-shift (no second forward) ----
+        # v_baseline[e, t] = V(s_t), current_upper_potential[e, t] = Φ(s_t) from model predictions
+        # We want next_v_baseline[e, t] = V(s_{t+1}) and next_upper_potential[e, t] = Φ(s_{t+1})
+        # These are created by time-shifting the predictions, NOT using actual scores
         # For the last step (t = T-1), this value is unused; we set it to 0.
         next_v_baseline = torch.zeros_like(v_baseline)
-        next_upper_score_actual = torch.zeros_like(current_upper_potential)
+        next_upper_potential = torch.zeros_like(current_upper_potential)
         if num_steps > 1:
             next_v_baseline[:, :-1] = v_baseline[:, 1:]
-            next_upper_score_actual[:, :-1] = current_upper_potential[:, 1:]
+            next_upper_potential[:, :-1] = current_upper_potential[:, 1:]
 
         # ---- Flatten all (B, T, ...) -> (B*T, ...) ----
         states_flat = states.view(-1, state_size)
@@ -283,7 +278,7 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
         v_baseline_flat = v_baseline.view(-1)
         next_v_baseline_flat = next_v_baseline.view(-1)
         current_upper_potential_flat = current_upper_potential.view(-1)
-        next_upper_score_actual = next_upper_score_actual.view(-1)
+        next_upper_potential_flat = next_upper_potential.view(-1)
         phases_flat = phases.view(-1)
         rewards_flat = rewards.view(-1)
         old_log_probs_flat = old_log_probs.view(-1)
@@ -309,7 +304,7 @@ class SelfPlayDataset(torch.utils.data.Dataset[EpisodeBatch]):
             "v_baseline": v_baseline_flat,
             "next_v_baseline": next_v_baseline_flat,
             "current_upper_potential": current_upper_potential_flat,
-            "next_upper_score_actual": next_upper_score_actual,
+            "next_upper_potential": next_upper_potential_flat,
             "upper_score_actual": upper_score_actual_flat,
             "old_log_probs": old_log_probs_flat,
         }
