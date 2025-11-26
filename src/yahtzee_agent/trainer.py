@@ -132,6 +132,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         # for PPO style minibatching we need to turn off Lightning's automatic updating
         if self.algorithm == Algorithm.PPO:
             self.automatic_optimization = False
+
     def run_batched_validation_games(  # noqa: C901, PLR0912, PLR0915
         self, num_games: int, run_deterministic: bool = True, run_stochastic: bool = False
     ) -> tuple[list[float], list[float], dict[str, Any], dict[str, Any]]:
