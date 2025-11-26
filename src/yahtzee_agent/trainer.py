@@ -410,8 +410,11 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         # - "rewards": (BATCH_SIZE*39,) float32
         # - "next_states": (BATCH_SIZE*39, state_size) float32
         # - "phases": (BATCH_SIZE*39,) int
+        # - "v_baseline": (BATCH_SIZE*39,) float32 - for advantage calculation
         # - "next_v_baseline": (BATCH_SIZE*39,) float32 - for TD(0)
-        # - "v_baseline": (BATCH_SIZE*39,) float32 - for advantage calculation in PPO
+        # - "current_upper_potential": (BATCH_SIZE*39,) float32 - Φ(s_t) predictions
+        # - "next_upper_potential": (BATCH_SIZE*39,) float32 - Φ(s_{t+1}) predictions
+        # - "upper_score_actual": (BATCH_SIZE*39,) float32 - actual final upper scores
         # - "old_log_probs": (BATCH_SIZE*39,) float32 - for PPO
 
         # Dataset pre-flattens, so we just extract directly
@@ -423,7 +426,8 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         next_v_baseline = batch["next_v_baseline"]
         phases_flat = batch["phases"]
         upper_score_actual = batch["upper_score_actual"]
-        next_upper_score_actual = batch["next_upper_score_actual"]
+        current_upper_potential = batch["current_upper_potential"]
+        next_upper_potential = batch["next_upper_potential"]
         old_log_probs = batch["old_log_probs"]
 
         # Calculate num_episodes and steps_per_episode from flattened shape
@@ -444,8 +448,8 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
                 v_baseline,
                 next_v_baseline,
                 phases_flat,
-                upper_score_actual,
-                next_upper_score_actual,
+                current_upper_potential,
+                next_upper_potential,
                 old_log_probs,
                 total_steps,
                 steps_per_episode,
@@ -464,8 +468,8 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
                 next_v_baseline,
                 v_ests,
                 phases_flat,
-                upper_score_actual,
-                next_upper_score_actual,
+                current_upper_potential,
+                next_upper_potential,
             )
 
             policy_loss, entropy_loss = self.get_policy_loss(
@@ -528,8 +532,8 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         v_baseline: torch.Tensor,
         next_v_baseline: torch.Tensor,
         phases_flat: torch.Tensor,
-        upper_score_actual: torch.Tensor,
-        next_upper_score_actual: torch.Tensor,
+        current_upper_potential: torch.Tensor,
+        next_upper_potential: torch.Tensor,
         old_log_probs: torch.Tensor,
         total_steps: int,
         steps_per_episode: int,
@@ -546,8 +550,8 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
             next_v_baseline,
             v_baseline,
             phases_flat,
-            upper_score_actual,
-            next_upper_score_actual,
+            current_upper_potential,
+            next_upper_potential,
         )
 
         batch_size = self.ppo_games_per_minibatch * steps_per_episode
@@ -661,8 +665,8 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         next_v_baseline: torch.Tensor,  # [B], V(s_{t+1})
         v_ests: torch.Tensor,  # [B] or [B, 1], V(s_t)
         phases_flat: torch.Tensor,
-        upper_score_actual: torch.Tensor | None,
-        next_upper_score_actual: torch.Tensor | None,
+        current_upper_potential: torch.Tensor | None,
+        next_upper_potential: torch.Tensor | None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Calculate advantages using REINFORCE, A2C TD(0), or A2C+GAE, and log diagnostics."""
         gamma = self.get_gamma()
@@ -694,9 +698,9 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
                 advantages = returns - v_flat
             else:  # A2C or PPO
                 # Apply reward shaping if bonus potential is provided
-                if upper_score_actual is not None and next_upper_score_actual is not None:
+                if current_upper_potential is not None and next_upper_potential is not None:
                     shaped_rewards = self.shaped_reward(
-                        rewards_flat, upper_score_actual, next_upper_score_actual
+                        rewards_flat, current_upper_potential, next_upper_potential
                     )
                 else:
                     shaped_rewards = rewards_flat
@@ -745,8 +749,8 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
     def shaped_reward(
         self,
         rewards_flat: torch.Tensor,
-        current_potential_raw: torch.Tensor,
-        next_potential_raw: torch.Tensor,
+        current_upper_potential: torch.Tensor,
+        next_upper_potential: torch.Tensor,
     ) -> torch.Tensor:
         """Calculate shaped rewards using potential-based shaping.
 
@@ -756,13 +760,13 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         # Convert normalized potential back to raw score: potential * 63 + 63
         # Then clamp to [0, 63]
         next_score = torch.clamp(
-            next_potential_raw.squeeze() * MINIMUM_UPPER_SCORE_FOR_BONUS
+            next_upper_potential.squeeze() * MINIMUM_UPPER_SCORE_FOR_BONUS
             + MINIMUM_UPPER_SCORE_FOR_BONUS,
             min=0.0,
             max=float(MINIMUM_UPPER_SCORE_FOR_BONUS),
         )
         current_score = torch.clamp(
-            current_potential_raw.squeeze() * MINIMUM_UPPER_SCORE_FOR_BONUS
+            current_upper_potential.squeeze() * MINIMUM_UPPER_SCORE_FOR_BONUS
             + MINIMUM_UPPER_SCORE_FOR_BONUS,
             min=0.0,
             max=float(MINIMUM_UPPER_SCORE_FOR_BONUS),
