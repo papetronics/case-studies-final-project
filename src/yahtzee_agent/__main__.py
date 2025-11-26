@@ -368,6 +368,17 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
     # Calculate games_per_epoch from total_train_games and epochs
     games_per_epoch = total_train_games // epochs
 
+    # Validate upper score configuration
+    if upper_score_regression_loss_weight == 0 and upper_score_shaping_weight != 0:
+        msg = (
+            "Invalid configuration: upper_score_shaping_weight is non-zero "
+            f"({upper_score_shaping_weight}) but upper_score_regression_loss_weight is zero. "
+            "Cannot apply reward shaping without training the upper score prediction head. "
+            "Either set upper_score_shaping_weight to 0, or set upper_score_regression_loss_weight "
+            "to a non-zero value."
+        )
+        raise ValueError(msg)
+
     # check that PPO minibatches evenly divide the batch size
     if algorithm == "ppo":
         ppo_batch_size = games_per_batch * num_steps_per_episode

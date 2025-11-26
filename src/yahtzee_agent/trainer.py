@@ -455,6 +455,14 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
                 steps_per_episode,
                 num_episodes,
             )
+
+            # Get upper score predictions for regression loss (if needed)
+            # PPO computes these inside minibatches, but we need them here for the full batch
+            if self.upper_score_regression_loss_weight != 0:
+                with torch.no_grad():
+                    _, _, _, upper_score_logit = self.policy_net.forward(states_flat)
+            else:
+                upper_score_logit = None
         else:
             # Forward pass through current policy to get probabilities and value estimates
             rolling_probs, scoring_probs, v_ests, upper_score_logit = self.policy_net.forward(
@@ -489,7 +497,12 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
             )
 
         ## Standard regression loss for upper score prediction
-        if self.algorithm == Algorithm.A2C:
+        # Both A2C and PPO can train the upper score head if the weight is non-zero
+        if (
+            self.algorithm != Algorithm.REINFORCE
+            and self.upper_score_regression_loss_weight != 0
+            and upper_score_logit is not None
+        ):
             upper_score_loss = torch.nn.functional.mse_loss(
                 upper_score_logit.squeeze(), upper_score_actual.float()
             )
@@ -665,8 +678,8 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         next_v_baseline: torch.Tensor,  # [B], V(s_{t+1})
         v_ests: torch.Tensor,  # [B] or [B, 1], V(s_t)
         phases_flat: torch.Tensor,
-        current_upper_potential: torch.Tensor | None,
-        next_upper_potential: torch.Tensor | None,
+        current_upper_potential: torch.Tensor,
+        next_upper_potential: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Calculate advantages using REINFORCE, A2C TD(0), or A2C+GAE, and log diagnostics."""
         gamma = self.get_gamma()
@@ -697,8 +710,8 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
                 # Advantages = returns - V(s)
                 advantages = returns - v_flat
             else:  # A2C or PPO
-                # Apply reward shaping if bonus potential is provided
-                if current_upper_potential is not None and next_upper_potential is not None:
+                # Apply reward shaping only if upper_score_shaping_weight is non-zero
+                if self.upper_score_shaping_weight != 0:
                     shaped_rewards = self.shaped_reward(
                         rewards_flat, current_upper_potential, next_upper_potential
                     )
