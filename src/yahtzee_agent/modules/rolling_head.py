@@ -17,10 +17,11 @@ class RollingHead(nn.Module):
         output_size: int,
         dropout_rate: float,
         activation: type[nn.Module],
+        use_layer_norm: bool,
     ):
         super().__init__()
         layers: list[nn.Module] = [
-            Block(hidden_size, hidden_size, dropout_rate, activation),
+            Block(hidden_size, hidden_size, dropout_rate, activation, use_layer_norm),
         ]
         if dropout_rate > 0.0:
             layers.append(nn.Dropout(dropout_rate))

@@ -295,6 +295,13 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
             "Number of epochs to train over each PPO batch.",
             display_name="PPO epochs",
         ),
+        ConfigParam(
+            "use_layer_norm",
+            bool,
+            True,
+            "Use LayerNorm in the model architecture",
+            display_name="Use LayerNorm",
+        ),
     ]
 
     # Initialize project with configuration
@@ -337,6 +344,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
     clip_epsilon = config["clip_epsilon"]
     ppo_games_per_minibatch = config["ppo_games_per_minibatch"]
     ppo_epochs = config["ppo_epochs"]
+    use_layer_norm = config["use_layer_norm"]
 
     torch.set_float32_matmul_precision("medium")
 
@@ -472,6 +480,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
             ppo_games_per_minibatch=ppo_games_per_minibatch,
             ppo_epochs=ppo_epochs,
             gradient_clip_val=gradient_clip_val,
+            use_layer_norm=use_layer_norm,
         )
 
         # Save hyperparameters explicitly
@@ -507,6 +516,7 @@ def main() -> None:  # noqa: C901, PLR0912, PLR0915
                 "clip_epsilon": clip_epsilon,
                 "ppo_games_per_minibatch": ppo_games_per_minibatch,
                 "ppo_epochs": ppo_epochs,
+                "use_layer_norm": use_layer_norm,
             }
         )
 

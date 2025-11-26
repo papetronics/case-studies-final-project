@@ -85,6 +85,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
         ppo_games_per_minibatch: int,
         ppo_epochs: int,
         gradient_clip_val: float,
+        use_layer_norm: bool = True,
     ):
         super().__init__()
 
@@ -101,6 +102,7 @@ class YahtzeeAgentTrainer(lightning.LightningModule):
             features=features,
             rolling_action_representation=self.rolling_action_representation,
             he_kaiming_initialization=he_kaiming_initialization,
+            use_layer_norm=use_layer_norm,
         )
 
         self.algorithm = algorithm

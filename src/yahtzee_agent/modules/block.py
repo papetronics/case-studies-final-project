@@ -12,14 +12,16 @@ class Block(nn.Module):
         in_features: int,
         out_features: int,
         dropout_rate: float,
-        activation: type[nn.Module] = nn.PReLU,
+        activation: type[nn.Module],
+        use_layer_norm: bool,
     ):
         super().__init__()
         layers = [
             nn.Linear(in_features, out_features),
             activation(),
-            nn.LayerNorm(out_features),
         ]
+        if use_layer_norm:
+            layers.append(nn.LayerNorm(out_features))
         if dropout_rate > 0.0:
             layers.append(nn.Dropout(dropout_rate))
 
