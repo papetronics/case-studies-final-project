@@ -24,16 +24,10 @@ To understand the tradeoff between single-turn and full-game performance, we abl
 the resulting performance on both the primary single-turn score, as well as the auxiliary full-game score.
 We expect that there is a Pareto frontier between these two objectives, and that some hyperparameter choices push performance towards one or the other.
 
-<Pick one:>
-
-<As expected, we can see that full game performance generally increases linearly with single-turn performance.
+As expected, we can see that full game performance generally increases linearly with single-turn performance.
 However, at very high levels of full-game performance, single-turn performance begins to plateau, and even decline slightly.
 Since the single-turn model does not have access to the full game context, these are actually imperfectly optimizing their purported objective.
-This indicates that selecting hyperparameters for a single-turn model based on full-game performance is indeed a form of target leakage.>
-
-<Contrary to our expectations, we do not see a clear tradeoff between single-turn and full-game performance at high performance levels.
-This suggests that single-turn optimization is a good proxy for full-game performance, or that the model is able to reconstruct
-sufficient full-game context from the single-turn state representation to make effective long-term decisions.>
+This indicates that selecting hyperparameters for a single-turn model based on full-game performance could indeed be a form of target leakage.
 
 \input{figures/pareto_frontier}
 
@@ -84,6 +78,9 @@ To understand the importance of each, they were ablated individually.
 
 \input{figures/feature_ablation_bonus}
 
+Lastly, we tested our hypothesis that a 32-way categorical would provide beneficial to complex actions that required specific combinations of dice to be held.
+\input{figures/action_representation}
+
 \subsubsection{Architectural Ablations}
 
 We performed a simple grid search ablation to understand if our chosen architecture of 3 hidden layers of 600 units each was optimal.
@@ -126,20 +123,21 @@ To better understand this sensitivity, we trained models under three different e
     \small
     \caption{Entropy regime definitions}
     \label{tab:entropy-regime-definitions}
-    \begin{tabular}{lcc}
+    \begin{tabular}{lcccc}
         \hline
-        \textbf{Regime} & $\beta_{\mathrm{roll}}$   & $\beta_{\mathrm{score}}$ \\
+        \textbf{Regime} & $\beta_{\mathrm{roll}}$ & $\beta_{\mathrm{score}}$ & Hold / Anneal \\
         \hline
-        Low Entropy     & 0.005 $\rightarrow$ 0.001 & 0.01 $\rightarrow$ 0.002 \\
-        Baseline        & 0.01 $\rightarrow$ 0.002  & 0.02 $\rightarrow$ 0.005 \\
-        High Entropy    & 0.02 $\rightarrow$ 0.005  & 0.04 $\rightarrow$ 0.01  \\
+        None            & 0.0                     & 0.0                      & 0 / 0         \\
+        Low             & 0.05 $\rightarrow$ 0.01 & 0.01 $\rightarrow$ 0.005 & 0.2 / 0.4     \\
+        Baseline        & 0.1 $\rightarrow$ 0.02  & 0.03 $\rightarrow$ 0.01  & 0.3 / 0.6     \\
+        High            & 0.2 $\rightarrow$ 0.04  & 0.06 $\rightarrow$ 0.02  & 0.35 / 0.65   \\
         \hline
     \end{tabular}
 \end{table}
 
 \input{figures/entropy_mean_score}
 
-\input{figures/entropy_scoring_entropy}
+\input{figures/entropy_rolling_entropy}
 
 \begin{table}[H]
     \centering
