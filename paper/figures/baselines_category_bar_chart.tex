@@ -1,0 +1,70 @@
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+                ybar,
+                width=\columnwidth,
+                height=6cm,
+                xlabel={Metric},
+                ylabel={Rate (\%)},
+                title={Bonus and Yahtzee Rates by Algorithm},
+                symbolic x coords={Upper Bonus, Yahtzee},
+                xtick=data,
+                xticklabel style={font=\small},
+                ylabel style={font=\small},
+                xlabel style={font=\small},
+                title style={font=\small},
+                ymin=0, ymax=100,
+                bar width=12pt,
+                grid=both,
+                grid style={dotted},
+                tick align=outside,
+                legend style={at={(0.5,1.05)},anchor=south,legend columns=4,font=\small},
+                enlarge x limits=0.4,
+            ]
+
+            % REINFORCE
+            \addplot[
+                fill=red!60!white,
+                draw=red!80!white
+            ] coordinates {
+                    (Upper Bonus, 50)
+                    (Yahtzee, 50)
+                };
+            \addlegendentry{REINFORCE}
+
+            % A2C
+            \addplot[
+                fill=blue!70!white,
+                draw=blue!80!white
+            ] coordinates {
+                    (Upper Bonus, 50)
+                    (Yahtzee, 50)
+                };
+            \addlegendentry{A2C}
+
+            % PPO
+            \addplot[
+                fill=green!60!white,
+                draw=green!80!white
+            ] coordinates {
+                    (Upper Bonus, 50)
+                    (Yahtzee, 50)
+                };
+            \addlegendentry{PPO}
+
+            % DP Optimal
+            \addplot[
+                fill=black!70,
+                draw=black!80
+            ] coordinates {
+                    (Upper Bonus, 50)
+                    (Yahtzee, 50)
+                };
+            \addlegendentry{DP Optimal}
+
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Bonus and Yahtzee achievement rates (placeholder data)}
+    \label{fig:bonus-yahtzee-rates}
+\end{figure}

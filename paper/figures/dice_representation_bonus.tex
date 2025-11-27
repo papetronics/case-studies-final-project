@@ -1,0 +1,98 @@
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+                width=\columnwidth,
+                height=5cm,
+                xlabel={Epochs},
+                ylabel={Upper Bonus Rate (\%)},
+                xmin=0, xmax=500,
+                ymin=0, ymax=100,
+                grid=both,
+                grid style={dotted},
+                tick align=outside,
+                tick label style={font=\small},
+                label style={font=\small},
+                legend style={at={(0.98,0.02)},anchor=south east,font=\small}
+            ]
+
+            % Combined (baseline)
+            \addplot[
+                thick,
+                blue!70!white,
+                mark=*,
+                mark size=1.5pt,
+                mark repeat=10
+            ] coordinates {
+                    (0, 50)
+                    (50, 50)
+                    (100, 50)
+                    (150, 50)
+                    (200, 50)
+                    (250, 50)
+                    (300, 50)
+                    (350, 50)
+                    (400, 50)
+                    (450, 50)
+                    (500, 50)
+                };
+            \addlegendentry{Combined (Baseline)}
+
+            % Counts-only
+            \addplot[
+                thick,
+                red!60!white,
+                mark=square*,
+                mark size=1.5pt,
+                mark repeat=10
+            ] coordinates {
+                    (0, 50)
+                    (50, 50)
+                    (100, 50)
+                    (150, 50)
+                    (200, 50)
+                    (250, 50)
+                    (300, 50)
+                    (350, 50)
+                    (400, 50)
+                    (450, 50)
+                    (500, 50)
+                };
+            \addlegendentry{Counts-Only}
+
+            % One-hot only
+            \addplot[
+                thick,
+                green!60!black,
+                mark=triangle*,
+                mark size=1.5pt,
+                mark repeat=10
+            ] coordinates {
+                    (0, 50)
+                    (50, 50)
+                    (100, 50)
+                    (150, 50)
+                    (200, 50)
+                    (250, 50)
+                    (300, 50)
+                    (350, 50)
+                    (400, 50)
+                    (450, 50)
+                    (500, 50)
+                };
+            \addlegendentry{One-Hot Only}
+
+            % DP optimal baseline
+            \addplot[
+                dashed,
+                black!80,
+                thick,
+                domain=0:500
+            ] {50};
+            \addlegendentry{DP Optimal}
+
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Upper bonus achievement by dice representation (placeholder data)}
+    \label{fig:dice-representation-bonus}
+\end{figure}

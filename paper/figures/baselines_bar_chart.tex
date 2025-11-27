@@ -1,0 +1,46 @@
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+                ybar,
+                width=\columnwidth,
+                height=6cm,
+                xlabel={Algorithm},
+                ylabel={Mean Full-Game Score},
+                title={Final Performance Comparison at 1M Games},
+                symbolic x coords={REINFORCE, A2C, PPO, DP Optimal},
+                xtick=data,
+                xticklabel style={font=\small},
+                ylabel style={font=\small},
+                xlabel style={font=\small},
+                title style={font=\small},
+                bar width=25pt,
+                ymin=0, ymax=280,
+                grid=both,
+                grid style={dotted},
+                tick align=outside,
+                nodes near coords,
+                nodes near coords style={font=\footnotesize, anchor=south},
+            ]
+
+            \addplot[
+                fill=blue!70!white,
+                draw=blue!80,
+                error bars/.cd,
+                y dir=both,
+                y explicit
+            ] coordinates {
+                    (REINFORCE, 50) +- (0, 0)
+                    (A2C, 50) +- (0, 0)
+                    (PPO, 50) +- (0, 0)
+                    (DP Optimal, 50) +- (0, 0)
+                };
+
+            % Horizontal dashed line at DP optimal
+            \draw[dashed, black!80, thick] (axis cs:REINFORCE,50) -- (axis cs:DP Optimal,50);
+
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Final performance, mean score (placeholder data)}
+    \label{fig:final-performance-comparison}
+\end{figure}
