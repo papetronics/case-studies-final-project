@@ -168,11 +168,12 @@ and carefully tuned entropy regularization produced the best results.
         \hline
         \textbf{Algorithm}         & \textbf{Training Budget} & \textbf{Mean Score} & \textbf{Std Dev} & \textbf{Bonus Rate (\%)} & \textbf{Yahtzee Rate (\%)} & \textbf{$\geq$250 (\%)} \\
         \hline
-        DP Optimal                 & --                       & $<X>$               & --               & $<X>$                    & $<Y>$                      & $<Z>$                   \\
-        A2C                        & 250K games               & $<X>$               & $<Y>$            & $<X>$                    & $<Y>$                      & $<Z>$                   \\
-        A2C                        & 1M games                 & $<X>$               & $<Y>$            & $<X>$                    & $<Y>$                      & $<Z>$                   \\
-        A2C (lower entropy floor)  & 5M games                 & $<X>$               & $<Y>$            & $<X>$                    & $<Y>$                      & $<Z>$                   \\
-        PPO ($\lambda=0.3$, $k=3$) & 250K games               & $<X>$               & $<Y>$            & $<X>$                    & $<Y>$                      & $<Z>$                   \\
+        DP Optimal                 & --                       & 254.59              & --               & 68.12\%                  & 33.74\%                    & 48.37\%                 \\
+        \hline
+        A2C                        & 250K games               & 230.38              & 2503.83          & 11.37\%                  & 31.08\%                    & 27.82\%                 \\
+        A2C                        & 1M games                 & 241.78              & 3230.86          & 24.93\%                  & 34.05\%                    & 36.87\%                 \\
+        PPO ($\lambda=0.3$, $k=5$) & 50k games                & $<X>$               & $<Y>$            & $<X>$                    & $<Y>$                      & $<Z>$                   \\
+        PPO ($\lambda=0.3$, $k=4$) & 250K games               & $<X>$               & $<Y>$            & $<X>$                    & $<Y>$                      & $<Z>$                   \\
         REINFORCE (full-game)      & 250K games               & $<X>$               & $<Y>$            & $<X>$                    & $<Y>$                      & $<Z>$                   \\
         REINFORCE (full-game)      & 1M games                 & $<X>$               & $<Y>$            & $<X>$                    & $<Y>$                      & $<Z>$                   \\
         REINFORCE (single-turn)    & 500K games               & $<X>$               & $<Y>$            & $<X>$                    & $<Y>$                      & $<Z>$                   \\
@@ -180,28 +181,28 @@ and carefully tuned entropy regularization produced the best results.
     \end{tabular}
 \end{table*}
 
-For our best configuration, A2C trained over 5,000,000 games, the final score distribution is compared to DP-optimal in Table \ref{tab:dp-score-distribution}.
+For our best configuration, A2C trained over 1 million games, the final score distribution is compared to DP-optimal in Table \ref{tab:dp-score-distribution}.
 \begin{table}[H]
     \centering
     \small
-    \caption{Score distribution (placeholder data)}
+    \caption{$P(\text{score} \geq n)$, 100,000 games}
     \label{tab:dp-score-distribution}
-    \begin{tabular}{cc}
+    \begin{tabular}{rcc}
         \hline
-        \textbf{$n$} & \textbf{$P(\text{score} \geq n)$} \\
+        \textbf{$n$} & A2C      & DP                        \\
         \hline
-        50           & $<X>$                             \\
-        100          & $<X>$                             \\
-        150          & $<X>$                             \\
-        200          & $<X>$                             \\
-        250          & $<X>$                             \\
-        300          & $<X>$                             \\
-        400          & $<X>$                             \\
-        500          & $<X>$                             \\
-        750          & $<X>$                             \\
-        1000         & $<X>$                             \\
-        1250         & $<X>$                             \\
-        1500         & $<X>$                             \\
+        50           & 1.000000 & 1.000000                  \\
+        100          & 0.999980 & 0.999998                  \\
+        150          & 0.989730 & 0.991230                  \\
+        200          & 0.820980 & 0.863584                  \\
+        250          & 0.368730 & 0.483683                  \\
+        300          & 0.109080 & 0.143265                  \\
+        400          & 0.025960 & 0.038351                  \\
+        500          & 0.004870 & 0.007192                  \\
+        750          & 0        & $5.11603 \cdot 10^{-6}$   \\
+        1000         & 0        & $5.57508 \cdot 10^{-9}$   \\
+        1250         & 0        & $ 6.49213 \cdot 10^{-13}$ \\
+        1500         & 0        & $ 3.93308 \cdot 10^{-19}$ \\
         \hline
     \end{tabular}
 \end{table}
@@ -232,3 +233,5 @@ Next, we analyzed each category to understand at what point in the game the agen
 \input{figures/strategy_first_category}
 
 \input{figures/strategy_fill_turn}
+
+\input{figures/top_categories_by_turn}

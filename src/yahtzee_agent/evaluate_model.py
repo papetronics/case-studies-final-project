@@ -14,7 +14,13 @@ from numpy.typing import NDArray
 from tqdm import tqdm
 
 from environments.full_yahtzee_env import Action, Observation
-from utilities.scoring_helper import BONUS_POINTS, MINIMUM_UPPER_SCORE_FOR_BONUS, ScoreCategory
+from utilities.scoring_helper import (
+    BONUS_POINTS,
+    MINIMUM_UPPER_SCORE_FOR_BONUS,
+    NUMBER_OF_CATEGORIES,
+    YAHTZEE_SCORE,
+    ScoreCategory,
+)
 from yahtzee_agent.features import create_features
 from yahtzee_agent.model import (
     YahtzeeAgent,
@@ -44,7 +50,8 @@ def load_model(checkpoint_path: str) -> YahtzeeAgent:
         activation_function=hparams["activation_function"],
         features=features,
         rolling_action_representation=hparams["rolling_action_representation"],
-        he_kaiming_initialization=True,
+        he_kaiming_initialization=False,
+        use_layer_norm=hparams.get("use_layer_norm", True),
     )
 
     policy_net_state_dict = {
@@ -59,10 +66,21 @@ def load_model(checkpoint_path: str) -> YahtzeeAgent:
 
 def run_batch_games(
     envs: SyncVectorEnv, model: YahtzeeAgent, batch_size: int
-) -> tuple[NDArray[np.float64], NDArray[np.int32]]:
-    """Run batch of games and return (total_rewards, final_scoresheets)."""
+) -> tuple[NDArray[np.float64], NDArray[np.int32], NDArray[np.int32]]:
+    """Run batch of games and return (total_rewards, final_scoresheets, category_usage_by_turn).
+
+    category_usage_by_turn is a 3D array of shape (batch_size, 13_turns, 2) where:
+    - [:, :, 0] contains the category index used in that turn
+    - [:, :, 1] contains the score earned in that category
+    """
     observations: Any = envs.reset()[0]
     total_rewards = np.zeros(batch_size, dtype=np.float64)
+
+    # Track which category was used in which turn and what score was earned
+    # Shape: (batch_size, 13_turns, 2) - [category_index, score]
+    category_usage_by_turn = np.zeros((batch_size, NUMBER_OF_CATEGORIES, 2), dtype=np.int32)
+    turn_number = np.zeros(batch_size, dtype=np.int32)  # Track current turn for each game
+    previous_phase = np.zeros(batch_size, dtype=np.int32)  # Track previous phase
 
     with torch.no_grad():
         for _ in tqdm(range(39), desc="Steps", leave=False):
@@ -110,11 +128,33 @@ def run_batch_games(
                 ),
             }
 
+            # Track category usage when scoring (phase is SCORING, i.e., phase == 1)
+            for i in range(batch_size):
+                if observations["phase"][i] == 1:  # SCORING phase
+                    category = actions["score_category"][i]
+                    if turn_number[i] < NUMBER_OF_CATEGORIES:
+                        category_usage_by_turn[i, turn_number[i], 0] = category
+
             rewards: NDArray[np.float64]
             observations, rewards = envs.step(actions)[:2]
             total_rewards += rewards
 
-    return total_rewards, observations["score_sheet"]
+            # Detect transition from SCORING (1) to ROLLING (0) phase - indicates turn completion
+            for i in range(batch_size):
+                if (
+                    previous_phase[i] == 1
+                    and observations["phase"][i] == 0
+                    and turn_number[i] < NUMBER_OF_CATEGORIES
+                ):
+                    # We just completed a scoring action
+                    category = category_usage_by_turn[i, turn_number[i], 0]
+                    category_usage_by_turn[i, turn_number[i], 1] = observations["score_sheet"][i][
+                        category
+                    ]
+                    turn_number[i] += 1
+                previous_phase[i] = observations["phase"][i]
+
+    return total_rewards, observations["score_sheet"], category_usage_by_turn
 
 
 @dataclass
@@ -263,17 +303,155 @@ def print_results_table(
     )
 
 
+def print_bonus_and_yahtzee_stats(final_scoresheets: NDArray[np.int32]) -> None:
+    """Print percentage of games earning bonus and Yahtzee."""
+    n_games = len(final_scoresheets)
+
+    # Calculate upper section totals and bonus eligibility
+    upper_totals = np.sum(final_scoresheets[:, 0:6], axis=1)
+    games_with_bonus = np.sum(upper_totals >= MINIMUM_UPPER_SCORE_FOR_BONUS)
+    pct_bonus = (games_with_bonus / n_games) * 100
+
+    # Calculate Yahtzee percentage (Yahtzee is category 11, scores YAHTZEE_SCORE)
+    yahtzee_scores = final_scoresheets[:, ScoreCategory.YAHTZEE]
+    games_with_yahtzee = np.sum(yahtzee_scores >= YAHTZEE_SCORE)
+    pct_yahtzee = (games_with_yahtzee / n_games) * 100
+
+    print("\n" + "=" * 60)
+    print("BONUS AND YAHTZEE STATISTICS")
+    print("=" * 60)
+    print(f"% of games earning Upper Bonus (≥63): {pct_bonus:6.2f}%")
+    print(f"% of games earning a Yahtzee:         {pct_yahtzee:6.2f}%")
+    print("=" * 60)
+
+
+def print_median_turn_by_category(category_usage: NDArray[np.int32]) -> None:
+    """Print median turn number when each category was used.
+
+    Args:
+        category_usage: Array of shape (n_games, 13, 2) where [:, :, 0] is category index
+    """
+    n_games = category_usage.shape[0]
+
+    # For each category, collect all turn numbers when it was used
+    category_turns: dict[int, list[int]] = {i: [] for i in range(NUMBER_OF_CATEGORIES)}
+
+    for game_idx in range(n_games):
+        for turn_idx in range(NUMBER_OF_CATEGORIES):
+            category = category_usage[game_idx, turn_idx, 0]
+            category_turns[category].append(turn_idx + 1)  # +1 for 1-indexed turns
+
+    print("\n" + "=" * 60)
+    print("MEDIAN TURN NUMBER BY CATEGORY")
+    print("=" * 60)
+    print(f"{'Category':<20} │ {'Median Turn':>12}")
+    print("─" * 60)
+
+    for i, label in enumerate(ScoreCategory.LABELS):
+        turns = category_turns[i]
+        median_turn = np.median(turns) if turns else 0
+        print(f"{label:<20} │ {median_turn:>12.1f}")
+
+    print("=" * 60)
+
+
+def print_top_categories_by_turn(category_usage: NDArray[np.int32]) -> None:
+    """Print top 3 most used categories for each turn with usage % and median score.
+
+    Args:
+        category_usage: Array of shape (n_games, 13, 2) where [:, :, 0] is category, [:, :, 1] is score
+    """
+    n_games = category_usage.shape[0]
+
+    print("\n" + "=" * 90)
+    print("TOP 3 CATEGORIES BY TURN")
+    print("=" * 90)
+    print(f"{'Turn':<5} │ {'Category':<20} │ {'Usage %':>8} │ {'Median Score':>12}")
+    print("─" * 90)
+
+    for turn_idx in range(NUMBER_OF_CATEGORIES):
+        # Count category usage for this turn across all games
+        category_counts: dict[int, int] = {}
+        category_scores: dict[int, list[int]] = {i: [] for i in range(NUMBER_OF_CATEGORIES)}
+
+        for game_idx in range(n_games):
+            category = category_usage[game_idx, turn_idx, 0]
+            score = category_usage[game_idx, turn_idx, 1]
+            category_counts[category] = category_counts.get(category, 0) + 1
+            category_scores[category].append(score)
+
+        # Sort by count and get top 3
+        top_categories = sorted(category_counts.items(), key=lambda x: x[1], reverse=True)[:3]
+
+        for rank, (category, count) in enumerate(top_categories):
+            usage_pct = (count / n_games) * 100
+            median_score = np.median(category_scores[category])
+            label = ScoreCategory.LABELS[category]
+
+            if rank == 0:
+                print(
+                    f"{turn_idx + 1:<5} │ {label:<20} │ {usage_pct:>7.1f}% │ {median_score:>12.1f}"
+                )
+            else:
+                print(f"{'':5} │ {label:<20} │ {usage_pct:>7.1f}% │ {median_score:>12.1f}")
+
+        if turn_idx < NUMBER_OF_CATEGORIES - 1:
+            print("─" * 90)
+
+    print("=" * 90)
+
+
+def print_score_distribution(total_rewards: NDArray[np.float64]) -> None:
+    """Print score distribution table showing P(score >= n) for various thresholds.
+
+    Args:
+        total_rewards: Array of total scores from all games
+    """
+    n_games = len(total_rewards)
+    thresholds = [50, 100, 150, 200, 250, 300, 400, 500, 750, 1000, 1250, 1500]
+
+    print("\n" + "=" * 50)
+    print("SCORE DISTRIBUTION")
+    print("=" * 50)
+    print(f"{'n':<10} │ {'P(score ≥ n)':>20}")
+    print("─" * 50)
+
+    for threshold in thresholds:
+        count = np.sum(total_rewards >= threshold)
+        probability = count / n_games
+
+        # Format probability with appropriate precision
+        if probability == 1.0:
+            prob_str = "1.000000"
+        elif probability >= 0.0001:  # noqa: PLR2004
+            prob_str = f"{probability:.6f}"
+        else:
+            prob_str = f"{probability:.6e}"
+
+        print(f"{threshold:<10} │ {prob_str:>20}")
+
+    print("=" * 50)
+
+
 def evaluate_model(checkpoint_path: str, num_games: int, baseline_path: str, alpha: float) -> None:
     """Evaluate trained model over multiple games."""
     model = load_model(checkpoint_path)
     baseline = load_baseline_stats(baseline_path)
 
+    print(f"Running {num_games} games...")
+
     envs = SyncVectorEnv([create_env for _ in range(num_games)])
-    batch_rewards, batch_scoresheets = run_batch_games(envs, model, num_games)
+    batch_rewards, batch_scoresheets, category_usage = run_batch_games(envs, model, num_games)
     envs.close()
 
     stats = compute_statistics(batch_rewards, batch_scoresheets)
     print_results_table(stats, baseline, alpha)
+
+    # Print additional statistics
+    print_bonus_and_yahtzee_stats(batch_scoresheets)
+    print_median_turn_by_category(category_usage)
+    print_top_categories_by_turn(category_usage)
+    print_score_distribution(batch_rewards)
 
 
 def main() -> None:

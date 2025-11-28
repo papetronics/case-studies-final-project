@@ -11,7 +11,7 @@
                 xticklabel style={font=\small},
                 ylabel={Average Score},
                 ymin=0,
-                ymax=35,
+                ymax=20,
                 ymajorgrids=true,
                 grid style={dashed,gray!30},
                 legend style={
@@ -29,29 +29,29 @@
 
             % A2C
             \addplot[fill=blue!70!white, draw=blue!80!white, thick] coordinates {
-                    (Ones,   5) (Twos,   5) (Threes, 5) (Fours,  5)
-                    (Fives,  5) (Sixes,  5) (Bonus,  5)
+                    (Ones,   1.80) (Twos,   4.96) (Threes, 7.97) (Fours,  11.08)
+                    (Fives,  13.92) (Sixes,  16.97) (Bonus,  8.73)
                 };
 
             % PPO
-            \addplot[fill=red!60!white, draw=red!80!white, thick] coordinates {
-                    (Ones,   5) (Twos,   5) (Threes, 5) (Fours,  5)
-                    (Fives,  5) (Sixes,  5) (Bonus,  5)
-                };
+            %\addplot[fill=red!60!white, draw=red!80!white, thick] coordinates {
+            %        (Ones,   5) (Twos,   5) (Threes, 5) (Fours,  5)
+            %        (Fives,  5) (Sixes,  5) (Bonus,  5)
+            %    };
 
             % REINFORCE
-            \addplot[fill=green!60!white, draw=green!80!white, thick] coordinates {
-                    (Ones,   5) (Twos,   5) (Threes, 5) (Fours,  5)
-                    (Fives,  5) (Sixes,  5) (Bonus,  5)
-                };
+            %\addplot[fill=green!60!white, draw=green!80!white, thick] coordinates {
+            %        (Ones,   5) (Twos,   5) (Threes, 5) (Fours,  5)
+            %        (Fives,  5) (Sixes,  5) (Bonus,  5)
+            %    };
 
             % DP
             \addplot[fill=black!70, draw=black!80, thick] coordinates {
-                    (Ones,   5) (Twos,   5) (Threes, 5) (Fours,  5)
-                    (Fives,  5) (Sixes,  5) (Bonus,  5)
+                    (Ones,   1.88) (Twos,   5.28) (Threes, 8.57) (Fours,  12.16)
+                    (Fives,  15.69) (Sixes,  19.19) (Bonus,  23.84)
                 };
 
-            \legend{A2C,PPO,REINFORCE,DP}
+            \legend{A2C,DP}
 
         \end{axis}
     \end{tikzpicture}

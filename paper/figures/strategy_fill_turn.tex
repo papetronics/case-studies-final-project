@@ -1,51 +1,47 @@
-\begin{figure}[H]
-    \centering
-    \begin{tikzpicture}
-        \begin{axis}[
-                ybar=1pt,
-                width=\columnwidth,
-                height=5cm,
-                bar width=8pt,
-                symbolic x coords={Ones,Sixes,4oK,Ch,Ytz},
-                xtick=data,
-                xticklabel style={font=\small},
-                ylabel={Median Fill Turn},
-                ymin=0,
-                ymax=13,
-                ymajorgrids=true,
-                grid style={dashed,gray!30},
-                legend style={
-                        at={(0.5,1.05)},
-                        anchor=south,
-                        legend columns=3,
-                        font=\footnotesize,
-                        draw=none,
-                        fill=none
-                    },
-                enlarge x limits=0.15,
-                axis line style={thick},
-                tick style={thick},
-            ]
+% \begin{figure}[H]
+%     \centering
+%     \begin{tikzpicture}
+%         \begin{axis}[
+%                 ybar=1pt,
+%                 width=\columnwidth,
+%                 height=5cm,
+%                 bar width=8pt,
+%                 symbolic x coords={Ones,Sixes,4oK,Ch,Ytz},
+%                 xtick=data,
+%                 xticklabel style={font=\small},
+%                 ylabel={Median Fill Turn},
+%                 ymin=0,
+%                 ymax=13,
+%                 ymajorgrids=true,
+%                 grid style={dashed,gray!30},
+%                 legend style={
+%                         at={(0.5,1.05)},
+%                         anchor=south,
+%                         legend columns=3,
+%                         font=\footnotesize,
+%                         draw=none,
+%                         fill=none
+%                     },
+%                 enlarge x limits=0.15,
+%                 axis line style={thick},
+%                 tick style={thick},
+%             ]
 
-            % DP
-            \addplot[fill=black!70, draw=black!80, thick] coordinates {
-                    (Ones,5) (Sixes,5) (4oK,5) (Ch,5) (Ytz,5)
-                };
+%             % A2C
+%             \addplot[fill=blue!70!white, draw=blue!80!white, thick] coordinates {
+%                     (Ones,5) (Sixes,5) (4oK,5) (Ch,5) (Ytz,5)
+%                 };
 
-            % A2C
-            \addplot[fill=blue!70!white, draw=blue!80!white, thick] coordinates {
-                    (Ones,5) (Sixes,5) (4oK,5) (Ch,5) (Ytz,5)
-                };
+%             % PPO
+%             \addplot[fill=red!60!white, draw=red!80!white, thick] coordinates {
+%                     (Ones,5) (Sixes,5) (4oK,5) (Ch,5) (Ytz,5)
+%                 };
 
-            % PPO
-            \addplot[fill=red!60!white, draw=red!80!white, thick] coordinates {
-                    (Ones,5) (Sixes,5) (4oK,5) (Ch,5) (Ytz,5)
-                };
+%             \legend{A2C,PPO}
 
-            \legend{DP,A2C,PPO}
+%         \end{axis}
+%     \end{tikzpicture}
+%     \caption{Median fill turn for key categories (placeholder data)}
+%     \label{fig:strategy-fill-turn}
+% \end{figure}
 
-        \end{axis}
-    \end{tikzpicture}
-    \caption{Median fill turn for key categories (placeholder data)}
-    \label{fig:strategy-fill-turn}
-\end{figure}

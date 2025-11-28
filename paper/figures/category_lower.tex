@@ -29,29 +29,30 @@
 
             % A2C
             \addplot[fill=blue!70!white, draw=blue!80!white, thick] coordinates {
-                    (3oK,  5) (4oK,  5) (FH,   5) (SS,   5)
-                    (LS,   5) (Ch,   5) (Ytz,  5)
+                    (3oK,  22.42) (4oK,  19.47) (FH,   22.57) (SS,   29.63)
+                    (LS,   34.80) (Ch,   22.22) (Ytz,  17.03)
                 };
+
 
             % PPO
-            \addplot[fill=red!60!white, draw=red!80!white, thick] coordinates {
-                    (3oK,  5) (4oK,  5) (FH,   5) (SS,   5)
-                    (LS,   5) (Ch,   5) (Ytz,  5)
-                };
+            %\addplot[fill=red!60!white, draw=red!80!white, thick] coordinates {
+            %        (3oK,  5) (4oK,  5) (FH,   5) (SS,   5)
+            %        (LS,   5) (Ch,   5) (Ytz,  5)
+            %    };
 
             % REINFORCE
-            \addplot[fill=green!60!white, draw=green!80!white, thick] coordinates {
-                    (3oK,  5) (4oK,  5) (FH,   5) (SS,   5)
-                    (LS,   5) (Ch,   5) (Ytz,  5)
-                };
+            %\addplot[fill=green!60!white, draw=green!80!white, thick] coordinates {
+            %        (3oK,  5) (4oK,  5) (FH,   5) (SS,   5)
+            %        (LS,   5) (Ch,   5) (Ytz,  5)
+            %    };
 
             % DP
             \addplot[fill=black!70, draw=black!80, thick] coordinates {
-                    (3oK,  5) (4oK,  5) (FH,   5) (SS,   5)
-                    (LS,   5) (Ch,   5) (Ytz,  5)
+                    (3oK,  21.66) (4oK,  12.10) (FH,   22.59) (SS,   29.46)
+                    (LS,   32.71) (Ch,   22.01) (Ytz,  16.87)
                 };
 
-            \legend{A2C,PPO,REINFORCE,DP}
+            \legend{A2C,DP}
 
         \end{axis}
     \end{tikzpicture}
