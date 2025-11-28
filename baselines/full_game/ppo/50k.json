@@ -22,7 +22,7 @@
         "gamma_start": 0.99,
         "gradient_clip_val": 1.0,
         "hidden_size": 600,
-        "learning_rate": 0.0001,
+        "learning_rate": 0.0005,
         "min_lr_ratio": 0.05,
         "num_hidden": 3,
         "phi_features": "dice_onehot,dice_counts,rolls_used,phase,has_earned_yahtzee,available_categories,percent_progress_towards_bonus,potential_scoring_opportunities,game_progress,will_receive_bonus_if_chosen",
