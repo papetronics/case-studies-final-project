@@ -1,0 +1,30 @@
+🔨 Building local dev image...
+Sending build context to Docker daemon  651.9MB
+Step 1/8 : FROM 367942341054.dkr.ecr.us-east-2.amazonaws.com/pape-lab/train:base-latest
+ ---> 6c4d383bd262
+Step 2/8 : WORKDIR /workspace
+ ---> Using cache
+ ---> 88770da4b2c3
+Step 3/8 : COPY --link requirements.txt .
+ ---> Using cache
+ ---> 702a7073d2ec
+Step 4/8 : RUN pip install --no-cache-dir -r requirements.txt
+ ---> Using cache
+ ---> 0e64799070fb
+Step 5/8 : COPY --link src ./src
+ ---> Using cache
+ ---> 301c48640d6c
+Step 6/8 : COPY --link dp_ideal_baseline.json .
+ ---> Using cache
+ ---> eaf9c9c20461
+Step 7/8 : WORKDIR /workspace/src
+ ---> Using cache
+ ---> f59fbe3f1e5f
+Step 8/8 : ENTRYPOINT []
+ ---> Using cache
+ ---> 8ebb4606b630
+Successfully built 8ebb4606b630
+Successfully tagged csml-final-project:latest
+✅ Image built successfully: csml-final-project
+🚀 Running container...
+Running 100000 games...
