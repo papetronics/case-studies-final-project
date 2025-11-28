@@ -51,6 +51,7 @@ We also defined a lock-in feature to indicate whether scoring in a given upper c
 
 \subsection{Action Representation}
 \subsubsection{Rolling Action}
+\label{sec:rolling-action}
 We experiment with two different rolling action representations.
 The first is a Bernoulli representation, where each die has an individual binary decision to be re-rolled or held.
 The second is a categorical representation, where each of the 32 possible combination of dice to keep is represented as a unique action.
@@ -72,6 +73,10 @@ The scoring action is always a categorical distribution over the 13 scoring cate
 During training, we mask out invalid scoring actions by setting their logits to $-\infty$ before applying the softmax function.
 To help with exploration \cite{tijsma2016comparing_exploration}, during training we sample from these distributions; during inference we take the argmax action.
 
+One important thing to note is that our environment always sorts the dice in ascending order before passing them to the agent.
+If this was not done, the network would be forced to waste capacity on understanding permutations of the same dice configuration,
+which we found early on was a significant impediment to learning.
+
 \subsection{Neural Network Architecture}
 The neural network uses a unique architecture designed to handle the specific challenges of \textit{Yahtzee}.
 The architecture consists of a trunk, followed by heads for the policy and value functions.
@@ -79,8 +84,7 @@ We created the network using PyTorch \cite{paszke2019pytorch}, and the training 
 
 \subsubsection{Trunk}
 The trunk of the network is a standard feedforward architecture with $L$ (typically 2 or 3) fully connected hidden layers.
-The width of each layer (hidden size $d_h$) is 600 neurons, found through empirical hyperparameter tuning,
-but aligning our model capacity with theoretical maximums \cite{horne-1994-bounds-rnn-fsm} and minimums \cite{hanin-2017-bounded-width-relu}.
+The width of each layer (hidden size $d_h$) is 600 neurons, found through empirical hyperparameter tuning (and ablated in Section~\ref{sec:arch-ablations}).
 We utilize layer normalization for improved training stability \cite{ba-2016-layernorm, bjorck-2022-high-variance},
 dropout with rate $p_d$ for regularization \cite{srivastava2014dropout},
 and Swish activations \cite{ramachandran-2017-swish} to introduce stable non-linearities.
@@ -244,9 +248,7 @@ each task \cite{tavakoli2018actionbranching, hausknecht2016parameterized}.
 We also implement a value head. This outputs a scalar which is used as the baseline for REINFORCE and the value estimate for actor-critic methods.
 Each of these networks has a fully connected hidden layer before the final output layer.
 
-In the rolling action head, we use either 5 outputs with sigmoid activations for Bernoulli representation, or 32 outputs with softmax activations for the categorical representation.
-
-In the scoring action head, we use 13 outputs with softmax activations for the categorical distribution over scoring categories.
+The rolling and scoring heads implement the distributions from Section~\ref{sec:rolling-action} with a single hidden layer, each.
 
 For the value head, we use a single linear output, constrained with ELU activation to clamp negative value estimates \cite{clevert2016elu}, since negative rewards are not possible in \textit{Yahtzee}.
 
@@ -269,35 +271,13 @@ All metrics were logged to Weights \& Biases \cite{biewald2020wandb}.
 
 \subsection{Reinforcement Learning}
 \subsubsection{Reward Shaping}
-We also performed an experiment with reward shaping, to assess its impact on the model's final performance and ability to learn the bonus.
+We also implemented a learned potential reward shaping mechanism to assess its impact on the model's final performance and ability to learn the bonus.
 
-One of the heads of our model is an upper bonus regression head, which predicts the expected upper section score at the end of the game: $\hat{U}_\theta(s)$.
-The target is the normalized final upper section score at the end of the episode:
+This makes use of the upper bonus regression head described, which predicts the normalized final upper section score at the end of the episode:
+
 $$
     U_{\mathrm{norm}} = \frac{U_{\mathrm{final}}}{63} - 1 \in \big[-1, \frac{5}{3}\big]
 $$
-This is trained using $L_2$ loss:
-$$
-    \mathcal{L}_{\mathrm{upper}}(\theta) =
-    \overbrace{\beta_{\mathrm{regression}}}^{\text{weight}}
-    \,
-    \biggl\|\hat{U}_\theta(s) - U_{\mathrm{norm}}\biggr\|_2^2
-$$
-
-We can convert the normalized score back to a predicted upper score and use it in a potential-based reward shaping function:
-\begin{equation}
-    \Phi(s) = 35 \cdot \text{clamp}\big(63 \cdot (\hat{U}_\theta(s) + 1), 0, 63\big)
-\end{equation}
-
-We then modify the rewards using the potential-based shaping formula \cite{ng-1999-reward-shaping}:
-\begin{equation}
-    R'(s, a, s') = R(s, a, s') + \beta_{\mathrm{shape}} \cdot (\gamma \Phi(s') - \Phi(s))
-\end{equation}
-
-Since the potential function $\Phi$ is changing during training, this may violate Ng's conditions for policy invariance.
-However, we wanted to see if it could help the model learn to go for the upper bonus more effectively.
-
-For simplicity, we utilize $r$ to denote the shaped reward $R'$ for the remainder of this paper.
 
 This head's architecture is similar to the value head, with a fully connected hidden layer followed by a linear output, with no activation.
 
@@ -349,7 +329,32 @@ This head's architecture is similar to the value head, with a fully connected hi
     \label{fig:upper-head-architecture}
 \end{figure}
 
+This head is trained using $L_2$ loss:
+
+$$
+    \mathcal{L}_{\mathrm{upper}}(\theta) =
+    \overbrace{\beta_{\mathrm{regression}}}^{\text{weight}}
+    \,
+    \biggl\|\hat{U}_\theta(s) - U_{\mathrm{norm}}\biggr\|_2^2
+$$
+
+We can convert the normalized score back to a predicted upper score and use it in a potential-based reward shaping function:
+\begin{equation}
+    \Phi(s) = 35 \cdot \text{clamp}\big(63 \cdot (\hat{U}_\theta(s) + 1), 0, 63\big)
+\end{equation}
+
+We then modify the rewards using the potential-based shaping formula \cite{ng-1999-reward-shaping}:
+\begin{equation}
+    R'(s, a, s') = R(s, a, s') + \beta_{\mathrm{shape}} \cdot (\gamma \Phi(s') - \Phi(s))
+\end{equation}
+
+Since the potential function $\Phi$ is changing during training, this may violate Ng's conditions for policy invariance.
+However, we wanted to see if it could help the model learn to go for the upper bonus more effectively.
+
+For simplicity, we utilize $r$ to denote the shaped reward $R'$ for the remainder of this paper.
+
 \subsection{Entropy}
+\label{sec:entropy}
 To encourage exploration, we also add an entropy bonus to the loss function  \cite{williams-peng-1991-function-optimization}. These are held
 constant at the start of training then linearly decayed to a final value near the end of training. Different entropy bonuses were used for rolling and scoring actions,
 as rolling actions had a tendency to collapse early in training.
@@ -382,8 +387,7 @@ For all algorithms, we have auxilliary losses for both the shaping head and for 
 
 \subsubsection{REINFORCE}
 We first implement the REINFORCE algorithm \cite{williams-1992-reinforce} with baseline for single-turn optimization, then attempt to extend it to full-game optimization.
-The baseline is the output of the value head, $V_{\phi}(\mathbf{s})$.
-We collect trajectories in batches of $B$ games before computing gradient updates. Thus, the loss function is:
+The baseline is the output of the value head, $V_{\phi}(\mathbf{s})$. The loss function is:
 
 \begin{align}
     \mathcal{L}(\theta,\phi)
@@ -405,7 +409,7 @@ We collect trajectories in batches of $B$ games before computing gradient update
 
 \subsubsection{Advantage Actor-Critic (A2C)}
 
-Second, we utilize an episodic, one-step TD(0) Advantage Actor-Critic (A2C) method. Its loss is:
+Second, we utilize an episodic, one-step TD(0) Advantage Actor-Critic (A2C) method. The loss function is:
 
 \begin{align}
     \delta_t
@@ -437,11 +441,11 @@ Second, we utilize an episodic, one-step TD(0) Advantage Actor-Critic (A2C) meth
 \end{align}
 
 As this turned out to be the most successfully tuned algorithm, this is the only one for which
-we attemped reward shaping.
+we attempted reward shaping.
 
 \subsubsection{PPO}
-PPO improves on TD by utilizing a "surrogate" objective which clips large policy updates, improving training stability.
-This allows for substantially larger batch sizes and learning rates \cite{schulman-2017-ppo}. The loss we use is:
+Lastly, we implement Proximal Policy Optimization (PPO) \cite{schulman-2017-ppo}; we tried this with TD(0) and GAE advantages.
+The loss function is:
 
 \begin{align}
     r_t(\theta)

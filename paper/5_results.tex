@@ -22,9 +22,8 @@ However, we suspected target leakage (selecting parameters and architectures bas
 \label{sec:tradeoff-curve}
 To understand the tradeoff between single-turn and full-game performance, we ablated our model using small changes to various hyperparameters and captured
 the resulting performance on both the primary single-turn score, as well as the auxiliary full-game score.
-We expect that there is a Pareto frontier between these two objectives, and that some hyperparameter choices push performance towards one or the other.
 
-As expected, we can see that full game performance generally increases linearly with single-turn performance.
+As we suspected, there is a Pareto frontier between these two objectives. We can see that full game performance generally increases linearly with single-turn performance.
 However, at very high levels of full-game performance, single-turn performance begins to plateau, and even decline slightly.
 Since the single-turn model does not have access to the full game context, these are actually imperfectly optimizing their purported objective.
 This indicates that selecting hyperparameters for a single-turn model based on full-game performance could indeed be a form of target leakage.
@@ -41,18 +40,22 @@ but found it to be necessary, especially with REINFORCE.
 
 \subsubsection{Algorithm Comparison: REINFORCE, A2C, PPO}
 
-REINFORCE proved challenging to optimize to high performance levels given our fixed training budget of 1 million full-game episodes (39 million steps).
-It was highly sensitive to hyperparameters such as the critic coefficient, the entropy bonus, and batch size.
-We also found that REINFORCE simply required more training data to converge at a reliable performance level across seeds; our implementation was trained on 1,000,000 games.
-However, after optimization we were able to achieve reasonable performance, scoring a mean of <X> points on average over 10,000 full games.
+During development, we compared algorithms using a fixed training budget of 250,000 full games played.
+Later, we attempt a longer, 1 million full-game training run for our best algorithm.
+
+REINFORCE proved challenging to optimize to high performance levels given our fixed training budget.
+It was sensitive to hyperparameters such as the critic coefficient, the entropy bonus, and batch size.
+We also found that REINFORCE required more games to converge at a reliable performance level.
+After optimization we were able to achieve reasonable performance; the million game training run scored a mean of <X> points.
 
 Our most successful algorithm was TD(0)-style Actor-Critic (A2C). We found is easiest to tune and with an immediate performance boost over REINFORCE.
-This was the algorithm we use for the ablation studies. With a fixed training budget of 1 million full-games,
-A2C was able to approach DP-optimal performance.
+This was the algorithm we use for the ablation studies. With a training budget of 1 million full-games,
+A2C was able to approach DP-optimal performance: scoring <X> points average.
 
-We also attempted to use Proximal Policy Optimization (PPO) with TD(0), but found it difficult to tune effectively within our computational budget. Each PPO rollout requires
-$k$ epochs of minibatch updates, which significantly increases training time compared to A2C and REINFORCE. Sample efficiency wasn't a huge factor for us, since Yahtzee is so easy to simulate.
-For fair comparison to the other algorithms, we had to reduce the total number of games seen during training by a factor of $k$.
+We also attempted to use Proximal Policy Optimization (PPO) with TD(0), but found it difficult to tune. Each PPO rollout requires
+$k$ epochs of minibatch updates, which significantly increases training time compared to A2C and REINFORCE.
+For fair comparison to the other algorithms, reduced the total number of games seen during training by a factor of $k$.
+PPO was able to outperform REINFORCE, but was not able to reach A2C performance within our training budget.
 However, it is possible PPO could reach or surpass A2C performance with more extensive hyperparameter tuning.
 
 \input{figures/baselines_training_graph}
@@ -64,9 +67,6 @@ However, it is possible PPO could reach or surpass A2C performance with more ext
 \subsubsection{Representational Ablations}
 
 While a number of additional representational choices were explored, one of the most important is the state representation of the dice.
-One important thing to note is that our environment always sorts the dice in ascending order before passing them to the agent.
-If this was not done, the network would be forced to waste capacity on understanding permutations of the same dice configuration,
-which we found early on was a significant impediment to learning.
 
 We wanted to highlight the importance of using a combined representation of both one-hot encodings and counts-based encodings of the dice.
 While the network could theoretically learn to reconstruct either representation from the other, in practice we found that using both improved performance.
@@ -78,10 +78,11 @@ To understand the importance of each, they were ablated individually.
 
 \input{figures/feature_ablation_bonus}
 
-Lastly, we tested our hypothesis that a 32-way categorical would provide beneficial to complex actions that required specific combinations of dice to be held.
+Lastly, figure \ref{fig:action_representation} shows results where we tested our hypothesis that a 32-way categorical would prove beneficial to complex actions that required specific combinations of dice to be held (see Section \ref{sec:rolling-action}).
 \input{figures/action_representation}
 
 \subsubsection{Architectural Ablations}
+\label{sec:arch-ablations}
 
 We performed a simple grid search ablation to understand if our chosen architecture of 3 hidden layers of 600 units each was optimal.
 Yahtzee is a fairly complex game, so we expected shorter, but wider networks to perform best. Note that each of these has a different number of total parameters,
@@ -113,9 +114,8 @@ significantly degraded performance.
 \input{figures/gae_bonus}
 
 \subsubsection{Entropy Sensitivity}
-During experimentation, we noticed that the entropy regularization coefficients had a significant impact on training stability and final performance.
-With no regularization, the policy quickly converges to a deterministic policy that fails to explore sufficiently.
-With too much regularization, the policy would not perform well enough to quickly learn strategies for earning Yahtzee's and the bonus.
+During experimentation, we noticed that the entropy regularization coefficients had a significant impact on training stability and final performance,
+as described in Section~\ref{sec:entropy}.
 To better understand this sensitivity, we trained models under three different entropy regimes: Low Entropy, Baseline, and High Entropy.
 
 \begin{table}[H]
@@ -148,9 +148,9 @@ To better understand this sensitivity, we trained models under three different e
         \hline
         \textbf{Regime} & \textbf{Mean Score} & \textbf{Bonus \%} & \textbf{Yahtzee \%} \\
         \hline
-        Low Entropy     & $<X> \pm <Y>$       & <X>               & <Y>                 \\
-        Baseline        & $<X> \pm <Y>$       & <X>               & <Y>                 \\
-        High Entropy    & $<X> \pm <Y>$       & <X>               & <Y>                 \\
+        Low Entropy     & $<X>$               & <X>               & <Y>                 \\
+        Baseline        & $<X>$               & <X>               & <Y>                 \\
+        High Entropy    & $<X>$               & <X>               & <Y>                 \\
         \hline
     \end{tabular}
 \end{table}
@@ -162,7 +162,7 @@ and carefully tuned entropy regularization produced the best results.
 \begin{table*}[t]
     \centering
     \small
-    \caption{Full-game performance summary (placeholder data)}
+    \caption{Full-game performance summary}
     \label{tab:full-game-summary}
     \begin{tabular}{lcccccc}
         \hline

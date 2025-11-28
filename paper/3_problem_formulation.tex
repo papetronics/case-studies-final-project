@@ -100,15 +100,15 @@ A state is represented as $\mathbf{s} = (\mathbf{d},\mathbf{c},r, t)$, where $\m
 dice configuration, $\mathbf{c}$ the scorecard, and $r$ the roll index, and $t$ the current turn index
 (see Section~\ref{sec:yahtzee-definitions}).
 
-For simplicity, we define the action $\mathbf{a} = (\mathbf{k}, \mathbf{s})$, where $\mathbf{k}$ is the keep vector and $s$ is the score category choice.
-We can define the action as a parameterization of the policy: $\pi_{\theta}(\mathbf{a}|\mathbf{s}) = \pi_{\theta}(\phi(\mathbf{s}))$,
+The action is $\mathbf{a} = (\mathbf{k}, \mathbf{s})$, where $\mathbf{k}$ is the keep vector and $s$ is the score category choice.
+This can be restated as a parameterization of the policy: $\pi_{\theta}(\mathbf{a}|\mathbf{s}) = \pi_{\theta}(\phi(\mathbf{s}))$,
 where $\phi(\mathbf{s})$ is a feature representation of the state $\mathbf{s}$.
 
-The transition function $P$ is is specified in Appendix~\ref{app:transition-function}. Note that when $r < 2$, the $\mathbf{k}$ is used by $P$, otherwise $\mathbf{s}$ is used.
+The transition function $P$ is is specified in Appendix~\ref{app:transition-function}.
 
-The reward is the change in total score between steps $R_t = \mathrm{score}(c_{t+1}) - \mathrm{score}(c_t)$,
-and since we desire to maximize total score at the end of the game, we set $\gamma = 1$.
+The reward is the change in total score between steps $R_t = \mathrm{score}(c_{t+1}) - \mathrm{score}(c_t)$.
 
+Since we desire to maximize total score at the end of the game, $\gamma = 1$.
 
 \subsection{Single-Turn Optimization Task}
 In the single-turn optimization task, the agent is trained to maximize the expected score over a single turn.
