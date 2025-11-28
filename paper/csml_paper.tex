@@ -1,6 +1,4 @@
-%
 % CSML Final Project Paper
-%
 
 \documentclass[11pt,a4paper]{article}
 \usepackage[hyperref]{acl2019}
@@ -14,7 +12,8 @@
 \usepackage{graphicx}
 \usepackage{caption}
 \usepackage{pgfplots}
-\usepackage[inline]{enumitem} % note the [inline]
+\usepackage{svg}
+\usepackage[inline]{enumitem}
 \pgfplotsset{compat=newest}
 \usetikzlibrary{fit,backgrounds,positioning}
 \usepackage{url}
@@ -35,19 +34,7 @@
 
 \begin{document}
 \maketitle
-\begin{abstract}
-  Yahtzee is a classic dice game whose stochastic, combinatorial structure and delayed rewards make it an interesting mid-scale RL benchmark.
-  While an optimal policy for solitaire Yahtzee can be computed using dynamic programming methods, multiplayer is intractable, motivating approximation methods.
-  We formulate Yahtzee as a Markov Decision Process (MDP), and train self-play agents using various policy gradient methods:
-  REINFORCE, Advantage Actor-Critic (A2C), and Proximal Policy Optimization (PPO), all using a multi-headed network with a shared trunk.
-  We ablate feature encodings, architecture, return estimators, reward shaping, and entropy regularization.
-
-  Under a fixed training budget, REINFORCE and PPO prove sensitive to hyperparameters and fail to reach near-optimal performance,
-  whereas A2C trains robustly across a range of settings. Our agent attains a median score of <242.5> points over 10,000 games,
-  within <4.7\%> of the optimal DP score of 254.59, achieving the upper section bonus and Yahtzee at rates of <X>\% and <Y>\%, respectively.
-  All models struggle to learn the upper bonus strategy, overindexing on four-of-a-kind's, highlighting persistent long-horizon credit-assignment
-  and exploration challenges.
-\end{abstract}
+\input{0_abstract}
 
 \input{1_introduction}
 \input{2_related_work}

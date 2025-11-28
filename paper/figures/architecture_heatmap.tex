@@ -1,0 +1,49 @@
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}
+        \begin{axis}[
+                width=\columnwidth,
+                height=0.5\textwidth,
+                xlabel={Network Width (Hidden Units)},
+                ylabel={Network Depth (Hidden Layers)},
+                title={Score by Network Architecture},
+                colormap/viridis,
+                xlabel style={font=\small},
+                ylabel style={font=\small},
+                title style={font=\small},
+                xtick={1,2,3},
+                xticklabels={300, 600, 900},
+                ytick={1,2,3},
+                yticklabels={2, 3, 4},
+                xticklabel style={font=\small},
+                yticklabel style={font=\small},
+                enlargelimits=0.3,
+                point meta min=185,
+                point meta max=235,
+                nodes near coords,
+                nodes near coords style={font=\small, color=black},
+                every node near coord/.append style={xshift=0pt, yshift=0pt},
+            ]
+
+            \addplot[
+                matrix plot,
+                mesh/cols=3,
+                point meta=explicit
+            ] table[meta=score] {
+                    x y score
+                    1 1 203.959
+                    2 1 227.618
+                    3 1 230.508
+                    1 2 194.403
+                    2 2 205.788
+                    3 2 212.495
+                    1 3 192.501
+                    2 3 190.864
+                    3 3 187.407
+                };
+
+        \end{axis}
+    \end{tikzpicture}
+    \caption{Network architecture ablation (placeholder data)}
+    \label{fig:architecture-heatmap}
+\end{figure}

@@ -30,6 +30,7 @@
                 "-synctex=1",
                 "-interaction=nonstopmode",
                 "-file-line-error",
+                "--shell-escape",
                 "%DOC%"
             ]
         },
@@ -48,6 +49,7 @@
                 "-file-line-error",
                 "-halt-on-error",
                 "-interaction=nonstopmode",
+                "--shell-escape",
                 "%DOC%"
             ]
         }
