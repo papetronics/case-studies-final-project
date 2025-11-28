@@ -11,8 +11,9 @@ For outputs, it uses Bernoulli rolling actions and categorical scoring actions.
 The single turn model has a short horizon (3 steps); REINFORCE was the natural choice here.
 We trained on <X> single-turn episodes, using a batch size of <Y> episodes, for <Z> total gradient updates.
 
-Although it does not nearly reach optimal performance, it performs surprisingly well over the full game; this is likely due to the high correlation between single-turn and full-game optimal actions.
+As shown in Figure~\ref{fig:single-turn-performance}, although it does not nearly reach optimal performance, it performs surprisingly well over the full game; this is likely due to the high correlation between single-turn and full-game optimal actions.
 However, we suspected target leakage (selecting parameters and architectures based on full-game performance) could also play a role and analyze the full-game vs. single-turn tradeoff in Section~\ref{sec:tradeoff-curve}.
+Figure~\ref{fig:single-turn-fullgame} demonstrates the full-game performance when evaluating the single-turn trained agent.
 
 \input{figures/single_turn_performance}
 
@@ -23,7 +24,7 @@ However, we suspected target leakage (selecting parameters and architectures bas
 To understand the tradeoff between single-turn and full-game performance, we ablated our model using small changes to various hyperparameters and captured
 the resulting performance on both the primary single-turn score, as well as the auxiliary full-game score.
 
-As we suspected, there is a Pareto frontier between these two objectives. We can see that full game performance generally increases linearly with single-turn performance.
+As we suspected, there is a Pareto frontier between these two objectives, as illustrated in Figure~\ref{fig:pareto-frontier}. We can see that full game performance generally increases linearly with single-turn performance.
 However, at very high levels of full-game performance, single-turn performance begins to plateau, and even decline slightly.
 Since the single-turn model does not have access to the full game context, these are actually imperfectly optimizing their purported objective.
 This indicates that selecting hyperparameters for a single-turn model based on full-game performance could indeed be a form of target leakage.
@@ -58,6 +59,9 @@ For fair comparison to the other algorithms, reduced the total number of games s
 PPO was able to outperform REINFORCE, but was not able to reach A2C performance within our training budget.
 However, it is possible PPO could reach or surpass A2C performance with more extensive hyperparameter tuning.
 
+Figure~\ref{fig:full-game-learning-curves} shows the learning curves for all three algorithms during training.
+The final performance comparison is summarized in Figure~\ref{fig:final-performance-comparison}, with detailed bonus and Yahtzee achievement rates shown in Figure~\ref{fig:bonus-yahtzee-rates}.
+
 \input{figures/baselines_training_graph}
 
 \input{figures/baselines_bar_chart}
@@ -69,16 +73,17 @@ However, it is possible PPO could reach or surpass A2C performance with more ext
 While a number of additional representational choices were explored, one of the most important is the state representation of the dice.
 
 We wanted to highlight the importance of using a combined representation of both one-hot encodings and counts-based encodings of the dice.
-While the network could theoretically learn to reconstruct either representation from the other, in practice we found that using both improved performance.
+While the network could theoretically learn to reconstruct either representation from the other, in practice we found that using both improved performance, as demonstrated in Figure~\ref{fig:dice-representation-bonus}.
 
 \input{figures/dice_representation_bonus}
 
 For the full-game model, we added several additional features beyond the single-turn representation.
-To understand the importance of each, they were ablated individually.
+To understand the importance of each, they were ablated individually, with results shown in Figure~\ref{fig:feature-ablation-bonus}.
 
 \input{figures/feature_ablation_bonus}
 
-Lastly, figure \ref{fig:action_representation} shows results where we tested our hypothesis that a 32-way categorical would prove beneficial to complex actions that required specific combinations of dice to be held (see Section \ref{sec:rolling-action}).
+Lastly, we tested our hypothesis that a 32-way categorical would prove beneficial to complex actions that required specific combinations of dice to be held (see Section \ref{sec:rolling-action}).
+Figure~\ref{fig:bernoulli-vs-categorical} shows the performance comparison, while Figure~\ref{fig:action-yahtzee-learning} illustrates how each representation learns to achieve Yahtzee over training.
 \input{figures/action_representation}
 
 \subsubsection{Architectural Ablations}
@@ -87,16 +92,17 @@ Lastly, figure \ref{fig:action_representation} shows results where we tested our
 We performed a simple grid search ablation to understand if our chosen architecture of 3 hidden layers of 600 units each was optimal.
 Yahtzee is a fairly complex game, so we expected shorter, but wider networks to perform best. Note that each of these has a different number of total parameters,
 so this is not a pure ablation of depth vs. width.
+Results are shown in Figure~\ref{fig:architecture-heatmap}.
 
 \input{figures/architecture_heatmap}
 
 Based on \cite{bjorck-2022-high-variance}, we hypothesized that layer normalization \cite{ba-2016-layernorm} would improve training stability and performance
-and used it in all of our main experiments. This was ablated to understand its true impact.
+and used it in all of our main experiments. This was ablated to understand its true impact, with learning curves compared in Figure~\ref{fig:layernorm-learning}.
 
 \input{figures/layernorm}
 
 Lastly, we used Swish activation functions in our network for all of our main experiments, as it had been reported to work well in RL settings \cite{elfwing2017sigmoidweightedlinearunitsneural}.
-We ablated this to ReLU to understand its true impact.
+We ablated this to ReLU to understand its true impact, as shown in Figure~\ref{fig:silu-vs-relu}.
 
 \input{figures/activations}
 
@@ -108,7 +114,7 @@ persisted. We then hypothesized that the TD(0) targets were not providing suffic
 so we switched to GAE with various $\lambda$ values to understand if this would help.
 
 Unfortunately, we found that GAE did not improve performance over TD(0), and values that were too high ($\lambda \geq 0.8$)
-significantly degraded performance.
+significantly degraded performance, as shown in Figures~\ref{fig:gae-lambda-performance} and~\ref{fig:gae-lambda-bonus}.
 
 \input{figures/gae_mean_score}
 \input{figures/gae_bonus}
@@ -116,9 +122,10 @@ significantly degraded performance.
 \subsubsection{Entropy Sensitivity}
 During experimentation, we noticed that the entropy regularization coefficients had a significant impact on training stability and final performance,
 as described in Section~\ref{sec:entropy}.
-To better understand this sensitivity, we trained models under three different entropy regimes: Low Entropy, Baseline, and High Entropy.
+To better understand this sensitivity, we trained models under three different entropy regimes: Low Entropy, Baseline, and High Entropy, as defined in Table~\ref{tab:entropy-regime-definitions}.
+The learning curves are shown in Figure~\ref{fig:entropy-mean-score}, with rolling entropy values tracked in Figure~\ref{fig:entropy-rolling-entropy}.
 
-\begin{table}[H]
+\begin{table}[htb]
     \centering
     \small
     \caption{Entropy regime definitions}
@@ -139,7 +146,9 @@ To better understand this sensitivity, we trained models under three different e
 
 \input{figures/entropy_rolling_entropy}
 
-\begin{table}[H]
+The overall results for each entropy regime are summarized in Table~\ref{tab:entropy-regimes}.
+
+\begin{table}[htb]
     \centering
     \small
     \caption{Entropy regime performance (placeholder data)}
@@ -158,6 +167,7 @@ To better understand this sensitivity, we trained models under three different e
 \subsubsection{Summary}
 In summary, we found that A2C with TD(0) targets, a combined dice representation, Layer Normalization, SILU activations,
 and carefully tuned entropy regularization produced the best results.
+Table~\ref{tab:full-game-summary} presents a comprehensive comparison of all algorithms tested.
 
 \begin{table*}[t]
     \centering
@@ -182,7 +192,7 @@ and carefully tuned entropy regularization produced the best results.
 \end{table*}
 
 For our best configuration, A2C trained over 1 million games, the final score distribution is compared to DP-optimal in Table \ref{tab:dp-score-distribution}.
-\begin{table}[H]
+\begin{table}[htb]
     \centering
     \small
     \caption{$P(\text{score} \geq n)$, 100,000 games}
@@ -217,9 +227,8 @@ The primary differentiators between our RL agents and the DP optimal solution ar
 Performance in the upper section is critical to achieving a high overall score, as it enables the bonus however it appears to be traded off against
 the four-of-a-kind; it seems the agents prefer to take the immediate points from the 5th die rather than place themselves in a safer position to earn the bonus later.
 
-Yahtzee's high performance was interesting; it requires agents to be performing at a competent level across a single turn in order to earn. We contrast the learning
-curve of the Yahtzee category with that of the upper bonus in Figure <INSERT A FIGURE FOR THIS>. The interesting takeaway here is that agents appear to
-exhibit a "mode shift" in their strategy once they figure out Yahtzee, whereas the bonus is learned more gradually over time.
+Yahtzee's high performance was interesting; it requires agents to be performing at a competent level across a single turn in order to earn. The interesting takeaway here is that agents appear to
+exhibit a "mode shift" in their strategy once they figure out Yahtzee (as shown in Figure~\ref{fig:action-yahtzee-learning} for the action representation experiments), whereas the bonus is learned more gradually over time.
 
 \input{figures/category_upper}
 
@@ -228,7 +237,7 @@ exhibit a "mode shift" in their strategy once they figure out Yahtzee, whereas t
 \subsubsection{Strategy Comparison Across Agents}
 We also compared some high-level strategy metrics across our different agents to understand how their learned policies differed.
 First, we analyzed the distribution of the first category choice made by each agent in Figure \ref{fig:strategy-first-category}.
-Next, we analyzed each category to understand at what point in the game the agent typically filled it, shown in Figure \ref{fig:strategy-fill-turn}.
+Additionally, Table~\ref{tab:top-categories-by-turn} shows the top three most frequently used categories at each turn of the game, providing insights into the agent's strategy throughout a game.
 
 \input{figures/strategy_first_category}
 
