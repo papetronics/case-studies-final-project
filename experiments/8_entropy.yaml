@@ -1,0 +1,10 @@
+# Pairs with 250k A2C
+program: src/yahtzee_agent/__main__.py
+name: entropy_regime
+method: grid
+parameters:
+  entropy_regime:
+    values:
+      - "low"
+      - "baseline"
+      - "high"

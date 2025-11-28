@@ -1,0 +1,9 @@
+# Pairs with 250k A2C
+program: src/yahtzee_agent/__main__.py
+name: activation_function
+method: grid
+parameters:
+  activation_function:
+    values:
+      - "Swish"
+      - "ReLU"
