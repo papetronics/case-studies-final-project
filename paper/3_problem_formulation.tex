@@ -5,7 +5,7 @@
 \subsubsection{Rules of Yahtzee}
 \textit{Yahtzee} is played with five standard six-sided dice and a shared scorecard containing 13 categories.
 Turns are rotated among players. A turn starts with a player rolling all five dice. They may then choose to keep
-some dice, and re-roll the remaining ones. This process can be repeated up to two more times, for a total of three rolls.
+some dice, re-rolling the remaining ones. This process can be repeated two more times, for a total of three total rolls.
 After the final roll, the player must select one of the 13 scoring categories to apply to their current dice.
 Each category has specific scoring rules, and each can only be used once per game.
 
@@ -46,7 +46,9 @@ The current turn number can be represented as:
 
 A single turn is composed of an initial dice roll, two optional re-rolls, and a final scoring decision.
 Let $r = 0$, with $r \in \{0,1,2\}$ which is the number of rolls taken so far.
+
 Prior to the first roll, the dice are randomized:
+
 $$
     \mathbf{d}_{r=0} \sim U(\mathcal{D})
 $$
@@ -88,6 +90,8 @@ $$
     \end{cases}
 $$
 
+There is an additional "Joker" bonus, detailed in Appendix~\ref{app:scoring}.
+
 The player's score can thus be calculated as:
 \begin{equation}
     \mathrm{score}(\mathbf{c}) = B(\mathbf{c}) + \big\langle \mathbf{u}(\mathbf{c}), \mathbf{c} \big\rangle
@@ -116,7 +120,7 @@ This task has 3 steps total; after being initialized with a random dice roll, th
 dice to keep and which to re-roll twice, and then selects a scoring category. A single reward is given at the end of the turn.
 
 This is a useful subproblem to study, as it isolates the decision-making process in a single turn,
-allowing us to analyze the network architecture and training regime in a low-variance setting.
+this allows us to quickly iterate on architecture and training choices with shorter training times and without the complications of long-term credit assignment.
 
 \subsection{Full-Game Optimization Task}
 In the full-game optimization task, 13-turn episodes (totalling 39 individual steps) are played to completion.

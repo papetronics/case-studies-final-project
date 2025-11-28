@@ -16,8 +16,8 @@ For example, n-step returns $G_{t}^{TD(n)}$  interpolate between MC and single-s
 A related method is $TD(\lambda)$, which uses an exponentially weighted average of n-step returns, effectively blending multiple time horizons into a single estimate controlled by $\lambda$ \cite{sutton-2018-reinforcement-book}.
 
 While TD estimates are biased (since they rely on future value estimates to be accurate), they have much lower variance than full-episode returns.
-Learning the value function over shorter horizons is a simpler problem than estimating the entire sequence of rewards.
-This often makes TD methods more sample efficient than REINFORCE, and provides the benefit of being able to learn online rather than waiting until the end of an episode.
+Learning the value function over shorter horizons is a simpler problem than estimating the entire sequence of rewards, so in some environments, TD methods are more sample efficient than REINFORCE.
+They also provide the benefit of being able to learn online rather than waiting until the end of an episode.
 
 Additionally, pure TD methods can also be viewed as a form of approximate dynamic programming, making them a natural fit for domains where dynamic-programming solutions exist \cite{bertsekas1996neuro}.
 
