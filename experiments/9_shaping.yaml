@@ -1,0 +1,10 @@
+# Pairs with 250k A2C
+program: src/yahtzee_agent/__main__.py
+name: shaping
+method: grid
+parameters:
+  upper_score_shaping_weight:
+    values: [0.25, 0.5, 1.0, 2.0]
+
+  upper_score_regression_loss_weight:
+    values: [0.25, 0.5, 1.0, 2.0]

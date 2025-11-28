@@ -2,40 +2,87 @@
 \section{Discussion}
 % <400-600 words>
 
-\subsection{Is there a tradeoff between single-turn and full-game performance?}
-Our results seem to show that there indeed is a tradeoff between the single-game and full-game objectives.
-The single turn agent achieved high scores, often higher than the full-game REINFORCE agent,
-but failed to learn a coherent bonus strategy, as expected.
+\subsection{Summary}
+In this work, we attempted to use policy-gradient reinforcement learning methods to teach agents to play \textit{Yahtzee} through self-play.
+We found that with appropriate algorithmic and architectural choices, it is possible to approach near-optimal performance.
+Advantage Actor-Critic (A2C) with TD(0) was consistently stable and efficient; REINFORCE and PPO were more fragile and underperformed at equal training budgets.
+Our best A2C agent, trained over 1 million games, achieved a median score of 241.78 points over 100,000 evaluation games, which is within 5.0\% of the DP-optimal score of 254.59.
+In games played, it achieved Yahtzee at an optimal rate (34.1\%), and had a good upper bonus achievement rate (24.9\%).
+These results are best reported in Table~\ref{tab:final-results}.
 
-At lower performance levels, there is a strong correlation between single-turn and full-game performance, as shown in Figure~\ref{fig:single-vs-full-game},
-but as full-game performance improves, the correlation weakens. We were also able to use significantly smaller models for the single-turn agent,
-indicating that the full-game task is inherently more complex.
-However, it would be interesting to see if transfer learning from single-turn to full-game agents could help improve sample efficiency.
+We found that single-turn REINFORCE gets surprisingly high scores (even with a smaller model),
+often outperforming full-game REINFORCE agents, but fails to learn a coherent bonus strategy.
+We observed a tradeoff between single-turn and full-game performance, especially at higher performance levels,
+as seen in Figure~\ref{fig:single-vs-full-game}, and found that with certain hyperparameters, we
+actually improved full-game performance while decreasing single-turn performance, indicating an interesting Pareto frontier
+and risk for target leakage.
 
-\subsection{Can an agent reach optimal play?}
-Our best full-game agent, trained with A2C, was able to reach a median score of 241.78 points over 100,000 evaluation games,
-which is within 5.0\% of the optimal DP score of 254.59.
-This indicates that with appropriate algorithm and architectural choices, it is indeed possible to approach near-optimal performance using self-play alone.
-
-\subsection{Which design choices most affect final performance?}
 Our ablation studies highlighted several design choices that significantly impacted final performance.
-First, the choice of RL algorithm and credit assignment was crucial; A2C with TD(0) outperformed both PPO and REINFORCE in terms of stability and final score.
-Second, the state and action encodings played a significant role; specifically providing (rather than forcing the network to learn) some easily calculable features improved learning.
-Third, entropy regularization played a huge role in stabilizing training and encouraging exploration. This made the most difference in the model's intra-turn strategy.
-Lastly, reward shaping was critical to learning the upper section bonus strategy, agents learned it extremely slowly without it.
+The choice of RL algorithm and credit assignment was crucial; A2C with TD(0) outperformed both PPO and REINFORCE in terms of stability and final score,
+as shown in Table~\ref{tab:ablation-results}.
+As seen in Table~\ref{tab:ablation-results}, the state and action encodings played a significant role; specifically providing (rather than forcing the network to learn) some easily calculable features improved learning.
+Categorical action distributions outperformed Gaussian ones, as seen in Table~\ref{tab:ablation-results}, allowing the network to better model compound actions.
+The choice of activation function also mattered; with <BLAH outperforming BLAH>, likely due to better gradient flow.
+Adding LayerNorm layers improved stability and final performance as well, as shown in Table~\ref{tab:ablation-results}.
+Lastly, we found diminishing returns for model size; larger models improved performance up to a point, but after a certain size, gains were minimal, as shown in Figure~\ref{fig:model-size-ablation}.
 
-\subsection{What failure modes exist in learned policies?}
-Despite the strong performance of the Actor-Critic agent, we observed several failure modes in the learned policies.
-Most notably, the agent still overweighted the four-of-a-kind category, even when pursuing the upper section bonus would have been more beneficial.
-Likewise, the agent did not make good use of the Chance category, using it right off the bat rather than saving it for difficult endgame scenarios.
-These failures highlight persistent long-horizon credit-assignment and exploration challenges, despite the use of reward shaping and entropy regularization.
+When moved from single-turn to full-game play, REINFORCE immediately began struggling with the
+variance and credit assignment challenges inherent in the full-game setting; in fact,
+it was extremely difficult to even get back to the same level of performance as the single-turn agent,
+which was a surprise. Performance immediately improved when we switched to TD(0) returns and A2C,
+after adjusting certain hyperparameters (notably the critic coefficient).
+When A2C still struggled with the upper bonus strategy, we implemented GAE returns,
+However, they did not lead to significant improvement, as shown in Table~\ref{tab:ablation-results};
+moderate values of GAE were slightly helpful, but high values led back to instability.
+The underlying issue here is that most of Yahtzee's reward is local, the bonus is a small, rare,
+and delayed reward that is difficult to assign credit for without accepting high variance.
 
-\subsection{Further Improvements}
-Our final training runs used a fixed budget of 1 million games. This took nearly 10 hours to train on a single NVIDIA A100 GPU.
-Samples were often the bottleneck for learning, in fact the bonus performance had not fully converged even after this many games.
-Further improvements to parallelization and GPU utilization could help reduce training time, allowing for larger budgets to be explored.
-Likewise, we struggled to get larger batch sizes to work, this would likely improve training times as well.
+Entropy regularization played a huge role in stabilizing training and encouraging exploration, best seen in Figure~\ref{fig:entropy-ablation};
+striking the right balance of explore vs exploit was critical. There's a narrow sweet spot:
+too little entropy and the policy collapses, does not explore and we get stuck in local minima;
+too much entropy and the policy becomes too random to learn strategies from signals that require high-coherence.
 
-A few other improvements could likely help close the gap further. For example, different types of learning rate schedules could be used.
-Soft-Actor-Critic (SAC) \cite{haarnoja2018softactorcriticoffpolicymaximum} style entropy control could be used to more finely adapt exploration during training,
-we had to tune entropy coefficients manually for each algorithm, and they often required large adjustments when other hyperparameters changed.
+There were some limitations to our approach. First, we fixed the training budget to 1 million games for all agents,
+but could only explore the hyperparameter space using 250,000 games per run. Likely, increased batching,
+parallelism, or more performant simulation would allow larger budgets in the same time frame, improving final performance.
+Second, we typically ran only a single seed per configuration due to compute constraints, so it's possible that some results were affected by random chance.
+Third, we only explored a limited set of architectures and hyperparameters; more extensive sweeps, especially around PPO,
+could yield better performance.
+We also did not explore transfer learning from single-turn to full-game agents, which could improve sample efficiency.
+
+\subsection{Strategy \& Failure Modes}
+From the per-turn statistics in Figure~\ref{fig:turn-by-turn-stats}, we can infer a typical game,
+which begins with the agent locking in straights or full houses.
+These are fixed, high-value categories that provide a strong foundation. The agent also prioritizes the 4-of-a-kind category early on,
+typically on the 6th turn. The agent then turns its attention to the upper section, often scoring in the
+4's, 5's, 6's, sometimes taking 3-of-a-kind instead.
+However, it seems to prefer taking a lower-section score for 5's and 6's rather than using them to build towards the bonus.
+The agent seems to understand the importance of reaching the 63-point threshold for the bonus,
+but perhaps does not prioritize it early enough in the game. We also see Ones, Twos, and Chance being used as "dump" categories later in the game when no better options are available.
+The agent does smartly hold these open.
+
+It could be that the agent is risk-averse, preferring the immediate points from lower-section categories, or it simply doesn't properly
+realize it needs to take at least one above-average score in each of the 4's, 5's, and 6's to offset lower scores in the 1's, 2's, and 3's later in the game.
+This is the core issue for the agent; it prefers 4-of-a-kind early in training, and has difficulty learning when to pivot to bonus-seeking behavior later on.
+We see evidence of this when comparing the category mean scores against DP in Table~\ref{tab:final-results}.
+This is the best evidence of the long-horizon credit-assignment challenge in Yahtzee; the agent needs to learn
+to sacrifice the marginal points from the 5th dice in 4-of-a-kind, in order to keep itself in a better position to earn the bonus later.
+
+The agent does surprisingly well in achieving Yahtzee, indicating it has figured out how to lock in on selecting pairs, triples, and quads when the opportunity arises.
+It would be worth investigating further if the agent is explicitly targeting Yahtzee or if it's a byproduct of its general strategy,
+and if the agent recognizes that even 1's and 2's can be worth a lot, if they score a Yahtzee.
+
+Reward shaping definitely helped the agent learn the bonus more quickly, but had its limits, as seen in Table~\ref{tab:ablation-results}.
+We pushed the potential approach to the limit of it becoming a separate objective, but the linear bonus curve during the learning curve indicated the same underlying challenge remained.
+At very high levels, the agent completely derailed and failed to prioritize the lower section, most notably ignoring Yahtzees.
+It's worth restating that, since we are using a learned potential function, we do break the theoretical guarantees of potential-based reward shaping \cite{ng1999policyinvariance},
+this could explained the mixed results, and perhaps a manually designed potential function would work better.
+
+In general our results backed up many known challenges in reinforcement learning, in that
+deep RL methods struggle with long-horizons, credit assignment, variance,
+and balanced exploration.
+Models are typically very quick to learn local strategies that yield immediate rewards;
+for example, our agents quickly snapped to the DP-optimal scores for full-house, straights, and even Yahtzee.
+However, they systematically under optimized the only part of Yahtzee that
+actually requires planning over the entire game: the upper section bonus.
+Yahtzee exposes this dynamic in a compact setting, showing it's value as a benchmark for RL research.
