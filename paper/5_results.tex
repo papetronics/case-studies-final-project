@@ -15,9 +15,11 @@ As shown in Figure~\ref{fig:single-turn-performance}, although it does not nearl
 Figure~\ref{fig:single-turn-fullgame} demonstrates the full-game performance when evaluating the single-turn trained agent.
 However, we suspected target leakage (selecting parameters and architectures based on full-game performance) could also play a role. This is analyzed in Section~\ref{sec:tradeoff-curve}.
 
-\input{figures/single_turn_performance}
+%\input{figures/single_turn_performance}
 
-\input{figures/single_turn_fullgame}
+%\input{figures/single_turn_fullgame}
+
+\input{figures/single_turn_dual_axis}
 
 \subsubsection{Single vs Full-game Tradeoff Curve}
 \label{sec:tradeoff-curve}
@@ -100,10 +102,10 @@ and used it in all of our main experiments. This was ablated to understand its t
 
 \input{figures/layernorm}
 
-Lastly, we used Swish activation functions in our network for all of our main experiments, as it had been reported to work well in RL settings \cite{elfwing2017sigmoidweightedlinearunitsneural}.
-We ablated this to ReLU to understand its true impact, as shown in Figure~\ref{fig:silu-vs-relu}.
+% Lastly, we used Swish activation functions in our network for all of our main experiments, as it had been reported to work well in RL settings \cite{elfwing2017sigmoidweightedlinearunitsneural}.
+% We ablated this to ReLU to understand its true impact, as shown in Figure~\ref{fig:silu-vs-relu}.
 
-\input{figures/activations}
+% \input{figures/activations}
 
 \subsubsection{Credit Assignment: TD(0) vs GAE}
 
@@ -127,36 +129,36 @@ The learning curves are shown in Figure~\ref{fig:entropy-mean-score}, with rolli
 The overall results for each entropy regime are summarized in Table~\ref{tab:entropy-regimes}.
 
 \begin{table}[H]
-    \centering
-    \small
-    \caption{Entropy regime definitions}
-    \label{tab:entropy-regime-definitions}
-    \begin{tabular}{lcccc}
-        \hline
-        \textbf{Regime} & $\beta_{\mathrm{roll}}$ & $\beta_{\mathrm{score}}$ & Hold / Anneal \\
-        \hline
-        None            & 0.0                     & 0.0                      & 0 / 0         \\
-        Low             & 0.05 $\rightarrow$ 0.01 & 0.01 $\rightarrow$ 0.005 & 0.2 / 0.4     \\
-        Baseline        & 0.1 $\rightarrow$ 0.02  & 0.03 $\rightarrow$ 0.01  & 0.3 / 0.6     \\
-        High            & 0.2 $\rightarrow$ 0.04  & 0.06 $\rightarrow$ 0.02  & 0.35 / 0.65   \\
-        \hline
-    \end{tabular}
+  \centering
+  \small
+  \caption{Entropy regime definitions}
+  \label{tab:entropy-regime-definitions}
+  \begin{tabular}{lcccc}
+    \hline
+    \textbf{Regime} & $\beta_{\mathrm{roll}}$ & $\beta_{\mathrm{score}}$ & Hold / Anneal \\
+    \hline
+    None            & 0.0                     & 0.0                      & 0 / 0         \\
+    Low             & 0.05 $\rightarrow$ 0.01 & 0.01 $\rightarrow$ 0.005 & 0.2 / 0.4     \\
+    Baseline        & 0.1 $\rightarrow$ 0.02  & 0.03 $\rightarrow$ 0.01  & 0.3 / 0.6     \\
+    High            & 0.2 $\rightarrow$ 0.04  & 0.06 $\rightarrow$ 0.02  & 0.35 / 0.65   \\
+    \hline
+  \end{tabular}
 \end{table}
 
 \begin{table}[H]
-    \centering
-    \small
-    \caption{Entropy regime performance (placeholder data)}
-    \label{tab:entropy-regimes}
-    \begin{tabular}{lccc}
-        \hline
-        \textbf{Regime} & \textbf{Mean Score} & \textbf{Bonus \%} & \textbf{Yahtzee \%} \\
-        \hline
-        Low Entropy     & $<X>$               & <X>               & <Y>                 \\
-        Baseline        & $<X>$               & <X>               & <Y>                 \\
-        High Entropy    & $<X>$               & <X>               & <Y>                 \\
-        \hline
-    \end{tabular}
+  \centering
+  \small
+  \caption{Entropy regime performance (placeholder data)}
+  \label{tab:entropy-regimes}
+  \begin{tabular}{lccc}
+    \hline
+    \textbf{Regime} & \textbf{Mean Score} & \textbf{Bonus \%} & \textbf{Yahtzee \%} \\
+    \hline
+    Low Entropy     & $<X>$               & <X>               & <Y>                 \\
+    Baseline        & $<X>$               & <X>               & <Y>                 \\
+    High Entropy    & $<X>$               & <X>               & <Y>                 \\
+    \hline
+  \end{tabular}
 \end{table}
 
 \input{figures/entropy_mean_score}
@@ -170,56 +172,56 @@ to understand their impact on final performance. Figure~\ref{fig:shaping-heatmap
 \input{figures/shaping_heatmap}
 
 \subsubsection{Summary}
-In summary, we found that A2C with TD(0) targets, a combined dice representation, Layer Normalization, SILU activations,
+In summary, we found that A2C with TD(0) targets, a combined dice representation, Layer Normalization,
 and carefully tuned entropy regularization produced the best results.
 Table~\ref{tab:full-game-summary} presents a comprehensive comparison of all algorithms tested.
 
 \begin{table*}[t]
-    \centering
-    \small
-    \caption{Full-game performance summary}
-    \label{tab:full-game-summary}
-    \begin{tabular}{lcccccc}
-        \hline
-        \textbf{Algorithm}         & \textbf{Training Budget} & \textbf{Mean Score} & \textbf{Std Dev} & \textbf{Bonus Rate (\%)} & \textbf{Yahtzee Rate (\%)} & \textbf{$\geq$250 (\%)} \\
-        \hline
-        DP Optimal                 & --                       & 254.59              & --               & 68.12\%                  & 33.74\%                    & 48.37\%                 \\
-        \hline
-        A2C                        & 250K games               & 230.38              & 2503.83          & 11.37\%                  & 31.08\%                    & 27.82\%                 \\
-        A2C                        & 1M games                 & 241.78              & 3230.86          & 24.93\%                  & 34.05\%                    & 36.87\%                 \\
-        PPO ($\lambda=0.3$, $k=5$) & 50k games                & 204.54              & 860.02           & 2.49\%                   & 6.54\%                     & 6.08\%                  \\
-        PPO ($\lambda=0.3$, $k=4$) & 250K games               & 230.20              & 2345.5           & 19.71\%                  & 24.87\%                    & 28.38\%                 \\
-        REINFORCE (full-game)      & 250K games               & 189.84              & 812.24           & 2.83\%                   & 1.70\%                     & 2.06\%                  \\
-        REINFORCE (full-game)      & 1M games                 & $<X>$               & $<Y>$            & $<X>$                    & $<Y>$                      & $<Z>$                   \\
-        REINFORCE (single-turn)    & 500K games               & 201.48              & 1366.00          & 0.89\%                   & 19.63\%                    & 9.34\%                  \\
-        \hline
-    \end{tabular}
+  \centering
+  \small
+  \caption{Full-game performance summary}
+  \label{tab:full-game-summary}
+  \begin{tabular}{lcccccc}
+    \hline
+    \textbf{Algorithm}         & \textbf{Training Budget} & \textbf{Mean Score} & \textbf{Std Dev} & \textbf{Bonus Rate (\%)} & \textbf{Yahtzee Rate (\%)} & \textbf{$\geq$250 (\%)} \\
+    \hline
+    DP Optimal                 & --                       & 254.59              & --               & 68.12\%                  & 33.74\%                    & 48.37\%                 \\
+    \hline
+    A2C                        & 250K games               & 230.38              & 2503.83          & 11.37\%                  & 31.08\%                    & 27.82\%                 \\
+    A2C                        & 1M games                 & 241.78              & 3230.86          & 24.93\%                  & 34.05\%                    & 36.87\%                 \\
+    PPO ($\lambda=0.3$, $k=5$) & 50k games                & 204.54              & 860.02           & 2.49\%                   & 6.54\%                     & 6.08\%                  \\
+    PPO ($\lambda=0.3$, $k=4$) & 250K games               & 230.20              & 2345.5           & 19.71\%                  & 24.87\%                    & 28.38\%                 \\
+    REINFORCE (full-game)      & 250K games               & 189.84              & 812.24           & 2.83\%                   & 1.70\%                     & 2.06\%                  \\
+    REINFORCE (full-game)      & 1M games                 & $<X>$               & $<Y>$            & $<X>$                    & $<Y>$                      & $<Z>$                   \\
+    REINFORCE (single-turn)    & 500K games               & 201.48              & 1366.00          & 0.89\%                   & 19.63\%                    & 9.34\%                  \\
+    \hline
+  \end{tabular}
 \end{table*}
 
 For our best configuration, A2C trained over 1 million games, the final score distribution is compared to DP-optimal in Table \ref{tab:dp-score-distribution}.
 \begin{table}[htb]
-    \centering
-    \small
-    \caption{$P(\text{score} \geq n)$, 100,000 games}
-    \label{tab:dp-score-distribution}
-    \begin{tabular}{rcc}
-        \hline
-        \textbf{$n$} & A2C      & DP                        \\
-        \hline
-        50           & 1.000000 & 1.000000                  \\
-        100          & 0.999980 & 0.999998                  \\
-        150          & 0.989730 & 0.991230                  \\
-        200          & 0.820980 & 0.863584                  \\
-        250          & 0.368730 & 0.483683                  \\
-        300          & 0.109080 & 0.143265                  \\
-        400          & 0.025960 & 0.038351                  \\
-        500          & 0.004870 & 0.007192                  \\
-        750          & 0        & $5.11603 \cdot 10^{-6}$   \\
-        1000         & 0        & $5.57508 \cdot 10^{-9}$   \\
-        1250         & 0        & $ 6.49213 \cdot 10^{-13}$ \\
-        1500         & 0        & $ 3.93308 \cdot 10^{-19}$ \\
-        \hline
-    \end{tabular}
+  \centering
+  \small
+  \caption{$P(\text{score} \geq n)$, 100,000 games}
+  \label{tab:dp-score-distribution}
+  \begin{tabular}{rcc}
+    \hline
+    \textbf{$n$} & A2C      & DP                        \\
+    \hline
+    50           & 1.000000 & 1.000000                  \\
+    100          & 0.999980 & 0.999998                  \\
+    150          & 0.989730 & 0.991230                  \\
+    200          & 0.820980 & 0.863584                  \\
+    250          & 0.368730 & 0.483683                  \\
+    300          & 0.109080 & 0.143265                  \\
+    400          & 0.025960 & 0.038351                  \\
+    500          & 0.004870 & 0.007192                  \\
+    750          & 0        & $5.11603 \cdot 10^{-6}$   \\
+    1000         & 0        & $5.57508 \cdot 10^{-9}$   \\
+    1250         & 0        & $ 6.49213 \cdot 10^{-13}$ \\
+    1500         & 0        & $ 3.93308 \cdot 10^{-19}$ \\
+    \hline
+  \end{tabular}
 \end{table}
 
 \subsection{Policy Analysis}

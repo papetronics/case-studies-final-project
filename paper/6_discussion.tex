@@ -19,7 +19,7 @@ The choice of RL algorithm and credit assignment was crucial; A2C with TD(0) out
 as shown in Table~\ref{tab:full-game-summary}.
 As seen in Figures~\ref{fig:dice-representation-bonus} and~\ref{fig:feature-ablation-bonus}, the state and action encodings played a significant role; specifically providing (rather than forcing the network to learn) some easily calculable features improved learning.
 Categorical action distributions outperformed Bernoulli ones, as seen in Figure~\ref{fig:bernoulli-vs-categorical}, allowing the network to better model compound actions.
-Swish and LayerNorm both improved stability and final performance, as shown in Figure~\ref{fig:silu-vs-relu} and Figure~\ref{fig:layernorm-learning}.
+LayerNorm improved stability and final performance, as shown in Figure~\ref{fig:layernorm-learning}.
 Lastly, we found diminishing returns for model size; larger models improved performance up to a point, but after a certain size, gains were minimal, as shown in Figure~\ref{fig:architecture-heatmap}.
 
 Moving from single-turn to full-game play, REINFORCE struggled with the
