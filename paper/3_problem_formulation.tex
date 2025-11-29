@@ -5,7 +5,7 @@
 \subsubsection{Rules of Yahtzee}
 \textit{Yahtzee} is played with five standard six-sided dice and a shared scorecard containing 13 categories.
 Turns are rotated among players. A turn starts with a player rolling all five dice. They may then choose to keep
-some dice, and re-roll the remaining ones. This process can be repeated up to two more times, for a total of three rolls.
+some dice, re-rolling the remaining ones. This process can be repeated two more times, for a total of three total rolls.
 After the final roll, the player must select one of the 13 scoring categories to apply to their current dice.
 Each category has specific scoring rules, and each can only be used once per game.
 
@@ -46,7 +46,9 @@ The current turn number can be represented as:
 
 A single turn is composed of an initial dice roll, two optional re-rolls, and a final scoring decision.
 Let $r = 0$, with $r \in \{0,1,2\}$ which is the number of rolls taken so far.
+
 Prior to the first roll, the dice are randomized:
+
 $$
     \mathbf{d}_{r=0} \sim U(\mathcal{D})
 $$
@@ -88,6 +90,8 @@ $$
     \end{cases}
 $$
 
+There is an additional "Joker" bonus, detailed in Appendix~\ref{app:scoring}.
+
 The player's score can thus be calculated as:
 \begin{equation}
     \mathrm{score}(\mathbf{c}) = B(\mathbf{c}) + \big\langle \mathbf{u}(\mathbf{c}), \mathbf{c} \big\rangle
@@ -100,15 +104,15 @@ A state is represented as $\mathbf{s} = (\mathbf{d},\mathbf{c},r, t)$, where $\m
 dice configuration, $\mathbf{c}$ the scorecard, and $r$ the roll index, and $t$ the current turn index
 (see Section~\ref{sec:yahtzee-definitions}).
 
-For simplicity, we define the action $\mathbf{a} = (\mathbf{k}, \mathbf{s})$, where $\mathbf{k}$ is the keep vector and $s$ is the score category choice.
-We can define the action as a parameterization of the policy: $\pi_{\theta}(\mathbf{a}|\mathbf{s}) = \pi_{\theta}(\phi(\mathbf{s}))$,
+The action is $\mathbf{a} = (\mathbf{k}, \mathbf{s})$, where $\mathbf{k}$ is the keep vector and $s$ is the score category choice.
+This can be restated as a parameterization of the policy: $\pi_{\theta}(\mathbf{a}|\mathbf{s}) = \pi_{\theta}(\phi(\mathbf{s}))$,
 where $\phi(\mathbf{s})$ is a feature representation of the state $\mathbf{s}$.
 
-The transition function $P$ is is specified in Appendix~\ref{app:transition-function}. Note that when $r < 2$, the $\mathbf{k}$ is used by $P$, otherwise $\mathbf{s}$ is used.
+The transition function $P$ is is specified in Appendix~\ref{app:transition-function}.
 
-The reward is the change in total score between steps $R_t = \mathrm{score}(c_{t+1}) - \mathrm{score}(c_t)$,
-and since we desire to maximize total score at the end of the game, we set $\gamma = 1$.
+The reward is the change in total score between steps $R_t = \mathrm{score}(c_{t+1}) - \mathrm{score}(c_t)$.
 
+Since we desire to maximize total score at the end of the game, $\gamma = 1$.
 
 \subsection{Single-Turn Optimization Task}
 In the single-turn optimization task, the agent is trained to maximize the expected score over a single turn.
@@ -116,7 +120,7 @@ This task has 3 steps total; after being initialized with a random dice roll, th
 dice to keep and which to re-roll twice, and then selects a scoring category. A single reward is given at the end of the turn.
 
 This is a useful subproblem to study, as it isolates the decision-making process in a single turn,
-allowing us to analyze the network architecture and training regime in a low-variance setting.
+this allows us to quickly iterate on architecture and training choices with shorter training times and without the complications of long-term credit assignment.
 
 \subsection{Full-Game Optimization Task}
 In the full-game optimization task, 13-turn episodes (totalling 39 individual steps) are played to completion.

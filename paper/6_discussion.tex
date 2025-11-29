@@ -1,13 +1,77 @@
 
 \section{Discussion}
 % <400-600 words>
-\subsection{Summary}
-<Discuss implications of results, limitations, and potential improvements.>
 
-Lorem ipsum dolor sit amet consectetur adipiscing elit quisque faucibus ex sapien vitae pellentesque sem placerat in id cursus mi pretium tellus duis convallis tempus leo eu aenean sed diam urna tempor pulvinar vivamus fringilla lacus nec metus bibendum egestas iaculis massa nisl malesuada lacinia integer nunc posuere ut hendrerit semper vel class aptent taciti sociosqu ad litora torquent per conubia nostra inceptos himenaeos orci varius natoque penatibus et magnis dis parturient montes nascetur ridiculus mus donec rhoncus eros lobortis nulla molestie mattis scelerisque maximus eget fermentum odio phasellus non purus est efficitur laoreet mauris pharetra vestibulum fusce dictum risus blandit quis suspendisse aliquet nisi sodales consequat magna ante condimentum neque at luctus nibh finibus facilisis dapibus etiam interdum tortor ligula congue sollicitudin erat viverra ac tincidunt nam porta elementum a enim euismod quam justo lectus commodo augue arcu dignissim velit aliquam imperdiet mollis nullam volutpat porttitor ullamcorper rutrum gravida cras eleifend turpis fames primis vulputate ornare sagittis vehicula praesent dui felis venenatis ultrices proin libero feugiat tristique accumsan maecenas potenti ultricies habitant morbi senectus netus suscipit auctor curabitur facilisi cubilia curae hac habitasse platea dictumst lorem ipsum dolor sit amet consectetur adipiscing elit quisque faucibus ex sapien vitae pellentesque sem placerat in id cursus mi pretium tellus duis convallis tempus leo eu aenean sed diam urna tempor pulvinar vivamus fringilla lacus nec metus bibendum egestas iaculis massa nisl malesuada lacinia integer nunc posuere ut hendrerit semper vel class aptent taciti sociosqu ad litora torquent per conubia nostra inceptos himenaeos.
+\subsection{Summary}
+In this work, we attempted to use policy-gradient reinforcement learning methods to teach agents to play \textit{Yahtzee} through self-play.
+We found that with appropriate algorithmic and architectural choices, it is possible to approach near-optimal performance.
+Advantage Actor-Critic (A2C) with TD(0) was consistently stable and efficient; REINFORCE and PPO were more fragile and underperformed at equal training budgets.
+Our best A2C agent, trained over 1 million games, achieved a median score of 241.78 points over 100,000 evaluation games, which is within 5.0\% of the DP-optimal score of 254.59.
+These results are best reported in Table~\ref{tab:full-game-summary}.
+
+We found that single-turn REINFORCE gets surprisingly high scores,
+often outperforming full-game REINFORCE agents, but fails to learn a coherent bonus strategy.
+We observed a tradeoff between single-turn and full-game performance, especially at higher performance levels. as seen in Figure~\ref{fig:pareto-frontier},
+and found a Pareto frontier between the two objectives.
+
+Our ablation studies highlighted several design choices that significantly impacted final performance.
+The choice of RL algorithm and credit assignment was crucial; A2C with TD(0) outperformed both PPO and REINFORCE in terms of stability and final score,
+as shown in Table~\ref{tab:full-game-summary}.
+As seen in Figures~\ref{fig:dice-representation-bonus} and~\ref{fig:feature-ablation-bonus}, the state and action encodings played a significant role; specifically providing (rather than forcing the network to learn) some easily calculable features improved learning.
+Categorical action distributions outperformed Bernoulli ones, as seen in Figure~\ref{fig:bernoulli-vs-categorical}, allowing the network to better model compound actions.
+Swish and LayerNorm both improved stability and final performance, as shown in Figure~\ref{fig:silu-vs-relu} and Figure~\ref{fig:layernorm-learning}.
+Lastly, we found diminishing returns for model size; larger models improved performance up to a point, but after a certain size, gains were minimal, as shown in Figure~\ref{fig:architecture-heatmap}.
+
+Moving from single-turn to full-game play, REINFORCE struggled with the
+variance and credit assignment challenges; in fact,
+it was difficult to return to the same level of performance we found with the single-turn agent. Performance immediately improved when we switched to TD(0) returns and A2C,
+after adjusting certain hyperparameters (notably the critic coefficient).
+When A2C still struggled with the upper bonus strategy, we implemented GAE returns,
+However, they did not lead to significant improvement, as shown in Figures~\ref{fig:gae-lambda-performance} and~\ref{fig:gae-lambda-bonus};
+moderate values of GAE were slightly helpful, but high values led back to instability.
+
+Entropy regularization played a huge role in stabilizing training and encouraging exploration, best seen in Figure~\ref{fig:entropy-mean-score};
+striking the right balance of explore vs exploit was critical. There's a narrow sweet spot:
+too little entropy and the policy collapses, does not explore and we get stuck in local minima;
+too much entropy and the policy becomes too random to learn important strategies.
+
+There were some limitations to our approach. First, we fixed the training budget to 1 million games for all agents,
+but could only explore the hyperparameter space using 250,000 games per run.
+Second, we typically ran only a single seed per configuration due to compute constraints, so it's possible that some results were affected by random chance.
+Third, we only explored a limited set of architectures and hyperparameters; more extensive sweeps, especially around PPO,
+could yield better performance.
+We also did not explore transfer learning from single-turn to full-game agents, which could improve sample efficiency.
 
 \subsection{Strategy \& Failure Modes}
-<Analyze common failure modes observed in learned policies>
-<Analyze failures during training such as policy collapse>
+From the per-turn statistics in Table~\ref{tab:top-categories-by-turn}, we can infer a typical game,
+which begins with the agent locking in straights or full houses.
+These are fixed, high-value categories that provide a strong foundation. The agent also prioritizes the 4-of-a-kind category early on,
+typically on the 6th turn. The agent then turns its attention to the upper section, often scoring in the
+4's, 5's, 6's, sometimes taking 3-of-a-kind instead.
+However, it seems to prefer taking a lower-section score for 5's and 6's rather than using them to build towards the bonus.
+The agent seems to understand the importance of reaching the 63-point threshold for the bonus,
+but perhaps does not prioritize it early enough in the game. We also see Ones, Twos, and Chance being used as "dump" categories later in the game when no better options are available.
+The agent does smartly hold these open.
 
-Lorem ipsum dolor sit amet consectetur adipiscing elit quisque faucibus ex sapien vitae pellentesque sem placerat in id cursus mi pretium tellus duis convallis tempus leo eu aenean sed diam urna tempor pulvinar vivamus fringilla lacus nec metus bibendum egestas iaculis massa nisl malesuada lacinia integer nunc posuere ut hendrerit semper vel class aptent taciti sociosqu ad litora torquent per conubia nostra inceptos himenaeos orci varius natoque penatibus et magnis dis parturient montes nascetur ridiculus mus donec rhoncus eros lobortis nulla molestie mattis scelerisque maximus eget fermentum odio phasellus non purus est efficitur laoreet mauris pharetra vestibulum fusce dictum risus blandit quis suspendisse aliquet nisi sodales consequat magna ante condimentum neque at luctus nibh finibus facilisis dapibus etiam interdum tortor ligula congue sollicitudin erat viverra ac tincidunt nam porta elementum a enim euismod quam justo lectus commodo augue arcu dignissim velit aliquam imperdiet mollis nullam volutpat porttitor ullamcorper rutrum gravida cras eleifend turpis fames primis vulputate ornare sagittis vehicula praesent dui felis venenatis ultrices proin libero feugiat tristique accumsan maecenas potenti ultricies habitant morbi senectus netus suscipit auctor curabitur facilisi cubilia curae hac habitasse platea dictumst lorem ipsum dolor sit amet consectetur adipiscing elit quisque faucibus ex sapien vitae pellentesque sem placerat in id cursus mi pretium tellus duis convallis tempus leo eu aenean sed diam urna tempor pulvinar vivamus fringilla lacus nec metus bibendum egestas iaculis massa nisl malesuada lacinia integer nunc posuere ut hendrerit semper vel class aptent taciti sociosqu ad litora torquent per conubia nostra inceptos himenaeos.
+It could be that the agent is risk-averse, preferring the immediate points from lower-section categories, or it simply doesn't properly
+realize it needs to take at least one above-average score in each of the 4's, 5's, and 6's to offset lower scores in the 1's, 2's, and 3's later in the game.
+This is the core issue for the agent; it has difficulty learning when to pivot to bonus-seeking behavior later in training.
+We see evidence of this when comparing the category mean scores against DP in Figures~\ref{fig:category-upper} and~\ref{fig:category-lower}.
+Fundamentally, the agent needs to learn to sacrifice the marginal points from the 5th dice in 4-of-a-kind, in order to keep itself in a better position to earn the bonus later.
+
+The agent does surprisingly well in achieving Yahtzee, indicating it has figured out how to lock in on selecting pairs, triples, and quads when the opportunity arises.
+It would be worth investigating further if the agent is explicitly targeting Yahtzee or if it's a byproduct of its general strategy,
+and if the agent recognizes that even 1's and 2's can be worth a lot, if they score a Yahtzee.
+
+Reward shaping definitely helped the agent learn the bonus more quickly, but had its limits.
+At very high levels, the agent completely derailed and failed to prioritize the lower section, most notably ignoring Yahtzees.
+It's worth restating that, since we are using a learned potential function, we do break the theoretical guarantees of potential-based reward shaping \cite{ng-1999-reward-shaping},
+this could explained the mixed results.
+
+In general our results backed up many known challenges in reinforcement learning:
+deep RL methods struggle with long-horizons, credit assignment, variance,
+and balanced exploration.
+Models are typically very quick to learn local strategies that yield immediate rewards;
+for example, our agents quickly snapped to the DP-optimal scores for full-house, straights, and even Yahtzee.
+However, they systematically under optimized the only part of Yahtzee that require planning over the entire game: the upper section bonus.
+Yahtzee exposes this dynamic in a compact setting, showing it's value as a benchmark for RL research.
