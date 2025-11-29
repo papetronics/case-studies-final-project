@@ -163,7 +163,11 @@ The overall results for each entropy regime are summarized in Table~\ref{tab:ent
 
 \input{figures/entropy_rolling_entropy}
 
+\subsubsection{Reward Shaping}
+We co-varied the shaping loss weight and the strength of the shaping reward
+to understand their impact on final performance. Figure~\ref{fig:shaping-heatmap} shows the results of this ablation study.
 
+\input{figures/shaping_heatmap}
 
 \subsubsection{Summary}
 In summary, we found that A2C with TD(0) targets, a combined dice representation, Layer Normalization, SILU activations,
