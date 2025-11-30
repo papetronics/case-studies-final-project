@@ -45,7 +45,7 @@ Later, we attempt a longer, 1 million full-game training run for our best algori
 REINFORCE proved challenging to optimize to high performance levels given our fixed training budget.
 It was sensitive to hyperparameters such as the critic coefficient, the entropy bonus, and batch size.
 We also found that REINFORCE required more games to converge.
-After optimization we were able to achieve reasonable performance; the million game training run scored a mean of <X> points.
+After optimization we were able to achieve reasonable performance; the million game training run scored a mean of 203.7 points.
 
 Our most successful algorithm was TD(0)-style Actor-Critic (A2C). We found is easiest to tune and with an immediate performance boost over REINFORCE.
 This was the algorithm we use for the ablation studies. With a training budget of 1 million full-games,
@@ -57,6 +57,7 @@ We also attempted to use Proximal Policy Optimization (PPO) with TD(0), but foun
 $k$ epochs of minibatch updates, which significantly increases training time compared to A2C and REINFORCE.
 For fair comparison to the other algorithms, reduced the total number of games seen during training by a factor of $k$.
 PPO was able to outperform REINFORCE, but was not able to reach A2C performance within our training budget.
+It earned a mean score of 230.2 points.
 However, it is possible PPO could reach or surpass A2C performance with more extensive hyperparameter tuning.
 
 Figure~\ref{fig:full-game-learning-curves} shows the learning curves for all three algorithms during training.
@@ -170,7 +171,7 @@ Table~\ref{tab:full-game-summary} presents a comprehensive comparison of all alg
         PPO ($\lambda=0.3$, $k=5$) & 50k games                & 204.54              & 860.02           & 2.49\%                   & 6.54\%                     & 6.08\%                  \\
         PPO ($\lambda=0.3$, $k=4$) & 250K games               & 230.20              & 2345.5           & 19.71\%                  & 24.87\%                    & 28.38\%                 \\
         REINFORCE (full-game)      & 250K games               & 189.84              & 812.24           & 2.83\%                   & 1.70\%                     & 2.06\%                  \\
-        REINFORCE (full-game)      & 1M games                 & $<X>$               & $<Y>$            & $<X>$                    & $<Y>$                      & $<Z>$                   \\
+        REINFORCE (full-game)      & 1M games                 & 203.73              & 1265.83          & 6.44\%                   & 10.61\%                    & 9.22\%                  \\
         REINFORCE (single-turn)    & 500K games               & 201.48              & 1366.00          & 0.89\%                   & 19.63\%                    & 9.34\%                  \\
         \hline
     \end{tabular}
