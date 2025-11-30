@@ -9,14 +9,12 @@ In this paper, we follow notation from \citet{sutton-2018-reinforcement-book} an
 There are multiple methods for assigning credit to actions taken by a policy.
 Monte-Carlo (MC) returns $G_{t}^{MC}$ use a summation over the full series of rewards until the end of the episode.
 This approach is unbiased but has high variance.
-In contrast, Temporal Difference methods use a "bootstrapped" estimate of future rewards to reduce variance.
+In contrast, TD(0) "Temporal Difference" methods use a "bootstrapped" estimate of future rewards to reduce variance.
 Essentially, they only consider received rewards $R$ in a specific time window, and use an estimate from the value function $V(S_{t+1})$ for future rewards beyond that window; this is called the TD estimate \cite{sutton-2018-reinforcement-book}.
-This time window can also be adjusted, depending on the task.
-For example, n-step returns $G_{t}^{TD(n)}$  interpolate between MC and single-step TD returns, allowing us to define a time horizon $n$ over which to sum rewards before bootstrapping.
+This time window can also be adjusted using n-step returns, $G_{t}^{TD(n)}$, which interpolate between MC and TD(0) returns by defining a time horizon $n$ over which to sum rewards before bootstrapping.
 A related method is $TD(\lambda)$, which uses an exponentially weighted average of n-step returns, effectively blending multiple time horizons into a single estimate controlled by $\lambda$ \cite{sutton-2018-reinforcement-book}.
 
-While TD estimates are biased (since they rely on future value estimates to be accurate), they have much lower variance than full-episode returns.
-Learning the value function over shorter horizons is a simpler problem than estimating the entire sequence of rewards, so in some environments, TD methods are more sample efficient than REINFORCE.
+While TD estimates are biased (since they rely on future value estimates to be accurate), they have much lower variance than full-episode returns, often improving sample efficiency.
 They also provide the benefit of being able to learn online rather than waiting until the end of an episode.
 
 Additionally, pure TD methods can also be viewed as a form of approximate dynamic programming, making them a natural fit for domains where dynamic-programming solutions exist \cite{bertsekas1996neuro}.
@@ -27,7 +25,7 @@ A simple formulation of this is the REINFORCE algorithm \cite{williams-1992-rein
 One trick for reducing variance in REINFORCE is to subtract a baseline (often just an average return, but potentially a learned estimate) from an episode's MC return.
 This yields an advantage estimate that reduces variance without changing its expectation \cite{weaver2013optimal, greensmith-2004-variance-reduction}.
 
-Actor-critic methods \cite{konda-1999-actorcritic} such as Advantage Actor-Critic (A2C) and Asynchronous Advantage Actor-Critic (A3C) \cite{mnih-2016-a3c} typically use a TD-style return estimate to update the policy.
+Actor-critic methods \cite{konda-1999-actorcritic} such as Advantage Actor-Critic (A2C) \cite{mnih-2016-a3c} typically use a TD-style return estimate to update the policy.
 These methods learn a separate value function: the critic $V_{\phi}$.
 This critic is used directly in the TD return estimate as the bootstrap value estimate for a state.
 For these methods, we can define the TD error $\delta_t$ as the difference between the TD estimate and the value estimate for the current state $V(S_t)$.
@@ -54,12 +52,12 @@ This has been shown to give practitioners the ability to change learning pattern
 The potential function can be hand-designed or learned, although a learned potential function could inadvertently change the optimal policy if not done carefully \cite{devlin-2014-potential-based}.
 
 \subsection{Complex Games}
-Typical board and dice games have extreme state complexity or stochasticity; reinforcement learning methods are a natural fit for these problems.
-In a classic example, \citet{tesauro1995tdgammon} utilized temporal difference learning to achieve superhuman performance in \textit{Backgammon}, another game with a large state space and stochastic elements.
-Tetris, which is deterministic but combinatorial, has also been studied extensively; \citet{bertsekas1996tetris} utilized approximate dynamic programming methods to learn effective policies for the game,
+RL methods have been shown to be successful in games despite high complexity or stochasticity.
+In a classic example, \citet{tesauro1995tdgammon} utilized temporal difference learning to achieve superhuman performance in \textit{Backgammon}.
+Tetris has also been studied extensively; \citet{bertsekas1996tetris} utilized approximate dynamic programming methods to learn effective policies for the game,
 while \citet{gabillon2013tetris} effectively tackled the game using reinforcement learning methods.
-\citet{moravcik2017deepstack} demonstrated that \textit{Texas Hold'em}, a stochastic game with hidden information, could be effectively learned.
-Many other stochastic games can be learned well, so long as methods which ensure better exploration are used \cite{osband2016bootstrappeddqn}.
+\citet{moravcik2017deepstack} demonstrated that \textit{Texas Hold'em} could be effectively learned, despite hidden information.
+Many games can be learned well, so long as methods which ensure better exploration are used \cite{osband2016bootstrappeddqn}.
 RL methods can also be used to reach high levels of performance on adversarial games, despite their sparse reward structures.
 For example, the game of Go, which has a notoriously intractable state space was solved using Monte-Carlo Tree Search and deep value networks \cite{silver2016alphago}.
 Subsequent work showed Go could be learned without the use of expert data, purely through self-play \cite{silver2017alphagozero}.
@@ -68,7 +66,7 @@ These works establish that RL methods can handle highly stochastic, combinatoria
 \subsection{DP Methods for Yahtzee}
 Solitaire \textit{Yahtzee} is a complex game with an upper bound of $~7 \times 10^{15}$ possible states in its state space.
 It has a high degree of stochasticity, as dice rolls are the primary driver of state transitions.
-Despite this, it has been analytically solved using dynamic programming techniques; \citet{verhoeff-1999-solitaire-yahtzee}, calculated that the average score achieved during ideal play is $254.59$ points, which serves as the gold-standard baselline for solitaire \textit{Yahtzee}.
+Despite this, it has been analytically solved using dynamic programming techniques; \citet{verhoeff-1999-solitaire-yahtzee}, calculated that the average score achieved during ideal play is $254.59$ points.
 Later work by \citet{glenn-2006-optimal-yahtzee} optimized the DP approach via symmetries to propose a more efficient algorithm for computing the optimal policy, with a reachable state space of $~5.3 \times 10^8$ states \cite{glenn-2007-solitaire-yahtzee}.
 
 However, adversarial \textit{Yahtzee} remains an open problem.
@@ -83,4 +81,4 @@ Later, \cite{yuan-2023-two-player-yahtzee} applied Deep-Q networks to the advers
 
 Additionally, some recent informal work has reported success using RL methods for \textit{Yahtzee}.
 For example, Yahtzotron used heavy supervised pretraining and A2C to achieve an average of $~236$ points \cite{Haefner2021Yahtzotron}.
-Although not a true reinforcement learning approach, \citet{DutschkeYahtzee} reports a statistical agent achieving a score of $241.6 \pm 40.7$ after just 8,000 games, using a combination of heuristics.
+Although not a true reinforcement learning approach, \citet{DutschkeYahtzee} reports an agent achieving a score of $241.6 \pm 40.7$ after just 8,000 games, using a combination of statistical heuristics.

@@ -1,6 +1,13 @@
 \section{Methodology}
 % <1400-1700 words>
 % 1076 words so far
+\subsection{Tasks}
+We optimize two distinct tasks: a single-turn optimization task and a full-game optimization task.
+In the full-game optimization task, 13-turn episodes (totalling 39 individual steps) are played to completion.
+The objective again is to maximize the total score at the end of the game.
+In the single-turn optimization task, the agent is trained to maximize the expected score over a single 3-step turn.
+This is a useful subproblem to study, allowing us to iterate on architecture and training choices with shorter training times and without the complications of long-term credit assignment.
+
 \subsection{State Representation \& Input Features}
 The design of $\mathbf{\phi}(\mathbf{s}) \rightarrow \mathbf{x}$ is one of the most critical components to the performance of a model \cite{sutton-2018-reinforcement-book}.
 
@@ -12,14 +19,7 @@ where $\mathbf{s}$ is the raw MDP state (e.g., dice configuration, scorecard, ro
 As such, several different representations were tested to evaluate their impact on learning efficiency and final performance.
 
 \subsubsection{Dice Representation}
-The dice representation can be encoded in several ways, depending on if we want to preserve permutation invariance or not.
-Preserving ordering information (and implicitly, ranking) gives the model the benefit of being able to directly output actions corresponding to dice indices,
-however, it comes at the cost of implicitly biasing the model to specific dice orderings; in other words, towards a local optima of keeping the highest ranking dice.
-However, eliminating ordering information requires the model to either waste capacity learning permutation invariance or be inherently supportive of invariance (e.g. with self-attention).
-It also requires a different action representation, since actions can no longer correspond to specific dice indices.
-To mitigate this, our environment always sorts the dice in ascending order before passing them to the agent.
-
-We attempted 3 different dice representations:
+The dice representation can be encoded in several ways, we attempted 3 different dice representations:
 
 \begin{align*}
      & \phi_{\mathrm{dice}}^{\mathrm{onehot}}(\mathbf{d})   &  & = \bigl[\mathrm{onehot}(d_1), \ldots, \mathrm{onehot}(d_5)\bigr]                                                  \\[4pt]
@@ -29,9 +29,12 @@ We attempted 3 different dice representations:
 
 A simple linear representation using the face values of the dice was also tested, but found to perform poorly and was abandoned early in experimentation.
 
+In our experiments, the environment sorts the dice before encoding them, reducing permutation artifacts but potentially introducing rank-based biases.
+Permutation-invariant representations are left for future work.
+
 \subsubsection{Scorecard Representation}
 There are two important pieces of information $\mathbf{\phi}$ must encode about the scorecard: whether a category is open or closed,
-and some form of progress towards the upper bonus.
+and some form of progress towards the upper bonus \cite{glenn-2007-solitaire-yahtzee}.
 $$\phi_{\mathrm{cat}}(\mathbf{c}) = \mathbf{u}(\mathbf{c})$$
 
 We experimented with several ways of encoding the bonus progress, but settled on a simple normalized, clamped sum of the upper section scores:
@@ -82,7 +85,7 @@ The architecture consists of a trunk, followed by heads for the policy and value
 We created the network using PyTorch \cite{paszke2019pytorch}, and the training loop is implemented using \texttt{pytorch-lightning} \cite{falcon2019pytorchlightning}.
 
 \subsubsection{Trunk}
-The trunk of the network is a standard feedforward architecture with $L$ (typically 2 or 3) fully connected hidden layers.
+The trunk of the network is a standard feedforward architecture with $L$ (typically 2) fully connected hidden layers.
 The width of each layer (hidden size $d_h$) is typically 600 neurons, found through empirical hyperparameter tuning (and ablated in Section~\ref{sec:arch-ablations}).
 We utilize layer normalization for improved training stability \cite{ba-2016-layernorm, bjorck-2022-high-variance},
 dropout with rate $p_d$ for regularization \cite{srivastava2014dropout},
@@ -269,7 +272,7 @@ All metrics were logged to Weights \& Biases \cite{biewald2020wandb}.
 
 \subsection{Reinforcement Learning}
 \subsubsection{Reward Shaping}
-We also implemented a learned potential reward shaping mechanism to assess its impact on the model's final performance and ability to learn the bonus.
+We also implemented a learned-potential reward shaping mechanism and assess its impact on the model's final performance and ability to learn the bonus.
 
 First, we implement a new head which predicts the normalized final upper section score at the end of the episode.
 This head's architecture is similar to the value head, with a fully connected hidden layer followed by a linear output, with no activation, described in Figure~\ref{fig:upper-head-architecture}.
@@ -356,8 +359,9 @@ For simplicity, we utilize $r$ to denote the shaped reward $R'$ for the remainde
 To encourage exploration, we also add an entropy bonus to the loss function  \cite{williams-peng-1991-function-optimization}. These are held
 constant at the start of training then linearly decayed to a final value near the end of training. Different entropy bonuses were used for rolling and scoring actions,
 as rolling actions had a tendency to collapse early in training.
+
 Exploration is particularly important for Yahtzee, there are many stable suboptimal policies (e.g., exclusively going for the upper bonus, always going for Yahtzees, etc).
-Once the model has figured out how to play the game, it quickly converges and won't explore other strategies as they often trade off short-term rewards for long-term gains.
+Once the model has figured out how to play the game, it quickly converges without additional exploration incentives.
 
 We can define the entropy bonus as:
 \begin{align}
@@ -487,4 +491,4 @@ We analyze several distinct training regimes for \textit{Yahtzee} agents:
 
 During training, we run 1,000 game episodes every 5 epochs (1\% of training) to monitor progress.
 These are run using deterministic actions (i.e., taking the action with highest probability) to get a clear picture of the learned policy's performance.
-At the end of training, we run a final evaluation of 100,000 games to get a robust estimate of the agent's performance.
+Our final evaluation consists of 100,000 simulated games, providing a robust estimate of the agent's performance.

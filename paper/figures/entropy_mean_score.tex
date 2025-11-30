@@ -7,7 +7,7 @@
                 width=\columnwidth,
                 height=5cm,
                 xlabel={Epochs},
-                ylabel={Mean Total Score},
+                ylabel={Mean Full-Game Score},
                 xmin=0, xmax=500,
                 ymin=50, ymax=240,
                 grid=both,
@@ -16,7 +16,6 @@
                 tick label style={font=\footnotesize},
                 label style={font=\footnotesize},
                 legend style={at={(0.98,0.02)},anchor=south east,font=\footnotesize},
-                title={(a) Mean Total Score},
                 title style={font=\footnotesize}
             ]
 
@@ -404,8 +403,8 @@
                 anchor=north,
                 width=\columnwidth,
                 height=5cm,
-                xlabel={Training Epoch},
-                ylabel={Mean Rolling Entropy},
+                xlabel={Epochs},
+                ylabel={Mean Rolling Entropy (nats)},
                 xmin=0, xmax=500,
                 ymin=0, ymax=3.5,
                 grid=both,
@@ -414,7 +413,6 @@
                 tick label style={font=\footnotesize},
                 label style={font=\footnotesize},
                 legend style={at={(0.98,0.98)},anchor=north east,font=\footnotesize},
-                title={(b) Mean Rolling Entropy},
                 title style={font=\footnotesize}
             ]
 

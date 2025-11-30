@@ -5,9 +5,9 @@
 \subsubsection{Rules of Yahtzee}
 \textit{Yahtzee} is played with five standard six-sided dice and a shared scorecard containing 13 categories.
 Turns are rotated among players. A turn starts with a player rolling all five dice. They may then choose to keep
-some dice, re-rolling the remaining ones. This process can be repeated two more times, for a total of three total rolls.
+some dice, re-rolling the remaining ones. This can be repeated two more times, for a total of three total rolls.
 After the final roll, the player must select one of the 13 scoring categories to apply to their current dice.
-Each category has specific scoring rules, and each can only be used once per game.
+Each category can only be used once and has specific criteria and scoring rules.
 
 \subsubsection{Mathematical Representation of Yahtzee}
 \label{sec:yahtzee-definitions}
@@ -90,7 +90,7 @@ $$
     \end{cases}
 $$
 
-There is an additional "Joker" bonus, detailed in Appendix~\ref{app:scoring}.
+There is an additional "Joker" bonus rule for multiple Yahtzees, omitted here for brevity.
 
 The player's score can thus be calculated as:
 \begin{equation}
@@ -113,17 +113,3 @@ The transition function $P$ is is specified in Appendix~\ref{app:transition-func
 The reward is the change in total score between steps $R_t = \mathrm{score}(c_{t+1}) - \mathrm{score}(c_t)$.
 
 Since we desire to maximize total score at the end of the game, $\gamma = 1$.
-
-\subsection{Single-Turn Optimization Task}
-In the single-turn optimization task, the agent is trained to maximize the expected score over a single turn.
-This task has 3 steps total; after being initialized with a random dice roll, the agent chooses which
-dice to keep and which to re-roll twice, and then selects a scoring category. A single reward is given at the end of the turn.
-
-This is a useful subproblem to study, as it isolates the decision-making process in a single turn,
-this allows us to quickly iterate on architecture and training choices with shorter training times and without the complications of long-term credit assignment.
-
-\subsection{Full-Game Optimization Task}
-In the full-game optimization task, 13-turn episodes (totalling 39 individual steps) are played to completion.
-The objective again is to maximize the total score at the end of the game.
-This task is more challenging due to the longer horizon and increased variance.
-Additionally, the network must learn to balance optimal single-turn play with long-term strategies, such as planning for the upper bonus.

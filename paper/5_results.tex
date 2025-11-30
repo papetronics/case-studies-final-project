@@ -9,7 +9,7 @@ $$\phi(\mathbf{s}) = \big[\phi_{\mathrm{dice}}^{\mathrm{combined}}(\mathbf{d}), 
 
 For outputs, it uses Bernoulli rolling actions and categorical scoring actions.
 The single turn model has a short horizon (3 steps); REINFORCE was the natural choice here.
-We trained on 260,000 games, ~10 million examples, using a batch size of 1,014 examples, for 10,000 total gradient updates.
+We trained on 260,000 games, \~10 million examples, using a batch size of 1,014 examples, for 10,000 total gradient updates.
 
 \input{figures/single_turn_dual_axis}
 
@@ -33,11 +33,6 @@ This indicates that selecting hyperparameters for a single-turn model based on f
 
 \subsection{Full-Game Results}
 % <600-700 words>
-For the full-game model, we added several additional features to the state representation: $\phi_{\mathrm{progress}}(t)$ and $\phi_{\mathrm{potential}}(\mathbf{d}, \mathbf{c})$
-while reusing the same underlying neural network architecture as the single-turn model.
-We intentionally omitted the $\phi_{\mathrm{potential}}(\mathbf{d}, \mathbf{c})$ feature in single turn, as we wanted to ensure the model was capable of learning to reason about category potential on its own,
-but found it to improve stability, especially with REINFORCE.
-
 \subsubsection{Algorithm Comparison: REINFORCE, A2C, PPO}
 
 \input{figures/baselines_bar_chart}
@@ -74,18 +69,17 @@ The final performance comparison is summarized in Figure~\ref{fig:final-performa
 
 While a number of additional representational choices were explored, one of the most important is the state representation of the dice.
 
-We wanted to highlight the importance of using a combined representation of both one-hot encodings and counts-based encodings of the dice.
-While the network could theoretically learn to reconstruct either representation from the other, in practice we found that using both improved performance, as demonstrated in Figure~\ref{fig:dice-representation-bonus}.
+First, we ablated the basic representation (bin count vs one-hot) to understand their impact.
+While the network can theoretically learn to reconstruct either representation from the other, in practice we found that using both improved reliability, as demonstrated in Figure~\ref{fig:dice-representation-bonus}.
 
 
-
-For the full-game model, we added several additional features beyond the single-turn representation.
-To understand the importance of each, they were ablated individually, with results shown in Figure~\ref{fig:feature-ablation-bonus}.
-
-
+For the full-game model, we added several additional features to the state representation: $\phi_{\mathrm{progress}}(t)$ and $\phi_{\mathrm{potential}}(\mathbf{d}, \mathbf{c})$
+while reusing the same underlying neural network architecture as the single-turn model.
+We intentionally omitted the $\phi_{\mathrm{potential}}(\mathbf{d}, \mathbf{c})$ feature in single turn, as we wanted to ensure the model was capable of learning category potentials.
+To understand the importance of each of these features, they were ablated individually, with results shown in Figure~\ref{fig:feature-ablation-bonus}.
 
 Lastly, we tested our hypothesis that a 32-way categorical would prove beneficial to complex actions that required specific combinations of dice to be held (see Section \ref{sec:rolling-action}).
-Figure~\ref{fig:bernoulli-vs-categorical} shows the performance comparison, while Figure~\ref{fig:action-yahtzee-learning} illustrates how each representation learns to achieve Yahtzee over training.
+Figure~\ref{fig:bernoulli-vs-categorical} shows the performance comparison, while Figure~\ref{fig:action-yahtzee-learning} illustrates how each representation learns to achieve Yahtzee during training.
 \input{figures/action_representation}
 
 \subsubsection{Architectural Ablations}
@@ -211,16 +205,8 @@ For our best configuration, A2C trained over 1 million games, the final score di
 \subsection{Policy Analysis}
 % <300-500 words>
 \subsubsection{Category Usage}
-To understand the overall performance of the agents, we compare their average scores in each category as a percentage of the DP-optimal score for that category
+To understand the overall performance of the A2C agent, we compare its average scores in each category against the relevant DP-optimal score
 in figures \ref{fig:category-upper} and \ref{fig:category-lower}.
-
-The primary differentiators between our RL agents and the DP optimal solution are in the upper section (and bonus), four-of-a-kind and Yahtzee.
-Performance in the upper section is critical to achieving a high overall score, as it enables the bonus however it appears to be traded off against
-the four-of-a-kind; it seems the agents prefer to take the immediate points from the 5th die rather than place themselves in a safer position to earn the bonus later.
-
-The high performance for many agents on Yahtzee category was interesting, as it requires agents to be performing at a competent level across multiple turns. The interesting takeaway here is that agents appear to
-exhibit a "mode shift" in their strategy once they figure out Yahtzee (as shown in Figure~\ref{fig:action-yahtzee-learning}).
-% whereas the bonus is learned more gradually over time (as shown in Figure~\ref{fig:action-bonus-learning}).
 
 \input{figures/category_upper}
 

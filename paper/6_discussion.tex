@@ -23,8 +23,7 @@ LayerNorm improved stability and final performance, as shown in Figure~\ref{fig:
 Lastly, we found diminishing returns for model size; larger models improved performance up to a point, but after a certain size, gains were minimal, as shown in Figure~\ref{fig:architecture-heatmap}.
 
 Moving from single-turn to full-game play, REINFORCE struggled with the
-variance and credit assignment challenges; in fact,
-it was difficult to return to the same level of performance we found with the single-turn agent. Performance immediately improved when we switched to TD(0) returns and A2C,
+variance and credit assignment challenges. Performance immediately improved when we switched to TD(0) returns and A2C,
 after adjusting certain hyperparameters (notably the critic coefficient).
 When A2C still struggled with the upper bonus strategy, we implemented GAE returns,
 However, they did not lead to significant improvement, as shown in Figures~\ref{fig:gae-lambda-performance} and~\ref{fig:gae-lambda-bonus};
@@ -43,6 +42,12 @@ could yield better performance.
 We also did not explore transfer learning from single-turn to full-game agents, which could improve sample efficiency.
 
 \subsection{Strategy \& Failure Modes}
+The primary differentiators between our RL agents and the DP optimal solution are in the upper section (and bonus), four-of-a-kind and Yahtzee.
+The high performance for many agents on Yahtzee category was interesting, as it requires agents to be performing at a competent level across multiple turns.
+The interesting takeaway here is that agents appear to
+exhibit a "mode shift" in their strategy once they figure out Yahtzee (as shown in Figure~\ref{fig:action-yahtzee-learning}),
+whereas the bonus is learned more gradually over time (as shown in Figure~\ref{fig:action-bonus-learning}).
+
 From the per-turn statistics in Table~\ref{tab:top-categories-by-turn}, we can infer a typical game,
 which begins with the agent locking in straights or full houses.
 These are fixed, high-value categories that provide a strong foundation. The agent also prioritizes the 4-of-a-kind category early on,
@@ -50,14 +55,15 @@ typically on the 6th turn. The agent then turns its attention to the upper secti
 4's, 5's, 6's, sometimes taking 3-of-a-kind instead.
 However, it seems to prefer taking a lower-section score for 5's and 6's rather than using them to build towards the bonus.
 The agent seems to understand the importance of reaching the 63-point threshold for the bonus,
-but perhaps does not prioritize it early enough in the game. We also see Ones, Twos, and Chance being used as "dump" categories later in the game when no better options are available.
-The agent does smartly hold these open.
+but perhaps does not prioritize it early enough in the game.
+We also see Ones, Twos, and Chance being used as "dump" categories later in the game when no better options are available.
+The agent does follow common wisdom, avoiding zeroing out high-value categories until forced to late in the game.
 
 It could be that the agent is risk-averse, preferring the immediate points from lower-section categories, or it simply doesn't properly
 realize it needs to take at least one above-average score in each of the 4's, 5's, and 6's to offset lower scores in the 1's, 2's, and 3's later in the game.
 This is the core issue for the agent; it has difficulty learning when to pivot to bonus-seeking behavior later in training.
 We see evidence of this when comparing the category mean scores against DP in Figures~\ref{fig:category-upper} and~\ref{fig:category-lower}.
-Fundamentally, the agent needs to learn to sacrifice the marginal points from the 5th dice in 4-of-a-kind, in order to keep itself in a better position to earn the bonus later.
+Fundamentally, the agent needs to learn to sacrifice the marginal points from the 5th dice in 4-of-a-kind, in order to put itself in a better position to earn the bonus later.
 
 The agent does surprisingly well in achieving Yahtzee, indicating it has figured out how to lock in on selecting pairs, triples, and quads when the opportunity arises.
 It would be worth investigating further if the agent is explicitly targeting Yahtzee or if it's a byproduct of its general strategy,
@@ -65,7 +71,7 @@ and if the agent recognizes that even 1's and 2's can be worth a lot, if they sc
 
 Reward shaping definitely helped the agent learn the bonus more quickly, but had its limits.
 At very high levels, the agent completely derailed and failed to prioritize the lower section, most notably ignoring Yahtzees.
-It's worth restating that, since we are using a learned potential function, we do break the theoretical guarantees of potential-based reward shaping \cite{ng-1999-reward-shaping},
+Since we are using a learned potential function, we do break the theoretical guarantees of potential-based reward shaping \cite{ng-1999-reward-shaping},
 this could explained the mixed results.
 
 In general our results backed up many known challenges in reinforcement learning:
