@@ -4,14 +4,11 @@
 
 Learning a robust policy for \textit{Yahtzee} using reinforcement learning presents several interesting challenges and insights.
 We showed that with appropriate algorithmic choices, it is possible to approach near-optimal performance using self-play alone.
-First, we showed that \textit{Yahtzee}'s combinatorial action space and sparse rewards make it suitable as a non-trivial benchmark environment.
-We found that \textrm{Yahtzee} is trivially broken into several a heirarchy of interesting sub-problems.
 Our results back up theoretical results in the literature regarding training stability and sample efficiency of common RL algorithms.
-Likewise, our ablation studies highlight the importance of finding semantically meaningful state and action representations that align the model architecture with the underlying structure of the problem.
 Our analysis of learned policies showed that these algorithms often struggle to learn rare, yet high-reward strategies, especially if they require strong coherence over longer time horizons.
 
 Future research could be done to find architectures, samples, and learning methods that allow the model to better approximate optimal play, more efficiently.
 Transfer learning could be explored further to see if knowledge from single-turn optimization could be effectively transferred to full-game, multiplayer Yahtzee, or other variants of the game.
 For example, curriculum learning approaches, where the agent is gradually exposed to more complex scenarios over time, could be used to help the model overcome some challenges outlined in this paper.
-For the multiplayer setting, future work could explore permutation-invariant architectures such as Deep Sets \cite{zaheer2018deepsets} or embeddings with self-attention to handle unsorted dice \cite{vaswani-2017-attention}.
+For the multiplayer setting, future work could explore permutation-invariant architectures such as Deep Sets \cite{zaheer2018deepsets} or embeddings with self-attention to handle unsorted dice or opponent states\cite{vaswani-2017-attention}.
 Additionally, \textrm{Yahtzee} could also be considered as a candidate environment for research into hierarchical reinforcement learning methods \cite{Barto2003}.

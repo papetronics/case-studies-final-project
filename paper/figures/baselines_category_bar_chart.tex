@@ -1,10 +1,10 @@
-\begin{figure}[htb]
+\begin{figure}[b]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
                 ybar,
                 width=\columnwidth,
-                height=6cm,
+                height=5cm,
                 xlabel={Metric},
                 ylabel={Rate (\%)},
                 title={Bonus and Yahtzee Rates by Algorithm},
@@ -28,8 +28,8 @@
                 fill=red!60!white,
                 draw=red!80!white
             ] coordinates {
-                    (Upper Bonus, 50)
-                    (Yahtzee, 50)
+                    (Upper Bonus, 6.44)
+                    (Yahtzee, 10.61)
                 };
             \addlegendentry{REINFORCE}
 
@@ -48,23 +48,34 @@
                 fill=green!60!white,
                 draw=green!80!white
             ] coordinates {
-                    (Upper Bonus, 50)
-                    (Yahtzee, 50)
+                    (Upper Bonus, 19.71)
+                    (Yahtzee, 24.87)
                 };
             \addlegendentry{PPO}
 
-            % DP Optimal
+            % DP Optimal - Horizontal dashed lines
             \addplot[
-                fill=black!70,
-                draw=black!80
+                black,
+                dashed,
+                thick,
+                forget plot
             ] coordinates {
-                    (Upper Bonus, 68.12)
-                    (Yahtzee, 33.74)
+                    ([normalized] 0.2, 68.12)
+                    ([normalized] 0.5, 68.12)
+                };
+
+            \addplot[
+                black,
+                dashed,
+                thick
+            ] coordinates {
+                    ([normalized] 0.5, 33.74)
+                    ([normalized] 0.8, 33.74)
                 };
             \addlegendentry{DP Optimal}
 
         \end{axis}
     \end{tikzpicture}
-    \caption{Bonus and Yahtzee achievement rates (placeholder data)}
+    \caption{Bonus and Yahtzee achievement rates for best models of each algorithm}
     \label{fig:bonus-yahtzee-rates}
 \end{figure}

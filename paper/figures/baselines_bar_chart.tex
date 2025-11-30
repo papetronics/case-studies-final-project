@@ -1,13 +1,13 @@
-\begin{figure}[htb]
+\begin{figure}[t]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
                 ybar,
                 width=\columnwidth,
-                height=6cm,
+                height=5cm,
                 xlabel={Algorithm},
                 ylabel={Mean Full-Game Score},
-                title={Final Performance Comparison at 1M Games},
+                title={},
                 symbolic x coords={REINFORCE, A2C, PPO, DP Optimal},
                 xtick=data,
                 xticklabel style={font=\small},
@@ -15,7 +15,7 @@
                 xlabel style={font=\small},
                 title style={font=\small},
                 bar width=25pt,
-                ymin=0, ymax=260,
+                ymin=200, ymax=270,
                 grid=both,
                 grid style={dotted},
                 tick align=outside,
@@ -30,17 +30,16 @@
                 y dir=both,
                 y explicit
             ] coordinates {
-                    (REINFORCE, 50) +- (0, 0)
-                    (A2C, 241.78) +- (0.3, 0.3)
-                    (PPO, 50) +- (0, 0)
-                    (DP Optimal, 254.59)
+                    (REINFORCE, 203.73)
+                    (A2C, 241.78)
+                    (PPO, 230.20)
                 };
 
-            % Horizontal dashed line at DP optimal
-            \draw[dashed, black!80, thick] (axis cs:REINFORCE,50) -- (axis cs:DP Optimal,50);
+            % Horizontal dashed line at DP optimal spanning entire graph
+            \draw[dashed, black!80, thick] (rel axis cs:0,0.682) -- (rel axis cs:1,0.682);
 
         \end{axis}
     \end{tikzpicture}
-    \caption{Final performance, mean score (placeholder data)}
+    \caption{Final Performance Comparison after training on 1 million games}
     \label{fig:final-performance-comparison}
 \end{figure}
