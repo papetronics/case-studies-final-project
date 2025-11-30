@@ -11,18 +11,16 @@ For outputs, it uses Bernoulli rolling actions and categorical scoring actions.
 The single turn model has a short horizon (3 steps); REINFORCE was the natural choice here.
 We trained on 260,000 games, ~10 million examples, using a batch size of 1,014 examples, for 10,000 total gradient updates.
 
-As shown in Figure~\ref{fig:single-turn-performance}, although it does not nearly reach optimal performance, it performs surprisingly well over the full game; this is likely due to the high correlation between single-turn and full-game optimal actions.
-Figure~\ref{fig:single-turn-fullgame} demonstrates the full-game performance when evaluating the single-turn trained agent.
-However, we suspected target leakage (selecting parameters and architectures based on full-game performance) could also play a role. This is analyzed in Section~\ref{sec:tradeoff-curve}.
-
-%\input{figures/single_turn_performance}
-
-%\input{figures/single_turn_fullgame}
-
 \input{figures/single_turn_dual_axis}
+
+As shown in Figure~\ref{fig:single-turn-dual-axis}, although the single-turn agent does not nearly reach optimal single-turn performance, it performs surprisingly well over the full game; this is likely due to the high correlation between single-turn and full-game optimal actions.
+However, we suspected target leakage (selecting parameters and architectures based on full-game performance) could also play a role. This is analyzed in Section~\ref{sec:tradeoff-curve}.
 
 \subsubsection{Single vs Full-game Tradeoff Curve}
 \label{sec:tradeoff-curve}
+
+\input{figures/pareto_frontier}
+
 To understand the tradeoff between single-turn and full-game performance, we ablated our model using small changes to various hyperparameters and captured
 the resulting performance on both the primary single-turn score, as well as the auxiliary full-game score.
 
@@ -31,7 +29,7 @@ However, at very high levels of full-game performance, single-turn performance b
 Since the single-turn model does not have access to the full game context, these are imperfectly optimizing their target objective.
 This indicates that selecting hyperparameters for a single-turn model based on full-game performance could indeed be a form of target leakage.
 
-\input{figures/pareto_frontier}
+
 
 \subsection{Full-Game Results}
 % <600-700 words>
@@ -41,6 +39,10 @@ We intentionally omitted the $\phi_{\mathrm{potential}}(\mathbf{d}, \mathbf{c})$
 but found it to improve stability, especially with REINFORCE.
 
 \subsubsection{Algorithm Comparison: REINFORCE, A2C, PPO}
+
+\input{figures/baselines_bar_chart}
+
+\input{figures/baselines_training_graph}
 
 During development, we compared algorithms using a fixed training budget of 250,000 full games played.
 Later, we attempt a longer, 1 million full-game training run for our best algorithm.
@@ -54,6 +56,8 @@ Our most successful algorithm was TD(0)-style Actor-Critic (A2C). We found is ea
 This was the algorithm we use for the ablation studies. With a training budget of 1 million full-games,
 A2C was able to approach DP-optimal performance: scoring 241.8 points average.
 
+\input{figures/baselines_category_bar_chart}
+
 We also attempted to use Proximal Policy Optimization (PPO) with TD(0), but found it difficult to tune. Each PPO rollout requires
 $k$ epochs of minibatch updates, which significantly increases training time compared to A2C and REINFORCE.
 For fair comparison to the other algorithms, reduced the total number of games seen during training by a factor of $k$.
@@ -63,25 +67,22 @@ However, it is possible PPO could reach or surpass A2C performance with more ext
 Figure~\ref{fig:full-game-learning-curves} shows the learning curves for all three algorithms during training.
 The final performance comparison is summarized in Figure~\ref{fig:final-performance-comparison}, with detailed bonus and Yahtzee achievement rates shown in Figure~\ref{fig:bonus-yahtzee-rates}.
 
-\input{figures/baselines_training_graph}
-
-\input{figures/baselines_bar_chart}
-
-\input{figures/baselines_category_bar_chart}
-
 \subsubsection{Representational Ablations}
+
+\input{figures/dice_representation_bonus}
+\input{figures/feature_ablation_bonus}
 
 While a number of additional representational choices were explored, one of the most important is the state representation of the dice.
 
 We wanted to highlight the importance of using a combined representation of both one-hot encodings and counts-based encodings of the dice.
 While the network could theoretically learn to reconstruct either representation from the other, in practice we found that using both improved performance, as demonstrated in Figure~\ref{fig:dice-representation-bonus}.
 
-\input{figures/dice_representation_bonus}
+
 
 For the full-game model, we added several additional features beyond the single-turn representation.
 To understand the importance of each, they were ablated individually, with results shown in Figure~\ref{fig:feature-ablation-bonus}.
 
-\input{figures/feature_ablation_bonus}
+
 
 Lastly, we tested our hypothesis that a 32-way categorical would prove beneficial to complex actions that required specific combinations of dice to be held (see Section \ref{sec:rolling-action}).
 Figure~\ref{fig:bernoulli-vs-categorical} shows the performance comparison, while Figure~\ref{fig:action-yahtzee-learning} illustrates how each representation learns to achieve Yahtzee over training.
@@ -121,107 +122,90 @@ significantly degraded performance, as shown in Figures~\ref{fig:gae-lambda-perf
 \input{figures/gae_bonus}
 
 \subsubsection{Entropy Sensitivity}
+\begin{table}[H]
+    \centering
+    \small
+    \caption{Entropy regime definitions}
+    \label{tab:entropy-regime-definitions}
+    \begin{tabular}{lcccc}
+        \hline
+        \textbf{Regime} & $\beta_{\mathrm{roll}}$ & $\beta_{\mathrm{score}}$ & Hold / Anneal \\
+        \hline
+        None            & 0.0                     & 0.0                      & 0 / 0         \\
+        Low             & 0.05 $\rightarrow$ 0.01 & 0.01 $\rightarrow$ 0.005 & 0.2 / 0.4     \\
+        Baseline        & 0.1 $\rightarrow$ 0.02  & 0.03 $\rightarrow$ 0.01  & 0.3 / 0.6     \\
+        High            & 0.2 $\rightarrow$ 0.04  & 0.06 $\rightarrow$ 0.02  & 0.35 / 0.65   \\
+        \hline
+    \end{tabular}
+\end{table}
+
 During experimentation, we noticed that the entropy regularization coefficients had a significant impact on training stability and final performance,
 as described in Section~\ref{sec:entropy}.
 To better understand this sensitivity, we trained models under three different entropy regimes: Low Entropy, Baseline, and High Entropy, as defined in Table~\ref{tab:entropy-regime-definitions}.
-The learning curves are shown in Figure~\ref{fig:entropy-mean-score}, with rolling entropy values tracked in Figure~\ref{fig:entropy-rolling-entropy}.
-
-The overall results for each entropy regime are summarized in Table~\ref{tab:entropy-regimes}.
-
-\begin{table}[H]
-  \centering
-  \small
-  \caption{Entropy regime definitions}
-  \label{tab:entropy-regime-definitions}
-  \begin{tabular}{lcccc}
-    \hline
-    \textbf{Regime} & $\beta_{\mathrm{roll}}$ & $\beta_{\mathrm{score}}$ & Hold / Anneal \\
-    \hline
-    None            & 0.0                     & 0.0                      & 0 / 0         \\
-    Low             & 0.05 $\rightarrow$ 0.01 & 0.01 $\rightarrow$ 0.005 & 0.2 / 0.4     \\
-    Baseline        & 0.1 $\rightarrow$ 0.02  & 0.03 $\rightarrow$ 0.01  & 0.3 / 0.6     \\
-    High            & 0.2 $\rightarrow$ 0.04  & 0.06 $\rightarrow$ 0.02  & 0.35 / 0.65   \\
-    \hline
-  \end{tabular}
-\end{table}
-
-\begin{table}[H]
-  \centering
-  \small
-  \caption{Entropy regime performance (placeholder data)}
-  \label{tab:entropy-regimes}
-  \begin{tabular}{lccc}
-    \hline
-    \textbf{Regime} & \textbf{Mean Score} & \textbf{Bonus \%} & \textbf{Yahtzee \%} \\
-    \hline
-    Low Entropy     & $<X>$               & <X>               & <Y>                 \\
-    Baseline        & $<X>$               & <X>               & <Y>                 \\
-    High Entropy    & $<X>$               & <X>               & <Y>                 \\
-    \hline
-  \end{tabular}
-\end{table}
+The learning curves and entropy values are shown in Figure~\ref{fig:entropy-analysis}.
 
 \input{figures/entropy_mean_score}
 
-\input{figures/entropy_rolling_entropy}
+% \input{figures/entropy_rolling_entropy}
 
 \subsubsection{Reward Shaping}
+\input{figures/shaping_heatmap}
 We co-varied the shaping loss weight and the strength of the shaping reward
 to understand their impact on final performance. Figure~\ref{fig:shaping-heatmap} shows the results of this ablation study.
 
-\input{figures/shaping_heatmap}
+
 
 \subsubsection{Summary}
 In summary, we found that A2C with TD(0) targets, a combined dice representation, Layer Normalization,
 and carefully tuned entropy regularization produced the best results.
 Table~\ref{tab:full-game-summary} presents a comprehensive comparison of all algorithms tested.
 
-\begin{table*}[t]
-  \centering
-  \small
-  \caption{Full-game performance summary}
-  \label{tab:full-game-summary}
-  \begin{tabular}{lcccccc}
-    \hline
-    \textbf{Algorithm}         & \textbf{Training Budget} & \textbf{Mean Score} & \textbf{Std Dev} & \textbf{Bonus Rate (\%)} & \textbf{Yahtzee Rate (\%)} & \textbf{$\geq$250 (\%)} \\
-    \hline
-    DP Optimal                 & --                       & 254.59              & --               & 68.12\%                  & 33.74\%                    & 48.37\%                 \\
-    \hline
-    A2C                        & 250K games               & 230.38              & 2503.83          & 11.37\%                  & 31.08\%                    & 27.82\%                 \\
-    A2C                        & 1M games                 & 241.78              & 3230.86          & 24.93\%                  & 34.05\%                    & 36.87\%                 \\
-    PPO ($\lambda=0.3$, $k=5$) & 50k games                & 204.54              & 860.02           & 2.49\%                   & 6.54\%                     & 6.08\%                  \\
-    PPO ($\lambda=0.3$, $k=4$) & 250K games               & 230.20              & 2345.5           & 19.71\%                  & 24.87\%                    & 28.38\%                 \\
-    REINFORCE (full-game)      & 250K games               & 189.84              & 812.24           & 2.83\%                   & 1.70\%                     & 2.06\%                  \\
-    REINFORCE (full-game)      & 1M games                 & $<X>$               & $<Y>$            & $<X>$                    & $<Y>$                      & $<Z>$                   \\
-    REINFORCE (single-turn)    & 500K games               & 201.48              & 1366.00          & 0.89\%                   & 19.63\%                    & 9.34\%                  \\
-    \hline
-  \end{tabular}
+\begin{table*}[htb!]
+    \centering
+    \small
+    \caption{Full-game performance summary}
+    \label{tab:full-game-summary}
+    \begin{tabular}{lcccccc}
+        \hline
+        \textbf{Algorithm}         & \textbf{Training Budget} & \textbf{Mean Score} & \textbf{Std Dev} & \textbf{Bonus Rate (\%)} & \textbf{Yahtzee Rate (\%)} & \textbf{$\geq$250 (\%)} \\
+        \hline
+        DP Optimal                 & --                       & 254.59              & --               & 68.12\%                  & 33.74\%                    & 48.37\%                 \\
+        \hline
+        A2C                        & 250K games               & 230.38              & 2503.83          & 11.37\%                  & 31.08\%                    & 27.82\%                 \\
+        A2C                        & 1M games                 & 241.78              & 3230.86          & 24.93\%                  & 34.05\%                    & 36.87\%                 \\
+        PPO ($\lambda=0.3$, $k=5$) & 50k games                & 204.54              & 860.02           & 2.49\%                   & 6.54\%                     & 6.08\%                  \\
+        PPO ($\lambda=0.3$, $k=4$) & 250K games               & 230.20              & 2345.5           & 19.71\%                  & 24.87\%                    & 28.38\%                 \\
+        REINFORCE (full-game)      & 250K games               & 189.84              & 812.24           & 2.83\%                   & 1.70\%                     & 2.06\%                  \\
+        REINFORCE (full-game)      & 1M games                 & $<X>$               & $<Y>$            & $<X>$                    & $<Y>$                      & $<Z>$                   \\
+        REINFORCE (single-turn)    & 500K games               & 201.48              & 1366.00          & 0.89\%                   & 19.63\%                    & 9.34\%                  \\
+        \hline
+    \end{tabular}
 \end{table*}
 
 For our best configuration, A2C trained over 1 million games, the final score distribution is compared to DP-optimal in Table \ref{tab:dp-score-distribution}.
-\begin{table}[htb]
-  \centering
-  \small
-  \caption{$P(\text{score} \geq n)$, 100,000 games}
-  \label{tab:dp-score-distribution}
-  \begin{tabular}{rcc}
-    \hline
-    \textbf{$n$} & A2C      & DP                        \\
-    \hline
-    50           & 1.000000 & 1.000000                  \\
-    100          & 0.999980 & 0.999998                  \\
-    150          & 0.989730 & 0.991230                  \\
-    200          & 0.820980 & 0.863584                  \\
-    250          & 0.368730 & 0.483683                  \\
-    300          & 0.109080 & 0.143265                  \\
-    400          & 0.025960 & 0.038351                  \\
-    500          & 0.004870 & 0.007192                  \\
-    750          & 0        & $5.11603 \cdot 10^{-6}$   \\
-    1000         & 0        & $5.57508 \cdot 10^{-9}$   \\
-    1250         & 0        & $ 6.49213 \cdot 10^{-13}$ \\
-    1500         & 0        & $ 3.93308 \cdot 10^{-19}$ \\
-    \hline
-  \end{tabular}
+\begin{table}[htb!]
+    \centering
+    \small
+    \caption{$P(\text{score} \geq n)$, 100,000 games}
+    \label{tab:dp-score-distribution}
+    \begin{tabular}{rcc}
+        \hline
+        \textbf{$n$} & A2C      & DP                        \\
+        \hline
+        50           & 1.000000 & 1.000000                  \\
+        100          & 0.999980 & 0.999998                  \\
+        150          & 0.989730 & 0.991230                  \\
+        200          & 0.820980 & 0.863584                  \\
+        250          & 0.368730 & 0.483683                  \\
+        300          & 0.109080 & 0.143265                  \\
+        400          & 0.025960 & 0.038351                  \\
+        500          & 0.004870 & 0.007192                  \\
+        750          & 0        & $5.11603 \cdot 10^{-6}$   \\
+        1000         & 0        & $5.57508 \cdot 10^{-9}$   \\
+        1250         & 0        & $ 6.49213 \cdot 10^{-13}$ \\
+        1500         & 0        & $ 3.93308 \cdot 10^{-19}$ \\
+        \hline
+    \end{tabular}
 \end{table}
 
 \subsection{Policy Analysis}
@@ -235,7 +219,8 @@ Performance in the upper section is critical to achieving a high overall score, 
 the four-of-a-kind; it seems the agents prefer to take the immediate points from the 5th die rather than place themselves in a safer position to earn the bonus later.
 
 The high performance for many agents on Yahtzee category was interesting, as it requires agents to be performing at a competent level across multiple turns. The interesting takeaway here is that agents appear to
-exhibit a "mode shift" in their strategy once they figure out Yahtzee (as shown in Figure~\ref{fig:action-yahtzee-learning}), whereas the bonus is learned more gradually over time (as shown in Figure~\ref{fig:action-bonus-learning}).
+exhibit a "mode shift" in their strategy once they figure out Yahtzee (as shown in Figure~\ref{fig:action-yahtzee-learning}).
+% whereas the bonus is learned more gradually over time (as shown in Figure~\ref{fig:action-bonus-learning}).
 
 \input{figures/category_upper}
 
@@ -243,11 +228,12 @@ exhibit a "mode shift" in their strategy once they figure out Yahtzee (as shown 
 
 \subsubsection{Strategy Comparison Across Agents}
 We also compared some high-level strategy metrics across our different agents to understand how their learned policies differed.
-First, we analyzed the distribution of the first category choice made by each agent in Figure \ref{fig:strategy-first-category}.
-Additionally, Table~\ref{tab:top-categories-by-turn} shows the top three most frequently used categories at each turn of the game, providing insights into the agent's strategy throughout a game.
+% First, we analyzed the distribution of the first category choice made by each agent in Figure \ref{fig:strategy-first-category}.
+Table~\ref{tab:top-categories-by-turn} shows the top three most frequently used categories at each turn of the game, providing insights into the agent's strategy throughout a game.
 
-\input{figures/strategy_first_category}
+% \input{figures/strategy_first_category}
 
 \input{figures/strategy_fill_turn}
 
 \input{figures/top_categories_by_turn}
+wsderrrrrr

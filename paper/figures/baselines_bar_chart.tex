@@ -1,10 +1,10 @@
-\begin{figure}[htb]
+\begin{figure}[t]
     \centering
     \begin{tikzpicture}
         \begin{axis}[
                 ybar,
                 width=\columnwidth,
-                height=6cm,
+                height=5cm,
                 xlabel={Algorithm},
                 ylabel={Mean Full-Game Score},
                 title={Final Performance Comparison at 1M Games},
@@ -15,7 +15,7 @@
                 xlabel style={font=\small},
                 title style={font=\small},
                 bar width=25pt,
-                ymin=150, ymax=265,
+                ymin=200, ymax=270,
                 grid=both,
                 grid style={dotted},
                 tick align=outside,
@@ -33,14 +33,13 @@
                     (REINFORCE, 50)
                     (A2C, 241.78)
                     (PPO, 230.20)
-                    (DP Optimal, 254.59)
                 };
 
-            % Horizontal dashed line at DP optimal
-            \draw[dashed, black!80, thick] (axis cs:REINFORCE,50) -- (axis cs:DP Optimal,50);
+            % Horizontal dashed line at DP optimal spanning entire graph
+            \draw[dashed, black!80, thick] (rel axis cs:0,0.682) -- (rel axis cs:1,0.682);
 
         \end{axis}
     \end{tikzpicture}
-    \caption{Final performance, mean score (placeholder data)}
+    \caption{Final performance, mean score}
     \label{fig:final-performance-comparison}
 \end{figure}
