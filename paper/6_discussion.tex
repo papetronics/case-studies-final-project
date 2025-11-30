@@ -29,7 +29,7 @@ When A2C still struggled with the upper bonus strategy, we implemented GAE retur
 However, they did not lead to significant improvement, as shown in Figures~\ref{fig:gae-lambda-performance} and~\ref{fig:gae-lambda-bonus};
 moderate values of GAE were slightly helpful, but high values led back to instability.
 
-Entropy regularization played a huge role in stabilizing training and encouraging exploration, best seen in Figure~\ref{fig:entropy-mean-score};
+Entropy regularization played a huge role in stabilizing training and encouraging exploration, best seen in Figure~\ref{fig:entropy-analysis};
 striking the right balance of explore vs exploit was critical. There's a narrow sweet spot:
 too little entropy and the policy collapses, does not explore and we get stuck in local minima;
 too much entropy and the policy becomes too random to learn important strategies.
@@ -46,7 +46,7 @@ The primary differentiators between our RL agents and the DP optimal solution ar
 The high performance for many agents on Yahtzee category was interesting, as it requires agents to be performing at a competent level across multiple turns.
 The interesting takeaway here is that agents appear to
 exhibit a "mode shift" in their strategy once they figure out Yahtzee (as shown in Figure~\ref{fig:action-yahtzee-learning}),
-whereas the bonus is learned more gradually over time (as shown in Figure~\ref{fig:action-bonus-learning}).
+whereas the bonus is learned more gradually over time (as shown in Figure~\ref{fig:dice-representation-bonus}).
 
 From the per-turn statistics in Table~\ref{tab:top-categories-by-turn}, we can infer a typical game,
 which begins with the agent locking in straights or full houses.
