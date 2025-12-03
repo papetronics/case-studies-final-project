@@ -3,7 +3,7 @@
 \section{Reproducibility}
 The custom gym environment, training code, models, and final evaluation statistics for this project are \href{https://github.com/papetronics/case-studies-final-project}{available on GitHub}.
 
-Likewise, data for all experiments used in this graph is available in \href{https://wandb.ai/papetronics/pape-lab/reports/Case-Studies-Ablations--VmlldzoxNTE4NDMzOA}{this Weights \& Biases report}.
+Likewise, data for all experiments used in this graph is available in \href{https://api.wandb.ai/links/papetronics/qfovf68e}{this Weights \& Biases report}.
 
 \section{Hyperparameters}
 The following hyperparameters were used for the baseline models:
@@ -20,7 +20,6 @@ The following hyperparameters were used for the baseline models:
         $d_h$ (Hidden Size)           & 600            \\
         $L$ (Hidden Layers)           & 3              \\
         $p_d$ (Dropout Rate)          & 0.1            \\
-        $r_{\alpha}$ (Min LR Ratio)   & 0.01           \\
         $B$ (Games per Batch)         & 20             \\
         Activation Function           & Swish          \\
         Rolling Action Representation & Categorical    \\
@@ -38,17 +37,18 @@ The following hyperparameters were used for the baseline models:
         \hline
         \textbf{Hyperparameter}        & \textbf{REINFORCE} & \textbf{A2C} & \textbf{PPO} \\
         \hline
-        $\alpha$                       & 0.001              & 0.0001       & 0.0001       \\
+        $\alpha$                       & 0.001              & 0.0001       & 0.001        \\
+        $r_{\alpha}$ (Min LR Ratio)    & 0.01               & 0.05         & 0.05         \\
         $\gamma$ (min)                 & 0.95               & 0.99         & 0.99         \\
         $\gamma$ (max)                 & 1.0                & 0.99         & 0.99         \\
         $\tau_{\mathrm{clip}}$         & 0.0                & 1.0          & 1.0          \\
-        $\lambda_V$                    & 0.025              & 0.005        & 0.01         \\
-        $\beta_{\mathrm{roll}}$ (max)  & 0.1                & 0.06         & 0.02         \\
+        $\lambda_V$                    & 0.025              & 0.005        & 0.02         \\
+        $\beta_{\mathrm{roll}}$ (max)  & 0.1                & 0.1          & 0.005        \\
         $\beta_{\mathrm{roll}}$ (min)  & 0.01               & 0.02         & 0.005        \\
         $\beta_{\mathrm{score}}$ (max) & 0.02               & 0.03         & 0.05         \\
-        $\beta_{\mathrm{score}}$ (min) & 0.003              & 0.008        & 0.01         \\
-        Entropy Hold Period            & 0.1                & 0.3          & 0.1          \\
-        Entropy Anneal Period          & 0.55               & 0.6          & 0.8          \\
+        $\beta_{\mathrm{score}}$ (min) & 0.003              & 0.01         & 0.01         \\
+        Entropy Hold Period            & 0.25               & 0.075        & 0.05         \\
+        Entropy Anneal Period          & 0.91               & 0.9          & 0.9          \\
         \hline
     \end{tabular}
 \end{table}
@@ -64,7 +64,7 @@ The following hyperparameters were used for the baseline models:
         \hline
         PPO Clip $\epsilon$     & 0.2            \\
         PPO Games per Minibatch & 4              \\
-        PPO Epochs              & 3              \\
+        PPO Epochs              & 4              \\
         \hline
     \end{tabular}
 \end{table}

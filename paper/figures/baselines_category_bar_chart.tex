@@ -53,24 +53,13 @@
                 };
             \addlegendentry{PPO}
 
-            % DP Optimal - Horizontal dashed lines
+            % DP Optimal
             \addplot[
-                black,
-                dashed,
-                thick,
-                forget plot
+                fill=black!70,
+                draw=black!80
             ] coordinates {
-                    ([normalized] 0.2, 68.12)
-                    ([normalized] 0.5, 68.12)
-                };
-
-            \addplot[
-                black,
-                dashed,
-                thick
-            ] coordinates {
-                    ([normalized] 0.5, 33.74)
-                    ([normalized] 0.8, 33.74)
+                    (Upper Bonus, 68.12)
+                    (Yahtzee, 33.74)
                 };
             \addlegendentry{DP Optimal}
 
