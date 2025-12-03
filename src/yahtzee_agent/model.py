@@ -11,7 +11,7 @@ from utilities.scoring_helper import NUMBER_OF_DICE
 from utilities.sequential_block import SequentialBlock
 
 from .features import PhiFeature
-from .modules import Block, RollingHead, ScoringHead, ValueHead
+from .modules import Block, ResidualBlock, RollingHead, ScoringHead, ValueHead
 
 
 class RollingActionRepresentation(str, Enum):
@@ -173,9 +173,10 @@ class YahtzeeAgent(nn.Module):
             dice_output_size = len(DICE_MASKS)  # 32 possible masks
         scoring_output_size = 13
 
-        layers = [Block(input_size, hidden_size, dropout_rate, activation)]
+        # Use ResidualBlock for trunk to prevent critic head from decohering shared representation
+        layers = [ResidualBlock(input_size, hidden_size, dropout_rate, activation)]
         for _ in range(num_hidden - 2):
-            layers.append(Block(hidden_size, hidden_size, dropout_rate, activation))  # noqa: PERF401
+            layers.append(ResidualBlock(hidden_size, hidden_size, dropout_rate, activation))  # noqa: PERF401
 
         self.network = SequentialBlock(*layers)
 
