@@ -12,14 +12,13 @@ The single turn model has a short horizon (3 steps); REINFORCE was the natural c
 We trained on 260,000 games, \~10 million examples, using a batch size of 1,014 examples, for 10,000 total gradient updates.
 
 \input{figures/single_turn_dual_axis}
+\input{figures/pareto_frontier}
 
 As shown in Figure~\ref{fig:single-turn-dual-axis}, although the single-turn agent does not nearly reach optimal single-turn performance, it performs surprisingly well over the full game; this is likely due to the high correlation between single-turn and full-game optimal actions.
 However, we suspected target leakage (selecting parameters and architectures based on full-game performance) could also play a role. This is analyzed in Section~\ref{sec:tradeoff-curve}.
 
 \subsubsection{Single vs Full-game Tradeoff Curve}
 \label{sec:tradeoff-curve}
-
-\input{figures/pareto_frontier}
 
 To understand the tradeoff between single-turn and full-game performance, we ablated our model using small changes to various hyperparameters and captured
 the resulting performance on both the primary single-turn score, as well as the auxiliary full-game score.
